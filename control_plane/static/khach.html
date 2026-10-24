@@ -57,31 +57,41 @@
     .stat { background: #f7f9fb; border-radius: 10px; padding: 0.7rem 0.75rem; }
     .stat b { display: block; font-size: 1.35rem; }
     .stat span { color: var(--muted); font-size: 0.92rem; }
-    table { width: 100%; border-collapse: collapse; min-width: 720px; }
-    th, td { text-align: left; padding: 0.45rem 0.3rem; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 0.95rem; }
-    td.addr { white-space: pre-line; }
-    @media (max-width: 700px) {
-      #people table, #lookupPeople table { min-width: 0; }
-      #people thead, #lookupPeople thead { display: none; }
-      #people tr, #lookupPeople tr {
-        display: block; border: 1px solid var(--line); border-radius: 12px;
-        padding: 0.65rem 0.75rem; margin: 0 0 0.65rem; background: #fff;
-      }
-      #people td, #lookupPeople td {
-        display: block; border: 0; padding: 0.2rem 0;
-      }
-      #people td::before, #lookupPeople td::before {
-        content: attr(data-label);
-        display: block;
-        color: var(--muted);
-        font-weight: 700;
-        font-size: 0.82rem;
-        margin-bottom: 0.1rem;
-      }
+    table.sheet {
+      display: table;
+      width: max-content;
+      min-width: 100%;
+      border-collapse: collapse;
+      border-spacing: 0;
+      table-layout: auto;
     }
+    table.sheet thead { display: table-header-group; }
+    table.sheet tbody { display: table-row-group; }
+    table.sheet tr { display: table-row; }
+    table.sheet th, table.sheet td {
+      display: table-cell;
+      text-align: left;
+      padding: 0.5rem 0.65rem;
+      border: 1px solid #d5dbe3;
+      vertical-align: top;
+      font-size: 0.92rem;
+      background: #fff;
+    }
+    table.sheet th {
+      color: var(--ink);
+      font-weight: 700;
+      background: #eef2f6;
+      white-space: nowrap;
+    }
+    table.sheet td { white-space: nowrap; }
+    table.sheet td.addr {
+      white-space: pre-line;
+      min-width: 200px;
+      max-width: 280px;
+    }
+    table.sheet tbody tr:nth-child(even) td { background: #f7f9fb; }
     .picks { display: grid; gap: 0.35rem; margin: 0.2rem 0 0.4rem; }
     .picks label { font-weight: 500; display: flex; gap: 0.45rem; align-items: center; }
-    th { color: var(--muted); font-weight: 700; }
     .note { color: var(--muted); margin-top: 0.55rem; }
     .warn { color: #8a2b2b; font-weight: 700; }
     .ok { color: #0d6b3a; }
@@ -90,7 +100,12 @@
     .files li { margin: 0.25rem 0; }
     .nav { margin: 0 0 1rem; }
     .nav a { color: var(--blue); font-weight: 700; text-decoration: none; }
-    .scroll { overflow-x: auto; }
+    .scroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      width: 100%;
+      max-width: 100%;
+    }
     [hidden] { display: none !important; }
     #file, #lookupFile { display: none; }
     .sp {
@@ -363,7 +378,7 @@
   }
 
   function renderSample(columns, samples) {
-    var html = "<table><thead><tr>";
+    var html = "<table class='sheet'><thead><tr>";
     columns.forEach(function (col) {
       html += "<th>" + escapeHtml(col.title) + "</th>";
     });
@@ -661,17 +676,17 @@
       document.getElementById("people").innerHTML = "<p class='note'>Chưa có khách, hoặc không khớp từ tìm.</p>";
       return;
     }
-    var html = "<table><thead><tr><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
+    var html = "<table class='sheet'><thead><tr><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
     items.forEach(function (row) {
       html += "<tr>" +
-        "<td data-label='Tên khách'>" + escapeHtml(row.name || "—") + "</td>" +
-        "<td data-label='Số điện thoại'>" + escapeHtml(row.phone || "—") + "</td>" +
-        "<td class='addr' data-label='Địa chỉ'>" + escapeHtml(row.address || "—") + "</td>" +
-        "<td class='addr' data-label='Địa chỉ hành chính'>" + escapeHtml(row.adminAddress || "—") + "</td>" +
-        "<td class='addr' data-label='Hàng mua'>" + escapeHtml(row.orderContent || "—") + "</td>" +
-        "<td data-label='COD'>" + escapeHtml(row.codAmount || "—") + "</td>" +
-        "<td data-label='UID Facebook'>" + escapeHtml(row.facebookUid || "—") + "</td>" +
-        "<td data-label='ID TikTok'>" + escapeHtml(row.tiktokId || "—") + "</td>" +
+        "<td>" + escapeHtml(row.name || "—") + "</td>" +
+        "<td>" + escapeHtml(row.phone || "—") + "</td>" +
+        "<td class='addr'>" + escapeHtml(row.address || "—") + "</td>" +
+        "<td class='addr'>" + escapeHtml(row.adminAddress || "—") + "</td>" +
+        "<td class='addr'>" + escapeHtml(row.orderContent || "—") + "</td>" +
+        "<td>" + escapeHtml(row.codAmount || "—") + "</td>" +
+        "<td>" + escapeHtml(row.facebookUid || "—") + "</td>" +
+        "<td>" + escapeHtml(row.tiktokId || "—") + "</td>" +
         "</tr>";
     });
     html += "</tbody></table>";
@@ -737,7 +752,7 @@
       document.getElementById("lookupExport").hidden = true;
       return;
     }
-    var html = "<table><thead><tr><th>Số tra cứu</th><th>Kho</th><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
+    var html = "<table class='sheet'><thead><tr><th>Số tra cứu</th><th>Kho</th><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
     items.forEach(function (item) {
       var customer = item.customer || {};
       html += "<tr><td>" + escapeHtml(item.query) + "</td><td>" + (item.found ? "Có" : "Không") + "</td><td>" + escapeHtml(customer.name) + "</td><td>" + escapeHtml(customer.phone) + "</td><td class='addr'>" + escapeHtml(customer.address) + "</td><td class='addr'>" + escapeHtml(customer.adminAddress) + "</td><td class='addr'>" + escapeHtml(customer.orderContent) + "</td><td>" + escapeHtml(customer.codAmount) + "</td><td>" + escapeHtml(customer.facebookUid) + "</td><td>" + escapeHtml(customer.tiktokId) + "</td></tr>";
