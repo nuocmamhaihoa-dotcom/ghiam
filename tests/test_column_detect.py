@@ -174,7 +174,7 @@ class ColumnAssignTests(unittest.TestCase):
         )
         incoming, _reports = rows_from_files([("nhieu-dia-chi.xlsx", payload)], mapping)
         self.assertEqual(incoming[0]["name"], "Nguyễn Lan")
-        self.assertEqual(incoming[0]["address"], "12 Lê Lợi\nQuận 1\nTP.HCM")
+        self.assertEqual(incoming[0]["address"], "12 Lê Lợi, Quận 1, TP.HCM")
 
     def test_multiple_order_content_columns_join_as_lines(self) -> None:
         from control_plane.excel_import import mapping_from_form, rows_from_files

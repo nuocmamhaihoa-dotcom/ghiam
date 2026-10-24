@@ -40,11 +40,12 @@ from control_plane.customers import (
     has_phone,
     is_facebook_id_digits,
     is_vn_phone,
+    compose_address,
     join_address_lines,
     phones_in_text,
 )
 from control_plane.settings import settings
-from control_plane.vietnam_places import fold_vietnamese
+from control_plane.vietnam_places import address_content_rank, address_header_rank, fold_vietnamese
 from control_plane.xlsx_fast import LazySharedStrings, count_value_rows, iter_sheet_rows
 
 TableSource = bytes | bytearray | os.PathLike[str] | str
@@ -1169,6 +1170,14 @@ def _mapped_row(
     size = len(row)
     raw: dict[str, str] = {}
     for field in FIELDS:
+        if field == "address":
+            pieces = [
+                (index, headers[index] if index < len(headers) else "", row[index])
+                for index in lines[field]
+                if index < size and row[index]
+            ]
+            raw[field] = compose_address(pieces)
+            continue
         if field in LINE_FIELDS:
             parts = [row[index] for index in lines[field] if index < size and row[index]]
             raw[field] = parts[0] if len(parts) == 1 else join_address_lines(*parts)
@@ -1213,14 +1222,36 @@ def _layout_group_key(headers: list[str], payload: dict[str, Any]) -> str:
     return base + "\n#role:" + ",".join(parts)
 
 
+def _column_address_rank(header: str, samples: list[list[str]], index: int) -> int:
+    forced = address_header_rank(header)
+    if forced is not None:
+        return forced
+    counts = [0, 0, 0, 0, 0]
+    seen = 0
+    for row in samples:
+        if index >= len(row):
+            continue
+        text = collapse(str(row[index]))
+        if not text:
+            continue
+        counts[address_content_rank(text)] += 1
+        seen += 1
+        if seen >= 8:
+            break
+    if not seen:
+        return 0
+    return max(range(5), key=lambda rank: (counts[rank], -rank))
+
+
 def _choice_columns(headers: list[str], samples: list[list[str]]) -> list[dict[str, Any]]:
     """Cột không có tên thật thì hiện một ô mẫu, để phân biệt cột E với cột F."""
     columns = describe_columns(headers)
     for column in columns:
         header = str(column.get("header") or "")
+        index = int(column["index"])
+        column["addressRank"] = _column_address_rank(header, samples, index)
         if not _GENERIC_HEADER.match(header):
             continue
-        index = int(column["index"])
         sample = ""
         for row in samples:
             if index < len(row):

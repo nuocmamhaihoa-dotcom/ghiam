@@ -359,3 +359,115 @@ def has_address_keyword(value: str) -> bool:
     if _ADMIN_PREFIX.search(padded):
         return True
     return any(f" {key} " in padded for key in ADDRESS_KEYWORDS)
+
+
+_PROVINCE_ALIASES = frozenset(
+    {
+        "ha noi",
+        "hn",
+        "ho chi minh",
+        "hcm",
+        "tphcm",
+        "tp hcm",
+        "sai gon",
+        "saigon",
+        "da nang",
+        "hai phong",
+        "can tho",
+        "hue",
+        "thanh pho ha noi",
+        "thanh pho hue",
+        "thanh pho ho chi minh",
+        "tp ho chi minh",
+    }
+)
+PROVINCE_NAMES = frozenset(fold_vietnamese(name) for name in _PROVINCES if fold_vietnamese(name)) | _PROVINCE_ALIASES
+DISTRICT_NAMES = frozenset(
+    name for name in (fold_vietnamese(item) for item in _DISTRICTS) if name and name not in PROVINCE_NAMES
+)
+_PROVINCE_PHRASES = tuple(sorted((name for name in PROVINCE_NAMES if " " in name or len(name) >= 6), key=len, reverse=True))
+_HAMLET_PREFIX = re.compile(r"^(?:thon|xom|ap|lang|buon|soc|khom|khu pho|to dan pho|kp|to \d|doi \d|ban \d)\b")
+_COMMUNE_PREFIX = re.compile(r"^(?:xa|phuong|thi tran|p|x)\.?\s+\S")
+_DISTRICT_PREFIX = re.compile(r"^(?:quan|huyen|thi xa|q|h)\.?\s+\S")
+_CITY_PREFIX = re.compile(r"^(?:thanh pho|tp)\.?\s+(.+)$")
+_PROVINCE_PREFIX = re.compile(r"^tinh\s+\S")
+
+
+def address_header_rank(header: str) -> int | None:
+    """Tiêu đề Xã / Huyện / Tỉnh thì khóa bậc. «Địa chỉ» chung thì để nội dung ô quyết định."""
+    folded = fold_vietnamese(header)
+    if not folded:
+        return None
+    padded = f" {folded} "
+    if " tinh " in padded:
+        return 4
+    if any(f" {word} " in padded for word in ("thi xa", "huyen", "quan")):
+        return 3
+    if " thanh pho " in padded or folded in {"tp", "thanh pho"}:
+        return None
+    if any(f" {word} " in padded for word in ("thi tran", "phuong", "xa")):
+        return 2
+    if any(f" {word} " in padded for word in ("to dan pho", "khu pho", "thon", "xom", "ap", "lang", "buon", "soc", "khom")):
+        return 1
+    if any(f" {word} " in padded for word in ("so nha", "ten duong", "duong", "ngo", "hem", "ngach", "kiet", "pho")):
+        return 0
+    return None
+
+
+def address_content_rank(value: str) -> int:
+    """0 chi tiết, 1 thôn/xóm, 2 xã/phường/thị trấn, 3 quận/huyện/thị xã, 4 tỉnh/thành phố trung ương."""
+    folded = fold_vietnamese(value)
+    if not folded:
+        return 0
+    if _PROVINCE_PREFIX.match(folded):
+        return 4
+    city = _CITY_PREFIX.match(folded)
+    if city:
+        rest = city.group(1).strip()
+        if rest in PROVINCE_NAMES:
+            return 4
+        return 3
+    if _DISTRICT_PREFIX.match(folded):
+        return 3
+    if _COMMUNE_PREFIX.match(folded):
+        return 2
+    if _HAMLET_PREFIX.match(folded):
+        return 1
+    if folded in PROVINCE_NAMES:
+        return 4
+    if folded in DISTRICT_NAMES:
+        return 3
+    return 0
+
+
+def address_levels_present(value: str) -> set[int]:
+    """Bậc đã có trong một ô đầy đủ, để khỏi nối lại thôn/xã/tỉnh đã viết trong ô đó."""
+    folded = fold_vietnamese(value)
+    if not folded:
+        return set()
+    padded = f" {folded} "
+    levels: set[int] = set()
+    if any(character.isdigit() for character in folded) or any(
+        f" {word} " in padded for word in ("duong", "ngo", "hem", "ngach", "kiet", "so nha")
+    ):
+        levels.add(0)
+    elif " pho " in padded and " thanh pho " not in padded:
+        levels.add(0)
+    if _HAMLET_PREFIX.search(folded) or any(f" {word} " in padded for word in ("thon", "xom", "khu pho", "to dan pho")):
+        levels.add(1)
+    if any(f" {word} " in padded for word in ("xa", "phuong", "thi tran")):
+        levels.add(2)
+    if any(f" {word} " in padded for word in ("quan", "huyen", "thi xa")) or _CITY_PREFIX.search(folded):
+        levels.add(3)
+    if " tinh " in padded or any(f" {name} " in padded for name in _PROVINCE_PHRASES):
+        levels.add(4)
+        if 3 in levels and _CITY_PREFIX.search(folded):
+            rest = _CITY_PREFIX.search(folded)
+            if rest and rest.group(1).strip() in PROVINCE_NAMES:
+                levels.discard(3)
+    return levels
+
+
+def is_complete_address(value: str) -> bool:
+    levels = address_levels_present(value)
+    return 0 in levels and 4 in levels

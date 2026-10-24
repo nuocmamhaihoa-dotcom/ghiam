@@ -14,6 +14,7 @@ from control_plane import db, xlsx_fast
 from control_plane.column_detect import looks_like_name
 from control_plane.customers import (
     clean_address,
+    compose_address,
     extract_phone,
     ingest_customers,
     phones_from_text,
@@ -405,6 +406,44 @@ class CountAndMappingTests(unittest.TestCase):
         )
         self.assertEqual(incoming[0]["address"], "12 Lê Lợi")
         self.assertNotIn("Phú Thọ", incoming[0]["address"])
+
+    def test_split_address_cells_join_from_detail_to_province(self) -> None:
+        joined = compose_address(
+            [
+                (4, "Tỉnh", "Vĩnh Long"),
+                (1, "Thôn", "thôn Trung"),
+                (3, "Huyện", "huyện Long Hồ"),
+                (0, "Số nhà", "12 Lê Lợi"),
+                (2, "Xã", "xã An Bình"),
+                (5, "Tỉnh", "Vĩnh Long"),
+                (6, "Ghi chú", ""),
+            ]
+        )
+        self.assertEqual(joined, "12 Lê Lợi, thôn Trung, xã An Bình, huyện Long Hồ, Vĩnh Long")
+        self.assertEqual(
+            compose_address(
+                [
+                    (0, "Địa chỉ", "12 Lê Lợi, Phú Thọ"),
+                    (1, "Xã", "xã An Bình"),
+                    (2, "Tỉnh", "Phú Thọ"),
+                ]
+            ),
+            "12 Lê Lợi, Phú Thọ, xã An Bình",
+        )
+        self.assertEqual(
+            compose_address(
+                [
+                    (1, "Cột B", "Thành phố Hà Nội"),
+                    (0, "Cột A", "Thành phố Thủ Đức"),
+                    (2, "Cột C", "thị xã Dĩ An"),
+                ]
+            ),
+            "Thành phố Thủ Đức, thị xã Dĩ An, Thành phố Hà Nội",
+        )
+        self.assertEqual(
+            compose_address([(0, "Cột A", "12"), (2, "Cột C", "Lê Lợi"), (1, "Cột B", "ngõ 5")]),
+            "12, ngõ 5, Lê Lợi",
+        )
 
     def test_sheet_with_other_layout_maps_its_own_columns(self) -> None:
         first = sheet(

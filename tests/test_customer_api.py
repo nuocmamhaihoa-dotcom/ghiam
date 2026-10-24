@@ -102,7 +102,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("Tình trạng", home.text)
         self.assertIn("Máy đã tự chọn cột", home.text)
         self.assertIn("Mỗi mục chọn được mọi cột", home.text)
-        self.assertIn("Ghép thêm cột thành dòng địa chỉ", home.text)
+        self.assertIn("Ghép thêm cột thành dòng địa chỉ, từ số nhà đến tỉnh", home.text)
         self.assertIn("rowsFromChoice", home.text)
         self.assertIn("syncAddressExtras", home.text)
         self.assertIn("fileMaps", home.text)
@@ -319,7 +319,7 @@ class CustomerApiTests(unittest.TestCase):
         data = preview.json()
         self.assertEqual(data["suggested"]["name"], 0)
         self.assertEqual(data["suggested"]["phone"], 1)
-        self.assertEqual(data["suggested"]["addressColumns"], [2])
+        self.assertEqual(data["suggested"]["addressColumns"], [2, 3, 4])
         self.assertEqual(data["suggested"]["adminAddressColumns"], [3, 4])
         imported = self.client.post(
             "/v1/customers/import",
@@ -343,7 +343,7 @@ class CustomerApiTests(unittest.TestCase):
         )
         self.assertEqual(imported.status_code, 200, imported.text)
         listed = self.client.get("/v1/customers", headers=self.headers)
-        self.assertEqual(listed.json()["items"][0]["address"], "12 Lê Lợi\nQuận 1\nTP.HCM")
+        self.assertEqual(listed.json()["items"][0]["address"], "12 Lê Lợi, Quận 1, TP.HCM")
 
     def test_import_admin_address_order_and_cod(self) -> None:
         name, body = self._xlsx(

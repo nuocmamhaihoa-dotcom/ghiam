@@ -9,7 +9,15 @@ from typing import Any, Callable, Iterator
 from urllib.parse import parse_qs, urlparse
 
 from control_plane import db
-from control_plane.vietnam_places import fold_vietnamese, has_address_keyword, has_vietnam_place
+from control_plane.vietnam_places import (
+    address_content_rank,
+    address_header_rank,
+    address_levels_present,
+    fold_vietnamese,
+    has_address_keyword,
+    has_vietnam_place,
+    is_complete_address,
+)
 
 FIELDS = (
     "name",
@@ -283,10 +291,55 @@ def join_address_lines(*parts: Any) -> str:
 
 
 def clean_address(value: Any) -> str:
-    """Tối đa 12 dòng × 200 ký tự, cắt theo dòng — không cắt giữa dòng."""
+    """Một dòng địa chỉ giữ đến 400 ký tự. Nhiều dòng thì tối đa 12 dòng × 200 ký tự."""
     if not value:
         return ""
-    return join_address_lines(value)
+    text = str(value).replace("\r\n", "\n").replace("\r", "\n")
+    if "\n" not in text:
+        return " ".join(text.split())[:400].rstrip()
+    return join_address_lines(text)
+
+
+def compose_address(parts: list[tuple[int, str, str]]) -> str:
+    """Gộp các ô địa chỉ thành một dòng: chi tiết, thôn, xã, huyện, tỉnh."""
+    pieces: list[tuple[int, str, str]] = []
+    seen: set[str] = set()
+    for index, header, raw in parts:
+        text = str(raw or "").replace("\r\n", "\n").replace("\r", "\n")
+        for raw_line in text.split("\n"):
+            line = " ".join(raw_line.split())
+            if not line:
+                continue
+            key = unicodedata.normalize("NFC", line).casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            pieces.append((index, header, line))
+    if not pieces:
+        return ""
+    if len(pieces) == 1:
+        return pieces[0][2]
+
+    def rank_of(item: tuple[int, str, str]) -> int:
+        forced = address_header_rank(item[1])
+        if forced is not None:
+            return forced
+        return address_content_rank(item[2])
+
+    bundles = [item for item in pieces if is_complete_address(item[2])]
+    loose = [item for item in pieces if item not in bundles]
+    if bundles:
+        covered = address_levels_present(" ".join(item[2] for item in bundles))
+        blob = f" {fold_vietnamese(' '.join(item[2] for item in bundles))} "
+        kept = [
+            item
+            for item in loose
+            if f" {fold_vietnamese(item[2])} " not in blob and rank_of(item) not in covered
+        ]
+        kept.sort(key=lambda item: (rank_of(item), item[0]))
+        return ", ".join([item[2] for item in bundles] + [item[2] for item in kept])
+    ordered = sorted(pieces, key=lambda item: (rank_of(item), item[0]))
+    return ", ".join(item[2] for item in ordered)
 
 
 def address_key(value: str) -> str:

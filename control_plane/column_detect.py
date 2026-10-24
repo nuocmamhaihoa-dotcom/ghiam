@@ -689,6 +689,20 @@ def suggested_payload(
         indexes = (details.get(field) or {}).get("indexes") or []
         if indexes:
             payload[f"{field}Columns"] = indexes
+    address_indexes = [int(index) for index in (payload.get("addressColumns") or [])]
+    admin_indexes = [int(index) for index in (payload.get("adminAddressColumns") or [])]
+    if admin_indexes:
+        primary = payload.get("address")
+        merged = list(address_indexes)
+        for index in admin_indexes:
+            if index not in merged:
+                merged.append(index)
+        merged.sort()
+        if primary is not None and int(primary) in merged:
+            merged = [int(primary)] + [index for index in merged if index != int(primary)]
+        payload["addressColumns"] = merged
+        if payload.get("address") is None and merged:
+            payload["address"] = merged[0]
     return payload, details
 
 
@@ -705,7 +719,9 @@ def explain_mapping(details: dict[str, dict[str, Any]], headers: list[str]) -> s
             title = collapse(headers[index]) if 0 <= index < len(headers) else ""
             labels.append(f"Cột {letter}" + (f" — {title}" if title else ""))
         how = item["reason"]
-        if field in LINE_FIELDS and len(indexes) > 1:
+        if field == "address" and len(indexes) > 1:
+            how = "gộp một dòng, chi tiết đến tỉnh"
+        elif field in LINE_FIELDS and len(indexes) > 1:
             how = "mỗi cột một dòng"
         parts.append(f"{_label(field)} ← {', '.join(labels)} ({how})")
     if not parts:

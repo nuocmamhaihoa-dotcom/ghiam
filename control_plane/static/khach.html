@@ -490,14 +490,24 @@
         var rawIndex = option.getAttribute("data-index");
         var index = rawIndex === "" || rawIndex == null ? null : Number(rawIndex);
         if (index !== index) index = null;
-        columns.push({ index: index, header: option.getAttribute("data-header") || "" });
+        columns.push({
+          index: index,
+          header: option.getAttribute("data-header") || "",
+          rank: Number(option.getAttribute("data-address-rank") || "0")
+        });
       }
       root.querySelectorAll("[data-field='" + field + "'] input[type=checkbox]:checked").forEach(function (box) {
         var header = box.getAttribute("data-header") || "";
         var rawIndex = box.getAttribute("data-index");
         var index = rawIndex === "" || rawIndex == null ? null : Number(rawIndex);
         if (index !== index) index = null;
-        if (header || index !== null) columns.push({ index: index, header: header });
+        if (header || index !== null) {
+          columns.push({
+            index: index,
+            header: header,
+            rank: Number(box.getAttribute("data-address-rank") || "0")
+          });
+        }
       });
       var seen = {};
       columns = columns.filter(function (col) {
@@ -573,6 +583,7 @@
     option.value = "col-" + (col.letter || col.index || col.header);
     option.setAttribute("data-header", col.header || "");
     option.setAttribute("data-index", col.index == null ? "" : String(col.index));
+    option.setAttribute("data-address-rank", col.addressRank == null ? "0" : String(col.addressRank));
     option.textContent = col.title;
     if (selected) option.selected = true;
     select.appendChild(option);
@@ -596,9 +607,16 @@
         if (!key || seen[key]) return;
         seen[key] = true;
         var text = textAt(row, col.index);
-        if (text) parts.push(text);
+        if (text) parts.push({ text: text, rank: Number(col.rank || 0), index: col.index });
       });
-      return parts.join("\n");
+      if (field === "address") {
+        parts.sort(function (left, right) {
+          if (left.rank !== right.rank) return left.rank - right.rank;
+          return left.index - right.index;
+        });
+        return parts.map(function (item) { return item.text; }).join(", ");
+      }
+      return parts.map(function (item) { return item.text; }).join("\n");
     }
     var out = [];
     (rawRows || []).forEach(function (row) {
@@ -678,7 +696,7 @@
         more.className = "extra";
         if (Object.keys(chosenExtra).length) more.open = true;
         var moreSummary = document.createElement("summary");
-        moreSummary.textContent = "Ghép thêm cột thành dòng địa chỉ";
+        moreSummary.textContent = "Ghép thêm cột thành dòng địa chỉ, từ số nhà đến tỉnh";
         more.appendChild(moreSummary);
         var extraBox = document.createElement("div");
         extraBox.className = "picks";
@@ -689,9 +707,10 @@
           var row = document.createElement("label");
           var boxInput = document.createElement("input");
           boxInput.type = "checkbox";
-          boxInput.setAttribute("data-header", col.header || "");
-          boxInput.setAttribute("data-index", col.index == null ? "" : String(col.index));
-          boxInput.checked = !!chosenExtra[index];
+            boxInput.setAttribute("data-header", col.header || "");
+            boxInput.setAttribute("data-index", col.index == null ? "" : String(col.index));
+            boxInput.setAttribute("data-address-rank", col.addressRank == null ? "0" : String(col.addressRank));
+            boxInput.checked = !!chosenExtra[index];
           row.appendChild(boxInput);
           row.appendChild(document.createTextNode("Thêm dòng: " + col.title));
           extraBox.appendChild(row);
