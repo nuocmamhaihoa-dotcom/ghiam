@@ -96,6 +96,10 @@ def clean_phone(value: Any) -> str:
         return rest if rest.startswith("0") else "0" + rest
     if leading_plus and digits.startswith("84") and len(digits) >= 10:
         return "0" + digits[2:]
+    if digits.startswith("00") and not digits.startswith("0084"):
+        trimmed = digits.lstrip("0")
+        if len(trimmed) == 9 and trimmed[:1] in "35789":
+            return "0" + trimmed
     return ("+" + digits) if leading_plus and not digits.startswith("84") else digits
 
 
@@ -315,9 +319,8 @@ class _UnionFind:
 def _pick(members: list[dict[str, Any]], field: str) -> str:
     if field in LINE_FIELDS:
         existing = [str(row.get(field) or "") for row in members if row["existing"] and row.get(field)]
-        if existing:
-            return join_address_lines(*existing)
-        return join_address_lines(*(str(row.get(field) or "") for row in members if not row["existing"]))
+        incoming = [str(row.get(field) or "") for row in members if not row["existing"] and row.get(field)]
+        return join_address_lines(*existing, *incoming)
     for row in members:
         if row["existing"] and row.get(field):
             return str(row[field])
@@ -360,8 +363,9 @@ def fold_customers(
 ) -> tuple[list[dict[str, Any]], dict[str, int], list[str]]:
     """Ghép khách mới vào kho khi trùng số điện thoại.
 
-    Ô đã có giữ nguyên, ô trống được điền thêm. Không có số, hoặc khác số,
-    thì mỗi dòng là một khách — không gộp vì tên, địa chỉ, Facebook hay TikTok.
+    Một số điện thoại là một hàng. Ô trống được bổ sung; địa chỉ / hàng mua /
+    địa chỉ hành chính mới thêm dòng; ô đã có mà không đổi thì giữ nguyên.
+    Không có số, hoặc khác số, thì mỗi dòng là một khách.
     """
     kept_incoming: list[dict[str, Any]] = []
     skipped = 0
@@ -436,7 +440,10 @@ def merge_existing_with_incoming(
     incoming: dict[str, Any],
     now: str,
 ) -> tuple[dict[str, Any], list[str], str]:
-    """Ghép một dòng file vào các khách cùng SĐT. Ô đã có giữ, ô trống điền."""
+    """Ghép một dòng file vào các khách cùng SĐT.
+
+    Ô trống điền thêm, dòng địa chỉ mới bổ sung, ô đã có không đổi thì giữ.
+    """
     incoming_row = _as_customer(incoming, False)
     if not existing:
         incoming_row["createdAt"] = now

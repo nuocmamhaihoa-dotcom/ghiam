@@ -786,18 +786,27 @@ def list_customers(db_path: Path, limit: int | None = None) -> list[dict[str, st
 def customers_by_phone(conn: sqlite3.Connection, phone: str) -> list[dict[str, str]]:
     if not phone:
         return []
+    keys = _phone_variants(phone) or [phone]
+    marks = ",".join("?" * len(keys))
     rows = conn.execute(
-        _CUSTOMER_SELECT + " WHERE phone=? ORDER BY created_at ASC, id ASC",
-        (phone,),
+        _CUSTOMER_SELECT + f" WHERE phone IN ({marks}) ORDER BY created_at ASC, id ASC",
+        keys,
     ).fetchall()
     return [customer_from_sql_row(row) for row in rows]
 
 
 def _phone_variants(value: str) -> list[str]:
-    digits = "".join(character for character in str(value or "") if character.isdigit())
+    raw = "".join(character for character in str(value or "") if character.isdigit())
+    digits = raw
     if not (8 <= len(digits) <= 15):
         return []
+    if digits.startswith("00") and not digits.startswith("0084"):
+        trimmed = digits.lstrip("0")
+        if len(trimmed) == 9 and trimmed[:1] in "35789":
+            digits = "0" + trimmed
     keys = [digits]
+    if raw and raw != digits:
+        keys.append(raw)
     if digits.startswith("0084") and len(digits) >= 13:
         rest = digits[4:]
         keys.append(rest if rest.startswith("0") else "0" + rest)
@@ -812,7 +821,7 @@ def _phone_variants(value: str) -> list[str]:
         keys.append(rest[1:] if rest.startswith("0") else rest)
     elif digits.startswith("0") and len(digits) >= 10:
         rest = digits[1:]
-        keys.extend([rest, "84" + rest, "084" + rest, "0084" + rest])
+        keys.extend([rest, "84" + rest, "084" + rest, "0084" + rest, "00" + rest, "00" + digits])
     elif len(digits) == 9:
         keys.extend(["0" + digits, "84" + digits])
     seen: set[str] = set()

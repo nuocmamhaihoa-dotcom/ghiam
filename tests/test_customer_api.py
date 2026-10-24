@@ -104,6 +104,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("Không có SĐT", home.text)
         self.assertIn("khach-build", home.text)
         self.assertIn("một khách cho mỗi số điện thoại", home.text)
+        self.assertIn("ô trống được bổ sung", home.text)
         self.assertIn("Số 84", home.text)
         self.assertIn("không lấy UID Facebook", home.text)
         self.assertIn("không bắt buộc chọn file", home.text)

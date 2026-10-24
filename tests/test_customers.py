@@ -45,6 +45,7 @@ class CustomerCleanTests(unittest.TestCase):
         self.assertEqual(clean_phone("0084901234567"), "0901234567")
         self.assertEqual(clean_phone("084901234567"), "0901234567")
         self.assertEqual(clean_phone("84901234567"), "0901234567")
+        self.assertEqual(clean_phone("00352548360"), "0352548360")
         self.assertEqual(clean_phone("abc"), "")
         self.assertIn("0901234567", phone_lookup_keys("84901234567"))
         self.assertIn("84901234567", phone_lookup_keys("0901234567"))
@@ -114,8 +115,16 @@ class CustomerMergeTests(unittest.TestCase):
         )
         self.assertEqual(stats["updated"], 1)
         self.assertEqual(again[0]["name"], "Nguyễn A")
-        self.assertEqual(again[0]["address"], "Hà Nội")
+        self.assertEqual(again[0]["address"], "Hà Nội\nSài Gòn")
         self.assertEqual(again[0]["facebookUid"], "1")
+        same, same_stats, _removed = fold_customers(
+            again,
+            [{"name": "Nguyễn A", "phone": "0901234567", "address": "Hà Nội"}],
+            "2026-01-03T00:00:00+00:00",
+        )
+        self.assertEqual(same_stats["unchanged"], 1)
+        self.assertEqual(same_stats["updated"], 0)
+        self.assertEqual(same[0]["address"], "Hà Nội\nSài Gòn")
 
     def test_same_name_different_phones_stay_apart(self) -> None:
         folded, stats, _removed = fold_customers(
@@ -548,6 +557,43 @@ class IngestSqlTests(unittest.TestCase):
         self.assertEqual(len(lan), 1)
         self.assertEqual(lan[0]["name"], "Lan")
         self.assertEqual(lan[0]["address"], "Huế")
+
+    def test_ingest_merges_84_and_00_prefix_to_same_row(self) -> None:
+        now = "2026-01-01T00:00:00+00:00"
+        first, _preview = ingest_customers(
+            self.db_path,
+            iter([{"name": "Lan", "phone": "0901222333", "address": "Huế"}]),
+            now,
+        )
+        self.assertEqual(first["created"], 1)
+        later, _preview = ingest_customers(
+            self.db_path,
+            iter(
+                [
+                    {"name": "Tên khác", "phone": "84901222333", "address": "Đà Nẵng", "codAmount": "120k"},
+                    {"name": "", "phone": "00352548360", "address": "Nha Trang"},
+                    {"name": "Minh", "phone": "0352548360", "address": "Quy Nhơn"},
+                ]
+            ),
+            "2026-01-02T00:00:00+00:00",
+        )
+        self.assertEqual(later["created"], 1)
+        self.assertEqual(later["updated"], 2)
+        self.assertEqual(later["total"], 2)
+        conn = db.connect(self.db_path)
+        try:
+            lan = db.customers_by_phone(conn, "84901222333")
+            minh = db.customers_by_phone(conn, "00352548360")
+        finally:
+            conn.close()
+        self.assertEqual(len(lan), 1)
+        self.assertEqual(lan[0]["name"], "Lan")
+        self.assertEqual(lan[0]["address"], "Huế\nĐà Nẵng")
+        self.assertEqual(lan[0]["codAmount"], "120000")
+        self.assertEqual(len(minh), 1)
+        self.assertEqual(minh[0]["name"], "Minh")
+        self.assertEqual(minh[0]["phone"], "0352548360")
+        self.assertEqual(minh[0]["address"], "Nha Trang\nQuy Nhơn")
 
 
 class SharedStringSpillTests(unittest.TestCase):
