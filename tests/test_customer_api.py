@@ -72,6 +72,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("applyChosenMapping", home.text)
         self.assertIn("Máy chủ sẽ tự lấy cột tên người", home.text)
         self.assertIn("file không lấy được dòng khách", home.text)
+        self.assertIn("Mỗi file tự khớp cột", home.text)
         self.assertNotIn("font-weight: 650", home.text)
         self.assertIn("không dùng video", home.text)
         self.assertIn("không giới hạn số file", home.text)

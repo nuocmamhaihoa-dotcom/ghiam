@@ -1,4 +1,4 @@
-"""Đọc Excel/CSV và áp một bảng chọn cột cho mọi file trong lần nạp."""
+"""Đọc Excel/CSV; mỗi file tự khớp cột, không lấy nhầm vị trí file khác."""
 
 from __future__ import annotations
 
