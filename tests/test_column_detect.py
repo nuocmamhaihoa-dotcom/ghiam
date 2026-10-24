@@ -141,8 +141,8 @@ class ColumnAssignTests(unittest.TestCase):
         from control_plane.excel_import import mapping_from_form, rows_from_files
 
         payload = write_xlsx(
-            ["Tên khách", "Số nhà", "Phường", "Tỉnh"],
-            [["Nguyễn Lan", "12 Lê Lợi", "Quận 1", "TP.HCM"]],
+            ["Tên khách", "SĐT", "Số nhà", "Phường", "Tỉnh"],
+            [["Nguyễn Lan", "0901222333", "12 Lê Lợi", "Quận 1", "TP.HCM"]],
         )
         preview = preview_table("nhieu-dia-chi.xlsx", payload)
         self.assertEqual(preview["suggested"]["name"], 0)
@@ -159,11 +159,12 @@ class ColumnAssignTests(unittest.TestCase):
         mapping = mapping_from_form(
             {
                 "name": {"index": 0, "header": "Tên khách"},
+                "phone": {"index": 1, "header": "SĐT"},
                 "address": {
                     "columns": [
-                        {"index": 1, "header": "Số nhà"},
-                        {"index": 2, "header": "Phường"},
-                        {"index": 3, "header": "Tỉnh"},
+                        {"index": 2, "header": "Số nhà"},
+                        {"index": 3, "header": "Phường"},
+                        {"index": 4, "header": "Tỉnh"},
                     ]
                 },
             }
@@ -176,8 +177,8 @@ class ColumnAssignTests(unittest.TestCase):
         from control_plane.excel_import import mapping_from_form, rows_from_files
 
         payload = write_xlsx(
-            ["Tên khách", "Hàng mua", "Sản phẩm", "Size"],
-            [["Nguyễn Lan", "Nước mắm", "chai 500ml", "size 41"]],
+            ["Tên khách", "SĐT", "Hàng mua", "Sản phẩm", "Size"],
+            [["Nguyễn Lan", "0901222333", "Nước mắm", "chai 500ml", "size 41"]],
         )
         mapping, details = assign_fields(
             ["Tên khách", "Hàng mua", "Sản phẩm", "Size"],
@@ -191,10 +192,11 @@ class ColumnAssignTests(unittest.TestCase):
             mapping_from_form(
                 {
                     "name": {"index": 0, "header": "Tên khách"},
+                    "phone": {"index": 1, "header": "SĐT"},
                     "orderContent": {
                         "columns": [
-                            {"index": 1, "header": "Hàng mua"},
-                            {"index": 2, "header": "Sản phẩm"},
+                            {"index": 2, "header": "Hàng mua"},
+                            {"index": 3, "header": "Sản phẩm"},
                         ]
                     },
                 }

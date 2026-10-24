@@ -32,6 +32,7 @@ from control_plane.customers import (
     collapse,
     expand_scientific,
     has_data,
+    has_phone,
     join_address_lines,
 )
 from control_plane.vietnam_places import fold_vietnamese
@@ -889,7 +890,7 @@ def rows_from_mapped_headers(
             index = indexes[field]
             raw[field] = row[index] if index is not None and index < len(row) else ""
         cleaned = clean_row(raw)
-        if has_data(cleaned):
+        if has_phone(cleaned):
             extracted.append(cleaned)
     return extracted
 
@@ -1007,7 +1008,7 @@ def rows_from_table(rows: list[list[str]], mapping: dict[str, Any], allow_index:
             index = indexes[field]
             raw[field] = row[index] if index is not None and index < len(row) else ""
         cleaned = clean_row(raw)
-        if has_data(cleaned):
+        if has_phone(cleaned):
             extracted.append(cleaned)
     return extracted
 
@@ -1060,8 +1061,10 @@ def _mapped_from_iter(
             index = indexes[field]
             raw[field] = row[index] if index is not None and index < len(row) else ""
         cleaned = clean_row(raw)
-        if has_data(cleaned):
+        if has_phone(cleaned):
             yield cleaned
+        elif has_data(cleaned):
+            continue
         else:
             tallies["unmapped"] += 1
 

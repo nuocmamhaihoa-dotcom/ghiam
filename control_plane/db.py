@@ -968,6 +968,16 @@ def replace_customers(db_path: Path, rows: list[dict[str, Any]], removed_ids: li
         write_customers(conn, rows, removed_ids)
 
 
+def delete_customers_without_phone(db_path: Path) -> int:
+    """Xóa các hàng không có số điện thoại. Không đụng khách đã có SĐT."""
+    with session(db_path) as conn:
+        row = conn.execute("SELECT COUNT(*) AS n FROM customers WHERE phone = ''").fetchone()
+        count = int(row["n"] or 0)
+        if count:
+            conn.execute("DELETE FROM customers WHERE phone = ''")
+    return count
+
+
 def customer_count(db_path: Path) -> int:
     with session(db_path) as conn:
         row = conn.execute("SELECT COUNT(*) AS n FROM customers").fetchone()

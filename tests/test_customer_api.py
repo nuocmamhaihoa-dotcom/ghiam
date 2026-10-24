@@ -105,6 +105,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("khach-build", home.text)
         self.assertIn("một khách cho mỗi số điện thoại", home.text)
         self.assertIn("ô trống được bổ sung", home.text)
+        self.assertIn("Không có số điện thoại thì bỏ qua, không lưu", home.text)
         self.assertIn("Số 84", home.text)
         self.assertIn("không lấy UID Facebook", home.text)
         self.assertIn("không bắt buộc chọn file", home.text)
@@ -285,8 +286,8 @@ class CustomerApiTests(unittest.TestCase):
     def test_preview_keeps_every_address_column(self) -> None:
         name, body = self._xlsx(
             "diachi.xlsx",
-            ["Tên khách", "Số nhà", "Phường", "Tỉnh"],
-            [["Nguyễn Lan", "12 Lê Lợi", "Quận 1", "TP.HCM"]],
+            ["Tên khách", "SĐT", "Số nhà", "Phường", "Tỉnh"],
+            [["Nguyễn Lan", "0901222333", "12 Lê Lợi", "Quận 1", "TP.HCM"]],
         )
         preview = self.client.post(
             "/v1/customers/preview",
@@ -296,8 +297,9 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(preview.status_code, 200, preview.text)
         data = preview.json()
         self.assertEqual(data["suggested"]["name"], 0)
-        self.assertEqual(data["suggested"]["addressColumns"], [1])
-        self.assertEqual(data["suggested"]["adminAddressColumns"], [2, 3])
+        self.assertEqual(data["suggested"]["phone"], 1)
+        self.assertEqual(data["suggested"]["addressColumns"], [2])
+        self.assertEqual(data["suggested"]["adminAddressColumns"], [3, 4])
         imported = self.client.post(
             "/v1/customers/import",
             headers=self.headers,
@@ -305,11 +307,12 @@ class CustomerApiTests(unittest.TestCase):
                 "mapping": json.dumps(
                     {
                         "name": {"index": 0, "header": "Tên khách"},
+                        "phone": {"index": 1, "header": "SĐT"},
                         "address": {
                             "columns": [
-                                {"index": 1, "header": "Số nhà"},
-                                {"index": 2, "header": "Phường"},
-                                {"index": 3, "header": "Tỉnh"},
+                                {"index": 2, "header": "Số nhà"},
+                                {"index": 3, "header": "Phường"},
+                                {"index": 4, "header": "Tỉnh"},
                             ]
                         },
                     }
@@ -369,8 +372,8 @@ class CustomerApiTests(unittest.TestCase):
     def test_preview_keeps_every_order_content_column(self) -> None:
         name, body = self._xlsx(
             "hang.xlsx",
-            ["Tên khách", "Hàng mua", "Sản phẩm"],
-            [["Nguyễn Lan", "Nước mắm", "chai 500ml"]],
+            ["Tên khách", "SĐT", "Hàng mua", "Sản phẩm"],
+            [["Nguyễn Lan", "0901222333", "Nước mắm", "chai 500ml"]],
         )
         preview = self.client.post(
             "/v1/customers/preview",
@@ -379,7 +382,7 @@ class CustomerApiTests(unittest.TestCase):
         )
         self.assertEqual(preview.status_code, 200, preview.text)
         data = preview.json()
-        self.assertEqual(data["suggested"]["orderContentColumns"], [1, 2])
+        self.assertEqual(data["suggested"]["orderContentColumns"], [2, 3])
         imported = self.client.post(
             "/v1/customers/import",
             headers=self.headers,
@@ -387,10 +390,11 @@ class CustomerApiTests(unittest.TestCase):
                 "mapping": json.dumps(
                     {
                         "name": {"index": 0, "header": "Tên khách"},
+                        "phone": {"index": 1, "header": "SĐT"},
                         "orderContent": {
                             "columns": [
-                                {"index": 1, "header": "Hàng mua"},
-                                {"index": 2, "header": "Sản phẩm"},
+                                {"index": 2, "header": "Hàng mua"},
+                                {"index": 3, "header": "Sản phẩm"},
                             ]
                         },
                     }

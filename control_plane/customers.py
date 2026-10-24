@@ -266,8 +266,12 @@ def has_data(row: dict[str, str]) -> bool:
     return any(row.get(field) for field in FIELDS)
 
 
+def has_phone(row: dict[str, str]) -> bool:
+    return bool(clean_phone(row.get("phone") or ""))
+
+
 def identity_keys(row: dict[str, str]) -> list[tuple[str, str]]:
-    """Chỉ gộp khi trùng số điện thoại. Không có số thì mỗi dòng là một khách."""
+    """Chỉ gộp khi trùng số điện thoại. Không có số thì bỏ qua."""
     phone = clean_phone(row.get("phone") or "")
     if not phone:
         return []
@@ -365,13 +369,13 @@ def fold_customers(
 
     Một số điện thoại là một hàng. Ô trống được bổ sung; địa chỉ / hàng mua /
     địa chỉ hành chính mới thêm dòng; ô đã có mà không đổi thì giữ nguyên.
-    Không có số, hoặc khác số, thì mỗi dòng là một khách.
+    Không có số điện thoại thì bỏ qua, không lưu.
     """
     kept_incoming: list[dict[str, Any]] = []
     skipped = 0
     for raw in incoming:
         row = clean_row(raw)
-        if not has_data(row):
+        if not has_phone(row):
             skipped += 1
             continue
         kept_incoming.append(_as_customer(row, False))
@@ -503,33 +507,29 @@ def ingest_customers(
         for raw in incoming:
             incoming_count += 1
             row = clean_row(raw)
-            if not has_data(row):
+            if not has_phone(row):
                 skipped += 1
                 continue
             repaired, changed = repair_customer_row(row)
             if changed:
                 row = clean_row(repaired)
-            if not has_data(row):
+            if not has_phone(row):
                 skipped += 1
                 continue
             kept += 1
             phone = clean_phone(row.get("phone") or "")
-            if phone:
-                pending_id = pending_phone.get(phone)
-                if pending_id and pending_id in pending:
-                    existing = [pending[pending_id]]
-                else:
-                    existing = db.customers_by_phone(conn, phone)
-                merged, extra_ids, kind = merge_existing_with_incoming(existing, row, now)
-                for extra_id in extra_ids:
-                    pending.pop(extra_id, None)
-                    pending_deletes.append(extra_id)
-                    absorbed += 1
-                pending[merged["id"]] = merged
-                pending_phone[phone] = merged["id"]
+            pending_id = pending_phone.get(phone)
+            if pending_id and pending_id in pending:
+                existing = [pending[pending_id]]
             else:
-                merged, extra_ids, kind = merge_existing_with_incoming([], row, now)
-                pending[merged["id"]] = merged
+                existing = db.customers_by_phone(conn, phone)
+            merged, extra_ids, kind = merge_existing_with_incoming(existing, row, now)
+            for extra_id in extra_ids:
+                pending.pop(extra_id, None)
+                pending_deletes.append(extra_id)
+                absorbed += 1
+            pending[merged["id"]] = merged
+            pending_phone[phone] = merged["id"]
             if kind == "created":
                 created += 1
             elif kind == "updated":

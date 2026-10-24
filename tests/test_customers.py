@@ -153,24 +153,27 @@ class CustomerMergeTests(unittest.TestCase):
         self.assertEqual(folded[0]["phone"], "0338174222")
         self.assertEqual(folded[0]["name"], "Sơn")
 
-    def test_same_name_and_address_without_phone_stay_apart(self) -> None:
+    def test_rows_without_phone_are_skipped(self) -> None:
         folded, stats, _removed = fold_customers(
             [],
             [
                 {"name": "Lan", "address": "Huế"},
                 {"name": "Lan", "address": "Huế"},
+                {"name": "Minh", "phone": "0901444555"},
             ],
             "2026-01-01T00:00:00+00:00",
         )
-        self.assertEqual(len(folded), 2)
-        self.assertEqual(stats["created"], 2)
+        self.assertEqual(len(folded), 1)
+        self.assertEqual(stats["created"], 1)
+        self.assertEqual(stats["skipped"], 2)
+        self.assertEqual(folded[0]["phone"], "0901444555")
 
     def test_facebook_or_tiktok_alone_does_not_merge(self) -> None:
         folded, stats, _removed = fold_customers(
             [],
             [
-                {"name": "Trần Tùng", "facebookUid": "222", "tiktokId": "tung.ban"},
-                {"name": "Tùng", "facebookUid": "222", "tiktokId": "tung.ban"},
+                {"name": "Trần Tùng", "phone": "0901111111", "facebookUid": "222", "tiktokId": "tung.ban"},
+                {"name": "Tùng", "phone": "0901222222", "facebookUid": "222", "tiktokId": "tung.ban"},
             ],
             "2026-01-01T00:00:00+00:00",
         )
@@ -533,7 +536,7 @@ class IngestSqlTests(unittest.TestCase):
         self.assertEqual(sample[0]["name"], "K12")
         self.assertEqual(sample[0]["address"], "Huế 12")
 
-    def test_ingest_merges_same_phone_and_keeps_no_phone(self) -> None:
+    def test_ingest_merges_same_phone_and_skips_no_phone(self) -> None:
         now = "2026-01-01T00:00:00+00:00"
         incoming = iter(
             [
@@ -546,17 +549,54 @@ class IngestSqlTests(unittest.TestCase):
         )
         stats, _preview = ingest_customers(self.db_path, incoming, now, flush_every=50)
         self.assertEqual(stats["incoming"], 5)
-        self.assertEqual(stats["created"], 4)
+        self.assertEqual(stats["created"], 1)
         self.assertEqual(stats["updated"], 1)
-        self.assertEqual(stats["total"], 4)
+        self.assertEqual(stats["skipped"], 3)
+        self.assertEqual(stats["total"], 1)
+        self.assertEqual(db.delete_customers_without_phone(self.db_path), 0)
         conn = db.connect(self.db_path)
         try:
             lan = db.customers_by_phone(conn, "0901111111")
+            empty = conn.execute("SELECT COUNT(*) AS n FROM customers WHERE phone = ''").fetchone()["n"]
         finally:
             conn.close()
         self.assertEqual(len(lan), 1)
         self.assertEqual(lan[0]["name"], "Lan")
         self.assertEqual(lan[0]["address"], "Huế")
+        self.assertEqual(int(empty), 0)
+
+    def test_delete_customers_without_phone_keeps_numbered_rows(self) -> None:
+        db.replace_customers(
+            self.db_path,
+            [
+                {
+                    "id": "p1",
+                    "name": "Lan",
+                    "phone": "0901111111",
+                    "address": "Huế",
+                    "facebookUid": "",
+                    "tiktokId": "",
+                    "createdAt": "2026-01-01T00:00:00+00:00",
+                    "updatedAt": "2026-01-01T00:00:00+00:00",
+                },
+                {
+                    "id": "e1",
+                    "name": "Không số",
+                    "phone": "",
+                    "address": "Huế",
+                    "facebookUid": "",
+                    "tiktokId": "",
+                    "createdAt": "2026-01-01T00:00:00+00:00",
+                    "updatedAt": "2026-01-01T00:00:00+00:00",
+                },
+            ],
+            [],
+        )
+        self.assertEqual(db.delete_customers_without_phone(self.db_path), 1)
+        self.assertEqual(db.customer_count(self.db_path), 1)
+        stats = db.warehouse_stats(self.db_path)
+        self.assertEqual(stats["emptyPhone"], 0)
+        self.assertEqual(stats["uniquePhones"], 1)
 
     def test_ingest_merges_84_and_00_prefix_to_same_row(self) -> None:
         now = "2026-01-01T00:00:00+00:00"
