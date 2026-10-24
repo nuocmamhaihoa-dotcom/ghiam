@@ -223,7 +223,7 @@
       <input id="token" type="password" placeholder="Token hub" autocomplete="off" />
       <button id="saveToken" class="ghost" type="button">Lưu token</button>
       <button id="refresh" type="button">Tải lại</button>
-      <button id="recheck" class="danger" type="button">Check proxy ngay</button>
+      <button id="recheck" class="danger" type="button" hidden>Check proxy ngay</button>
     </div>
     <div data-norecord>
       <a id="openPhone" href="/phone">Mở giả lập điện thoại trên PC</a>
@@ -240,14 +240,14 @@
     <button type="button" class="ghost on" data-tab="home">Tổng quan</button>
     <button type="button" class="ghost" data-tab="journal">Nhật ký</button>
     <button type="button" class="ghost" data-tab="script">Kịch bản</button>
-    <button type="button" class="ghost" data-tab="proxy">Proxy</button>
+    <button type="button" class="ghost" data-tab="proxy" hidden>Proxy</button>
     <button type="button" class="ghost" data-tab="comments">Comment</button>
     <button type="button" class="ghost" data-tab="people">Đã lưu</button>
   </nav>
   </div>
   <main>
     <section data-view="home">
-      <p class="lead">Số liệu hub, máy đang nối, rồi chuyển tab để ghi nhớ, làm lại thao tác, xem proxy hoặc comment.</p>
+      <p class="lead">Số liệu hub, máy đang nối, rồi chuyển tab để ghi nhớ, làm lại thao tác hoặc xem comment. Quét không dùng proxy.</p>
       <a class="iphone-go" href="/iphone">Lướt trên iPhone</a>
       <a class="iphone-go" href="/focus/">Focus: quét lik</a>
       <div class="stats" id="stats"></div>
@@ -257,7 +257,7 @@
     <section data-view="journal" hidden>
       <div class="panel journal" id="journal">
         <h2>Nhật ký thao tác</h2>
-        <p class="lead">Ghi việc vừa làm để tìm lại. Check proxy và upload gói được ghi tự động. Ô mật khẩu không lưu ký tự.</p>
+        <p class="lead">Ghi việc vừa làm để tìm lại. Upload gói được ghi tự động. Ô mật khẩu không lưu ký tự.</p>
         <div class="toolbar">
           <input id="actionText" type="text" maxlength="500" placeholder="Mình vừa làm gì? Ví dụ: import 300 URL rồi rebalance hot" />
           <button id="saveAction" type="button">Ghi nhớ</button>
@@ -383,8 +383,8 @@
     <section data-view="proxy" hidden>
       <div class="split">
         <div class="panel" id="diePanel">
-          <h2>Proxy DIE</h2>
-          <p class="meta" id="dieMeta">Đang tải…</p>
+          <h2>Proxy đã gỡ</h2>
+          <p class="meta" id="dieMeta">Quét đi IP máy — không check live/die.</p>
           <p class="meta" id="dieHint"></p>
           <div class="scroll">
             <table>
@@ -547,9 +547,6 @@
         $("stats").innerHTML = [
           ["Comments", stats.comments, ""],
           ["Agents", stats.agents, ""],
-          ["Proxy LIVE", px.live ?? "—", "ok"],
-          ["Proxy DIE", px.die ?? "—", "bad"],
-          ["Proxy tổng", px.total ?? "—", ""],
           ["Bytes sync", fmtBytes(stats.bytes_total || 0), ""],
         ].map(([label, val, cls]) =>
           `<div class="stat ${cls}"><b>${esc(val)}</b><span>${label}</span></div>`

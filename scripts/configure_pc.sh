@@ -27,7 +27,7 @@ read -r -p "HOT_SIZE [100]: " hot_size
 hot_size="${hot_size:-100}"
 
 mkdir -p data logs
-touch data/posts.txt data/proxies_static.txt data/proxies_4g.txt
+touch data/posts.txt
 
 cat > .env <<EOF
 DATABASE_URL=sqlite+aiosqlite://${ROOT}/data/fb_poller.db
@@ -45,19 +45,17 @@ HOT_MAX_COMMENTS_PAGE=20
 BROWSER_RESTART_EVERY_JOBS=80
 HEADLESS=true
 NAVIGATION_TIMEOUT_MS=15000
-PROXIES_STATIC_FILE=${ROOT}/data/proxies_static.txt
-PROXIES_4G_FILE=${ROOT}/data/proxies_4g.txt
 DATA_DIR=${ROOT}/data
 EOF
 
 echo
-echo "Đã ghi .env"
+echo "Đã ghi .env (quét đi IP máy, không proxy)"
 if [[ -x .venv/bin/python ]]; then
   # shellcheck disable=SC1091
   source .venv/bin/activate
   python scripts/pc_doctor.py
 fi
 echo
-echo "Tiếp theo: dán URL/proxy vào data/, rồi:"
+echo "Tiếp theo: dán URL vào data/posts.txt, rồi:"
 echo "  ./scripts/fb-poller-ctl.sh import"
 echo "  ./scripts/fb-poller-ctl.sh start"

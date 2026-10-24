@@ -19,7 +19,7 @@ from fb_poller.storage.repo import PostRepo
 from fb_poller.obs.metrics import Metrics
 from fb_poller.workers.job_hot import poll_post
 from fb_poller.workers.browser_pool import BrowserPool
-from fb_poller.workers.proxy_manager import ProxyManager, import_proxy_files
+from fb_poller.workers.proxy_manager import ProxyManager
 from fb_poller.workers.types import PostJob
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
@@ -59,16 +59,36 @@ def import_urls(
 
 @app.command("import-proxies")
 def import_proxies_cmd() -> None:
-    """Import proxies from data/proxies_static.txt and data/proxies_4g.txt."""
+    """Proxy đã gỡ — lệnh giữ để không gãy script cũ."""
+    remember_quietly(summary="Bỏ qua import proxy (đã gỡ khỏi phần mềm)", kind="cli", source="cli")
+    console.print("Đã gỡ proxy. Quét đi IP máy, không import.")
+
+
+@app.command("recover")
+def recover_cmd() -> None:
+    """Lấy lại bài bị chôn khi proxy cũ hết hạn / login wall giả."""
     settings = get_settings()
-    remember_quietly(summary="Import proxy từ file static/4g", kind="cli", source="cli")
+    remember_quietly(summary="Lấy lại hàng quét guest_hidden + fail_streak", kind="cli", source="cli")
 
     async def _run() -> None:
         await init_db(settings)
-        result = await import_proxy_files(settings)
+        async with session_scope() as session:
+            result = await PostRepo(session, settings).recover_scan_pool()
         console.print(result)
 
     asyncio.run(_run())
+
+
+@app.command("check-4g")
+def check_4g_cmd() -> None:
+    """Proxy đã gỡ."""
+    console.print("Đã gỡ proxy khỏi phần mềm.")
+
+
+@app.command("rotate-4g")
+def rotate_4g_cmd() -> None:
+    """Proxy đã gỡ — không xoay IP."""
+    console.print("Đã gỡ proxy khỏi phần mềm. Không xoay IP.")
 
 
 @app.command("rebalance-hot")

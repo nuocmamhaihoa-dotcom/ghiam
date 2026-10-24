@@ -130,7 +130,7 @@ cmd_import() {
   else
     echo "data/posts.txt trống — hãy dán URL vào trước"
   fi
-  fb-poller import-proxies
+  fb-poller recover
   fb-poller rebalance-hot
   fb-poller status
 }
@@ -148,6 +148,7 @@ cmd_doctor() {
   source "$ROOT/.venv/bin/activate"
   fb-poller doctor
 }
+
 
 cmd_install_service() {
   ensure_installed
@@ -204,7 +205,7 @@ Commands:
   restart           Restart
   status            Trạng thái process + DB
   logs [N]          Xem log (mặc định follow)
-  import            Import posts.txt + proxies + rebalance-hot
+  import            Import posts.txt, lấy lại bài, rebalance-hot
   probe [n] [w]     Probe n bài với w workers
   doctor            Kiểm tra tài nguyên PC + cấu hình
   install-service   Cài systemd user service (tự chạy)

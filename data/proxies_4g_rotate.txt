@@ -1,0 +1,1 @@
+# Đã gỡ proxy — không xoay IP.

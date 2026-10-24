@@ -11,14 +11,13 @@ playwright install-deps chromium || true
 
 if [[ ! -f .env ]]; then
   cp .env.example .env
-  echo "Created .env — edit WORKERS / WORKER_ID / proxy paths"
+  echo "Created .env — edit WORKERS / WORKER_ID"
 fi
 
 mkdir -p data
-touch data/posts.txt data/proxies_static.txt data/proxies_4g.txt
+touch data/posts.txt
 fb-poller init-db
-echo "Setup done. Next: fill data/posts.txt + proxies, then:"
+echo "Setup done. Next: fill data/posts.txt (quét đi IP máy), then:"
 echo "  fb-poller import-urls data/posts.txt"
-echo "  fb-poller import-proxies"
 echo "  fb-poller rebalance-hot"
 echo "  fb-poller run"

@@ -30,8 +30,12 @@ async def _worker_loop(
     warm_cold_sem: asyncio.Semaphore,
 ) -> None:
     worker = pool.workers[slot]
-    console.log(f"[worker-{slot}] ready proxy={worker.proxy.raw if worker.proxy else 'direct'}")
+    kind = worker.proxy.kind if worker.proxy else "direct"
+    console.log(f"[worker-{slot}] ready proxy={worker.proxy.raw if worker.proxy else 'direct'} kind={kind}")
     while not stop.is_set():
+        if worker.needs_recycle:
+            await pool.recycle_now(worker)
+            console.log(f"[worker-{slot}] recycled")
         try:
             job = await asyncio.wait_for(queue.get(), timeout=1.0)
         except asyncio.TimeoutError:
@@ -87,10 +91,18 @@ async def run_poller(settings: Settings) -> None:
     metrics_path = settings.data_dir / "metrics" / f"{settings.worker_id}.jsonl"
     metrics = Metrics(path=metrics_path)
 
+    async with session_scope() as session:
+        recovered = await PostRepo(session, settings).recover_scan_pool()
+    if recovered["recovered"] or recovered["reset_fail"]:
+        console.log(
+            f"[runner] lấy lại hàng quét recovered={recovered['recovered']} "
+            f"reset_fail={recovered['reset_fail']}"
+        )
+
     proxy_manager = ProxyManager(settings)
-    assigned = await proxy_manager.load_for_worker(settings.workers)
+    await proxy_manager.load_for_worker(settings.workers)
     console.log(
-        f"[runner] PA1 workers={settings.workers} proxies={assigned} "
+        f"[runner] PA1 workers={settings.workers} proxy=off (IP máy) "
         f"hot_interval={settings.hot_interval_sec}s hot_size={settings.hot_size}"
     )
 

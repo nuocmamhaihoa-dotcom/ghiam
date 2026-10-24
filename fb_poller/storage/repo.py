@@ -181,15 +181,14 @@ class PostRepo:
         guest_visible: bool | None = None,
     ) -> None:
         now = utcnow()
-        if guest_visible is not None:
-            post.guest_visible = guest_visible
-            if guest_visible is False:
-                post.status = PostStatus.guest_hidden.value
-
         if ok:
             post.fail_streak = 0
             post.last_success_at = now
             post.last_error = None
+            if guest_visible is True:
+                post.guest_visible = True
+                if post.status == PostStatus.guest_hidden.value:
+                    post.status = PostStatus.active.value
             recent = _parse_ids(post.recent_ids_json)
             for cid in reversed(new_ids):
                 if cid not in recent:
@@ -208,6 +207,13 @@ class PostRepo:
             if post.fail_streak >= self.settings.fail_streak_cooldown:
                 # cooldown: push next poll further
                 post.next_poll_at = now + timedelta(seconds=max(self.settings.cold_interval_sec, 300))
+            # Login wall sau proxy chết / xoay 4G không được chôn bài vĩnh viễn.
+            if (
+                guest_visible is False
+                and post.fail_streak >= self.settings.hide_after_fail_streak
+            ):
+                post.guest_visible = False
+                post.status = PostStatus.guest_hidden.value
 
         # Demote hot if boost expired and no longer needed — handled in rebalance
         hot_until = ensure_utc(post.hot_until)
@@ -226,6 +232,42 @@ class PostRepo:
             .where(Post.id == post_id)
             .values(guest_visible=False, status=PostStatus.guest_hidden.value)
         )
+
+    async def recover_scan_pool(self) -> dict[str, int]:
+        """Lấy lại bài bị chôn khi proxy cũ chết / 4G vừa xoay hiện login."""
+        now = utcnow()
+        hidden = list(
+            (
+                await self.session.scalars(
+                    select(Post).where(Post.status == PostStatus.guest_hidden.value)
+                )
+            ).all()
+        )
+        stalled = list(
+            (
+                await self.session.scalars(
+                    select(Post).where(
+                        Post.status == PostStatus.active.value,
+                        Post.fail_streak >= 1,
+                    )
+                )
+            ).all()
+        )
+        recovered = 0
+        for post in hidden:
+            post.status = PostStatus.active.value
+            post.guest_visible = None
+            post.fail_streak = 0
+            post.next_poll_at = now
+            post.last_error = None
+            recovered += 1
+        reset = 0
+        for post in stalled:
+            post.fail_streak = 0
+            post.next_poll_at = now
+            reset += 1
+        await self.session.flush()
+        return {"recovered": recovered, "reset_fail": reset}
 
 
 class CommentRepo:
@@ -306,6 +348,9 @@ class ProxyRepo:
                 continue
             existing = await self.session.scalar(select(Proxy).where(Proxy.endpoint == endpoint))
             if existing:
+                existing.proxy_type = proxy_type
+                if proxy_type == "4g":
+                    existing.health = "ok"
                 skipped += 1
                 continue
             self.session.add(Proxy(endpoint=endpoint, proxy_type=proxy_type))
@@ -313,40 +358,49 @@ class ProxyRepo:
         await self.session.flush()
         return inserted, skipped
 
+    async def _healthy(self, proxy_type: str, worker_id: str | None = None, *, unassigned: bool = False) -> list[Proxy]:
+        stmt = select(Proxy).where(Proxy.proxy_type == proxy_type, Proxy.health == "ok")
+        if unassigned:
+            stmt = stmt.where(Proxy.assigned_worker.is_(None))
+        elif worker_id is not None:
+            stmt = stmt.where(Proxy.assigned_worker == worker_id)
+        return list((await self.session.scalars(stmt)).all())
+
     async def assign_static(self, worker_id: str, count: int) -> list[Proxy]:
         # Reuse already assigned
-        mine = list(
-            (
-                await self.session.scalars(
-                    select(Proxy).where(
-                        Proxy.assigned_worker == worker_id,
-                        Proxy.proxy_type == "static",
-                        Proxy.health == "ok",
-                    )
-                )
-            ).all()
-        )
+        mine = await self._healthy("static", worker_id)
         if len(mine) >= count:
             return mine[:count]
 
         need = count - len(mine)
-        free = list(
-            (
-                await self.session.scalars(
-                    select(Proxy)
-                    .where(
-                        Proxy.assigned_worker.is_(None),
-                        Proxy.proxy_type == "static",
-                        Proxy.health == "ok",
-                    )
-                    .limit(need)
-                )
-            ).all()
-        )
+        free = (await self._healthy("static", unassigned=True))[:need]
         for p in free:
             p.assigned_worker = worker_id
         await self.session.flush()
         return mine + free
+
+    async def assign_for_scan(self, worker_id: str, count: int) -> list[Proxy]:
+        """Ưu tiên 4G kq2; thiếu thì mới lấy proxy tĩnh. Worker thừa thì dùng chung 4G."""
+        if count <= 0:
+            return []
+        mine = await self._healthy("4g", worker_id)
+        free = await self._healthy("4g", unassigned=True)
+        seen: set[int] = set()
+        pool: list[Proxy] = []
+        for p in mine + free:
+            if p.id in seen:
+                continue
+            seen.add(p.id)
+            pool.append(p)
+        if pool:
+            for p in pool:
+                if p.assigned_worker is None:
+                    p.assigned_worker = worker_id
+            await self.session.flush()
+            if len(pool) >= count:
+                return pool[:count]
+            return [pool[i % len(pool)] for i in range(count)]
+        return await self.assign_static(worker_id, count)
 
     async def mark_sick(self, proxy_id: int) -> None:
         proxy = await self.session.get(Proxy, proxy_id)
@@ -356,3 +410,11 @@ class ProxyRepo:
         proxy.last_ban_at = utcnow()
         proxy.assigned_worker = None
         await self.session.flush()
+
+    async def mark_ok(self, endpoint: str) -> Proxy | None:
+        proxy = await self.session.scalar(select(Proxy).where(Proxy.endpoint == endpoint))
+        if not proxy:
+            return None
+        proxy.health = "ok"
+        await self.session.flush()
+        return proxy

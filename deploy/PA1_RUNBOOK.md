@@ -8,16 +8,15 @@ Engine: **browser-light only**. Hot = 100 posts, start **45s**, goal **30s** aft
 git pull
 ./scripts/setup_machine.sh
 cp deploy/env.pc20.example deploy/env.pc20   # or env.pc12
-# edit WORKERS / DATABASE_URL / proxy paths
+# edit WORKERS / DATABASE_URL
 ```
 
 Fill:
 - `data/posts.txt` — 300 permalinks
-- `data/proxies_static.txt` — sticky proxies (prefer ~20+ for workers)
+- Quét đi IP máy (đã gỡ proxy)
 
 ```bash
 fb-poller import-urls data/posts.txt
-fb-poller import-proxies
 fb-poller rebalance-hot
 fb-poller probe --limit 10 --workers 2
 fb-poller status

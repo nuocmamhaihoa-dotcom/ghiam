@@ -1,13 +1,13 @@
 # Cài đặt fb-poller trên PC để quét comment (PA1)
 
-Phần mềm chạy **trên máy bạn**, dùng CPU/RAM/proxy của PC — không phụ thuộc máy cloud.
+Phần mềm chạy **trên máy bạn**, dùng CPU/RAM của PC — không phụ thuộc máy cloud.
 
 ## Yêu cầu
 
 - Linux (Ubuntu 22.04+/Debian) **hoặc** Windows 10/11
 - Python 3.11+
 - ~8GB+ RAM trống (khuyến nghị 32GB+ nếu `WORKERS≥10`)
-- Danh sách URL bài công khai + proxy tĩnh (khuyến nghị)
+- Danh sách URL bài công khai (quét đi IP máy, không proxy)
 
 ## Linux — cài 1 lệnh
 
@@ -25,7 +25,7 @@ Installer sẽ:
 1. Cài dependency hệ thống + Python venv  
 2. Cài Playwright Chromium  
 3. Tạo `.env` khớp tài nguyên máy  
-4. Tạo `data/posts.txt`, `data/proxies_static.txt`  
+4. Tạo `data/posts.txt`  
 5. Init database SQLite local  
 
 ### Cấu hình lại workers (tuỳ chọn)
@@ -35,11 +35,10 @@ Installer sẽ:
 ./scripts/fb-poller-ctl.sh doctor
 ```
 
-### Nạp URL + proxy
+### Nạp URL
 
 ```bash
 nano data/posts.txt            # 1 permalink / dòng
-nano data/proxies_static.txt   # 1 proxy / dòng (http://user:pass@host:port)
 ./scripts/fb-poller-ctl.sh import
 ./scripts/fb-poller-ctl.sh probe 10 2
 ```
@@ -92,7 +91,7 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 
 - Mỗi máy dùng `.env` riêng (`WORKER_ID` khác nhau).  
 - Muốn 2 máy chung 1 DB: đưa Postgres lên PC12, cùng `DATABASE_URL` trên cả 2.  
-- Chia proxy tĩnh: PC20 ~14 IP, PC12 ~6 IP (không trùng nếu có thể).
+- Quét đi IP từng máy (đã gỡ proxy).
 
 ## Kiểm tra sức khoẻ
 
@@ -106,7 +105,7 @@ Chỉ hạ `HOT_INTERVAL_SEC=30` khi `fb-poller kpi` báo `ready_for_30s=true`.
 ## Luồng sử dụng hàng ngày
 
 ```text
-import URL/proxy  →  doctor  →  start  →  status/logs  →  kpi
+import URL  →  doctor  →  start  →  status/logs  →  kpi
 ```
 
 Log mặc định: `logs/fb-poller.out`  

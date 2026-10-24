@@ -62,11 +62,8 @@ def run_doctor() -> None:
     table.add_row("Playwright", "ok" if chromium_ok else "missing", "playwright install chromium")
 
     posts = count_nonempty_lines(ROOT / "data" / "posts.txt")
-    static = count_nonempty_lines(Path(settings.proxies_static_file))
-    g4 = count_nonempty_lines(Path(settings.proxies_4g_file))
     table.add_row("posts.txt", str(posts), "≥1 URL permalink")
-    table.add_row("proxies_static", str(static), f"≥ WORKERS ({settings.workers})")
-    table.add_row("proxies_4g", str(g4), "tuỳ chọn")
+    table.add_row("proxy", "off", "quét đi IP máy")
     table.add_row("DB", settings.database_url, "SQLite 1 máy / Postgres khi 2 PC")
     console.print(table)
 
@@ -75,11 +72,6 @@ def run_doctor() -> None:
         warns.append(f"WORKERS={settings.workers} cao hơn gợi ý {suggested} — dễ timeout/CPU full.")
     if posts == 0:
         warns.append("Chưa có URL trong data/posts.txt")
-    if static < settings.workers:
-        warns.append(
-            f"Proxy tĩnh ({static}) < WORKERS ({settings.workers}). "
-            "Nên gắn 1 sticky proxy / browser, hoặc chấp nhận chạy direct (dễ bị chặn)."
-        )
     if settings.workers >= 10 and ram > 0 and ram < 24:
         warns.append("RAM thấp so với số worker — giảm WORKERS.")
 

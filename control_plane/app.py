@@ -102,16 +102,7 @@ def _remember_hub(kind: str, summary: str, detail: str | None = None, actor: str
 async def _startup() -> None:
     settings.ensure_dirs()
     db.init_db(settings.db_path)
-    # Import proxy list into DB immediately; live/die loop runs in background
-    from control_plane.proxy_check import load_proxy_lines, start_background_checker
-
-    lines = load_proxy_lines(settings.proxies_file)
-    if lines:
-        db.upsert_proxy_endpoints(settings.db_path, lines, "static")
-        cd_copy = settings.data_dir / "proxies_static.txt"
-        if not cd_copy.exists():
-            cd_copy.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    start_background_checker()
+    # Proxy đã gỡ khỏi phần mềm — không nạp list, không check live/die.
 
 
 def _auth(authorization: str | None) -> None:
@@ -493,16 +484,18 @@ def proxies_live_txt(authorization: str | None = Header(default=None)) -> PlainT
 
 @app.post("/v1/proxies/check")
 async def proxies_check_now(authorization: str | None = Header(default=None)) -> dict[str, Any]:
-    """Trigger an immediate live/die sweep."""
+    """Proxy đã gỡ — không check live/die."""
     _auth(authorization)
-    from control_plane.proxy_check import run_proxy_check_once
-
-    result = await run_proxy_check_once()
-    _remember_hub(
-        "proxy_check",
-        f"Check proxy: live={result.get('live', 0)} die={result.get('die', 0)}",
-        detail=f"checked={result.get('checked', 0)} elapsed_ms={result.get('elapsed_ms', 0)}",
-    )
+    result = {
+        "ok": True,
+        "removed": True,
+        "live": 0,
+        "die": 0,
+        "checked": 0,
+        "elapsed_ms": 0,
+        "message": "Đã gỡ proxy — quét đi IP máy",
+    }
+    _remember_hub("proxy_check", "Đã gỡ proxy — quét đi IP máy")
     return result
 
 
@@ -518,32 +511,10 @@ async def proxies_upload(
     body: ProxiesUploadBody,
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
+    """Proxy đã gỡ — không nhận list mới."""
     _auth(authorization)
-    lines = [ln.strip() for ln in body.text.splitlines() if ln.strip() and not ln.strip().startswith("#")]
-    path = settings.data_dir / "proxies_static.txt"
-    path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
-    settings.proxies_file = path
-    # Also mirror into repo data path for scanner PCs that rsync later
-    repo_data = Path(__file__).resolve().parents[1] / "data" / "proxies_static.txt"
-    try:
-        repo_data.write_text(
-            "# Static proxies (synced from VPS hub)\n" + "\n".join(lines) + "\n",
-            encoding="utf-8",
-        )
-    except Exception:
-        pass
-    inserted = db.upsert_proxy_endpoints(settings.db_path, lines, "static")
-    result: dict[str, Any] = {"ok": True, "saved": inserted, "file": str(path)}
-    try:
-        if body.run_check:
-            from control_plane.proxy_check import run_proxy_check_once
-
-            result["check"] = await run_proxy_check_once()
-    finally:
-        check = result.get("check") or {}
-        extra = f" · live={check.get('live', 0)} die={check.get('die', 0)}" if check else ""
-        _remember_hub("proxy_upload", f"Cập nhật {inserted} proxy{extra}")
-    return result
+    _remember_hub("proxy_upload", "Bỏ qua upload proxy (đã gỡ khỏi phần mềm)")
+    return {"ok": True, "removed": True, "saved": 0, "message": "Đã gỡ proxy — quét đi IP máy"}
 
 
 @app.get("/v1/comments")
