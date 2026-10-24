@@ -71,6 +71,9 @@ class ServerSettings:
     def uploads_dir(self) -> Path:
         return self.data_dir / "uploads"
 
+    def imports_dir(self) -> Path:
+        return self.data_dir / "imports"
+
     def ensure_dirs(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.packages_dir.mkdir(parents=True, exist_ok=True)
@@ -78,6 +81,7 @@ class ServerSettings:
         (self.data_dir / "sync").mkdir(parents=True, exist_ok=True)
         self.tmp_dir().mkdir(parents=True, exist_ok=True)
         self.uploads_dir().mkdir(parents=True, exist_ok=True)
+        self.imports_dir().mkdir(parents=True, exist_ok=True)
 
     def cleanup_import_temps(self) -> None:
         """Xóa file tạm nạp khách còn sót khi lần trước bị tắt giữa chừng."""

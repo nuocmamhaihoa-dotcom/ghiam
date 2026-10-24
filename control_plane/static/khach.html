@@ -164,6 +164,13 @@
   </section>
 
   <section>
+    <h2>Các lần nạp</h2>
+    <div class="stats" id="sessionStats"></div>
+    <div id="sessionList"></div>
+    <p id="sessionNote" class="note">Đang đối chiếu các lần nạp với kho.</p>
+  </section>
+
+  <section>
     <h2>Tra cứu hàng loạt</h2>
     <p class="note">Dán list số điện thoại, hoặc chọn file danh sách. Chọn thêm file là cộng vào, không giới hạn số file và dung lượng. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách.</p>
     <label for="lookupPaste">Danh sách số điện thoại</label>
@@ -683,6 +690,7 @@
       document.getElementById("mapBox").hidden = true;
       clearPending();
       await loadCustomers();
+      await loadSessions();
     } catch (error) {
       setNote("mapNote", networkMessage(error), "warn");
     } finally {
@@ -710,6 +718,62 @@
     });
     html += "</tbody></table>";
     document.getElementById("people").innerHTML = html;
+  }
+
+  function vnTime(iso) {
+    try {
+      return new Date(iso).toLocaleString("vi-VN", { timeZone: "Asia/Saigon" });
+    } catch (error) {
+      return iso || "";
+    }
+  }
+
+  async function loadSessions() {
+    try {
+      var response = await api("/v1/customers/sessions");
+      if (!response.ok) {
+        setNote("sessionNote", "Không đọc được lịch sử nạp.", "warn");
+        return;
+      }
+      var body = await response.json();
+      var sessions = body.sessions || [];
+      var missing = sessions.filter(function (item) { return item.missing; }).length;
+      var emptyCount = sessions.reduce(function (sum, item) { return sum + (item.emptyFiles || []).length; }, 0);
+      document.getElementById("sessionStats").innerHTML =
+        stat(sessions.length, "Lần nạp") +
+        stat(body.total || 0, "Khách trong kho") +
+        stat((body.needReupload || []).length, "File cần nạp lại");
+      var html = "";
+      sessions.forEach(function (item) {
+        html += "<p class='note" + (item.missing || (item.emptyFiles || []).length ? " warn" : "") + "'>";
+        html += escapeHtml(vnTime(item.at)) + " — " + escapeHtml(item.summary || "");
+        if (item.missing) {
+          html += " Lô này không còn đủ trong kho. Hãy nạp lại file.";
+        }
+        if ((item.emptyFiles || []).length) {
+          html += " " + item.emptyFiles.length + " file không lấy được dòng.";
+        }
+        html += "</p>";
+      });
+      document.getElementById("sessionList").innerHTML = html;
+      padSpaces(document.getElementById("sessionList"));
+      if (!sessions.length) {
+        setNote("sessionNote", "Chưa có lần nạp nào.");
+      } else if (!body.complete) {
+        setNote(
+          "sessionNote",
+          "Kho hiện " + (body.total || 0) + " khách. Còn " +
+            (body.needReupload || []).length + " file cần nạp lại để đủ các lần trước." +
+            (missing ? " Có lô đã nạp nhưng không còn trong kho." : "") +
+            (emptyCount ? " Có file bị 0 dòng." : ""),
+          "warn"
+        );
+      } else {
+        setNote("sessionNote", "Các lần nạp đã đối chiếu với kho. Lần nạp mới cộng vào, không xóa khách cũ.", "ok");
+      }
+    } catch (error) {
+      setNote("sessionNote", "Không đọc được lịch sử nạp.", "warn");
+    }
   }
 
   async function loadCustomers() {
@@ -942,6 +1006,7 @@
   bindDrop();
   padSpaces(document.body);
   loadCustomers();
+  loadSessions();
 </script>
 </body>
 </html>

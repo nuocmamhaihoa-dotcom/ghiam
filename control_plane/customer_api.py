@@ -5,9 +5,11 @@ from __future__ import annotations
 import asyncio
 import hmac
 import json
+import re
+import shutil
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -109,6 +111,119 @@ def _cleanup_uploads(files: list[tuple[str, Path]]) -> None:
             Path(path).unlink(missing_ok=True)
         except OSError:
             continue
+
+
+def _safe_upload_name(name: str) -> str:
+    base = Path(name).name.replace("\x00", "").strip() or "khach.xlsx"
+    return base[:180]
+
+
+def _keep_imported_files(uploaded: list[tuple[str, Path]], stamp: str) -> list[str]:
+    """Giữ file đã nạp để lần sau còn đối chiếu, không xóa khách theo file."""
+    folder = settings.imports_dir() / re.sub(r"[^0-9T]", "", stamp)[:20]
+    folder.mkdir(parents=True, exist_ok=True)
+    kept: list[str] = []
+    used: set[str] = set()
+    for name, path in uploaded:
+        dest = folder / _safe_upload_name(name)
+        if dest.name in used or dest.exists():
+            dest = folder / f"{dest.stem}-{path.name[-8:]}{dest.suffix or '.xlsx'}"
+        used.add(dest.name)
+        source = Path(path)
+        if not source.exists():
+            continue
+        try:
+            source.replace(dest)
+        except OSError:
+            try:
+                shutil.copy2(source, dest)
+            except OSError:
+                continue
+        kept.append(dest.name)
+    return kept
+
+
+_NAP_SUMMARY = re.compile(
+    r"thêm\s+(\d+),\s+bổ sung\s+(\d+),\s+giữ\s+(\d+),\s+gộp\s+(\d+)",
+    re.I,
+)
+
+
+def _parse_iso(value: str) -> datetime | None:
+    text = collapse(value)
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _import_sessions() -> dict[str, Any]:
+    actions = db.list_actions(settings.db_path, limit=200, q="Nạp Excel")
+    sessions: list[dict[str, Any]] = []
+    need_reupload: list[str] = []
+    for action in actions:
+        if "Nạp Excel" not in str(action.get("summary") or ""):
+            continue
+        payload: dict[str, Any] = {}
+        raw = action.get("detail") or ""
+        try:
+            loaded = json.loads(raw)
+            if isinstance(loaded, dict):
+                payload = loaded
+        except json.JSONDecodeError:
+            payload = {}
+        stats = payload.get("stats") if isinstance(payload.get("stats"), dict) else {}
+        match = _NAP_SUMMARY.search(str(action.get("summary") or ""))
+        created = int(stats.get("created") or (match.group(1) if match else 0) or 0)
+        updated = int(stats.get("updated") or (match.group(2) if match else 0) or 0)
+        incoming = int(stats.get("incoming") or 0)
+        files = payload.get("files") if isinstance(payload.get("files"), list) else []
+        empty = [str(item.get("name") or "") for item in files if isinstance(item, dict) and not item.get("rows") and not item.get("error")]
+        empty = [name for name in empty if name]
+        if isinstance(payload.get("emptyFiles"), list) and not empty:
+            empty = [str(name) for name in payload["emptyFiles"] if name]
+        at = str(action.get("at") or "")
+        moment = _parse_iso(at)
+        kept = 0
+        if moment is not None:
+            start = (moment - timedelta(hours=6)).isoformat()
+            kept = db.customers_created_between(settings.db_path, start, at)
+        missing = created >= 1000 and kept < max(1, int(created * 0.1))
+        names = [str(item.get("name") or "") for item in files if isinstance(item, dict) and item.get("name")]
+        if missing:
+            need_reupload.extend(name for name in names or ["file lần nạp này"] if name)
+        need_reupload.extend(empty)
+        sessions.append(
+            {
+                "id": action.get("id"),
+                "at": at,
+                "summary": action.get("summary") or "",
+                "created": created,
+                "updated": updated,
+                "incoming": incoming,
+                "fileCount": int(payload.get("fileCount") or len(files) or 0),
+                "okFiles": int(payload.get("okFiles") or sum(1 for item in files if isinstance(item, dict) and item.get("rows"))),
+                "emptyFiles": empty,
+                "keptInWarehouse": kept,
+                "missing": missing,
+                "filesKept": payload.get("keptFiles") or [],
+            }
+        )
+    seen: set[str] = set()
+    unique_reupload: list[str] = []
+    for name in need_reupload:
+        if name in seen:
+            continue
+        seen.add(name)
+        unique_reupload.append(name)
+    return {
+        "total": db.customer_count(settings.db_path),
+        "sessions": sessions,
+        "needReupload": unique_reupload[:80],
+        "complete": not unique_reupload,
+    }
 
 
 async def _spool_upload(value: Any) -> Path:
@@ -300,7 +415,7 @@ def _preview_uploaded(
         "suggested": payload,
         "detectNote": explain_mapping(details, headers),
         "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
-        "applyNote": "Cách chọn cột này dùng cho mọi file trong lần nạp này. Không giới hạn số file và dung lượng. File nằm trên đĩa khi đọc. Nạp từng dòng, ghi từng lô vào SQLite, không tải cả kho khách vào bộ nhớ. Khớp tên cột trước; nếu thiếu tên hoặc SĐT thì lấy cột có tên người / số điện thoại / địa chỉ. Cột giới tính, ngày sinh, link thì bỏ qua.",
+        "applyNote": "Mỗi file tự khớp cột theo tiêu đề của file đó. Không giới hạn số file và dung lượng. File nạp thành công được giữ lại trên đĩa. Nạp từng dòng, ghi từng lô vào SQLite, cộng vào kho, không xóa khách cũ. Khớp tên cột trước; nếu thiếu tên hoặc SĐT thì lấy cột có tên người / số điện thoại / địa chỉ. Cột giới tính, ngày sinh, link thì bỏ qua.",
         "headerMismatch": different,
     }
 
@@ -397,6 +512,7 @@ def _import_uploaded(
         )
     stats["total"] = db.customer_count(settings.db_path)
     empty_files = [item["name"] for item in file_reports if not item.get("rows") and not item.get("error")]
+    kept_files = _keep_imported_files(uploaded, now)
     summary = (
         f"Nạp Excel: thêm {stats['created']}, bổ sung {stats['updated']}, "
         f"giữ {stats['unchanged']}, gộp {stats['absorbed']}."
@@ -409,6 +525,7 @@ def _import_uploaded(
                 "fileCount": len(file_reports),
                 "okFiles": sum(1 for item in file_reports if item.get("rows")),
                 "emptyFiles": empty_files,
+                "keptFiles": kept_files,
                 "files": file_reports,
             },
             ensure_ascii=False,
@@ -419,6 +536,7 @@ def _import_uploaded(
         "files": file_reports,
         "fileErrors": problems,
         "emptyFiles": empty_files,
+        "keptFiles": kept_files,
         "items": changed[:200],
         "total": stats["total"],
     }
@@ -437,6 +555,13 @@ async def customers_import(
             return await run_in_threadpool(_import_uploaded, uploaded, fields, problems)
     finally:
         _cleanup_uploads(uploaded)
+
+
+@router.get("/v1/customers/sessions")
+def customers_sessions(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    db.init_db(settings.db_path)
+    return _import_sessions()
 
 
 def _unique_phones(*groups: list[str]) -> list[str]:

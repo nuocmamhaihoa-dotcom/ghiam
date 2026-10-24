@@ -73,6 +73,8 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("Máy chủ sẽ tự lấy cột tên người", home.text)
         self.assertIn("file không lấy được dòng khách", home.text)
         self.assertIn("Mỗi file tự khớp cột", home.text)
+        self.assertIn("Các lần nạp", home.text)
+        self.assertIn("/v1/customers/sessions", home.text)
         self.assertNotIn("font-weight: 650", home.text)
         self.assertIn("không dùng video", home.text)
         self.assertIn("không giới hạn số file", home.text)
@@ -111,7 +113,7 @@ class CustomerApiTests(unittest.TestCase):
         data = preview.json()
         self.assertEqual(data["files"][0]["rowCount"], 1)
         self.assertEqual(data["suggested"]["name"], 0)
-        self.assertIn("mọi file", data["applyNote"])
+        self.assertIn("Mỗi file tự khớp", data["applyNote"])
         self.assertIn("Khớp cột", data["detectNote"])
 
     def test_preview_skips_unlabeled_and_gender_columns(self) -> None:
@@ -655,6 +657,12 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(imported.json()["total"], 1200)
         leftover = list((settings.data_dir / "uploads").glob("khach-up-*")) if (settings.data_dir / "uploads").exists() else []
         self.assertEqual(leftover, [])
+        kept = list((settings.data_dir / "imports").rglob("*.xlsx")) if (settings.data_dir / "imports").exists() else []
+        self.assertTrue(any(path.name == "ngan.xlsx" for path in kept), kept)
+        history = self.client.get("/v1/customers/sessions", headers=self.headers)
+        self.assertEqual(history.status_code, 200, history.text)
+        self.assertEqual(history.json()["total"], 1200)
+        self.assertTrue(history.json()["sessions"])
 
     def test_import_keeps_all_unique_phones_across_batches(self) -> None:
         rows = [[f"K{index}", f"0905{index:06d}", f"Huế {index}"] for index in range(3500)]

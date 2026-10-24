@@ -846,6 +846,15 @@ def customer_count(db_path: Path) -> int:
     return int(row["n"] if row else 0)
 
 
+def customers_created_between(db_path: Path, start: str, end: str) -> int:
+    with session(db_path) as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM customers WHERE created_at >= ? AND created_at <= ?",
+            (start, end),
+        ).fetchone()
+    return int(row["n"] if row else 0)
+
+
 def save_people(db_path: Path, rows: list[dict[str, str]], updated_at: str) -> None:
     with session(db_path) as conn:
         current = {
