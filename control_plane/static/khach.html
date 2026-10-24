@@ -120,14 +120,24 @@
     }
     [hidden] { display: none !important; }
     #file, #lookupFile { display: none; }
+    .words { display: inline; }
+    .w { display: inline; }
+    .w + .w { margin-left: 0.28em; }
     .sp {
       display: inline;
       font-weight: 400;
+      padding: 0 0.02em;
     }
+    table.sess { width: 100%; table-layout: auto; }
+    table.sess th, table.sess td { white-space: normal; overflow: visible; }
+    table.sess tr.miss td { background: #fdecec; }
+    #sessionList table.sheet { width: 100%; }
+    #translateWarn { margin: 0 0 0.8rem; padding: 0.65rem 0.75rem; background: #fdecec; border-radius: 10px; }
   </style>
 </head>
 <body translate="no" class="notranslate">
 <main translate="no">
+  <p id="translateWarn" class="note warn" hidden>Google Dịch đang bật nên chữ bị dính. Tắt dịch trang này trên Chrome, rồi tải lại.</p>
   <h1>Kho khách Excel</h1>
   <p class="lead">Nhập khách bằng file Excel, không dùng video. Không giới hạn số file và dung lượng: chọn thêm là cộng vào lần nạp này. Khớp tên cột kho trước (tên, SĐT, địa chỉ, địa chỉ hành chính, hàng mua, giá COD, UID Facebook, ID TikTok). Nếu file không có tên cột, hoặc thiếu cột tên / SĐT, thì lấy cột có tên người, số điện thoại và địa chỉ. Cột lạ như giới tính, ngày sinh, link thì bỏ qua. Mỗi file tự khớp cột theo tiêu đề của file đó; lần nạp mới cộng vào kho, không xóa khách cũ. Chỉ gộp khi trùng số điện thoại. Không có số, hoặc khác số, thì mỗi dòng là một khách. Ô đã có giữ nguyên, ô trống được điền thêm. Có list số thì tra cứu hàng loạt ngay trong kho.</p>
 
@@ -240,14 +250,58 @@
     return "Không gửi được file. Máy chủ bị ngắt khi đọc file lớn — giữ trang mở rồi thử lại.";
   }
 
+  function fillWordWrap(wrap, text) {
+    wrap.setAttribute("data-words", text);
+    wrap.setAttribute("translate", "no");
+    wrap.classList.add("words");
+    wrap.textContent = "";
+    var parts = String(text).split(" ");
+    parts.forEach(function (part, index) {
+      if (index) {
+        var spacer = document.createElement("span");
+        spacer.className = "sp";
+        spacer.setAttribute("translate", "no");
+        spacer.textContent = "\u00A0";
+        wrap.appendChild(spacer);
+      }
+      if (part) {
+        var word = document.createElement("span");
+        word.className = "w";
+        word.setAttribute("translate", "no");
+        word.textContent = part;
+        wrap.appendChild(word);
+      }
+    });
+  }
+
+  function restoreWords(root) {
+    if (!root) return;
+    var nodes = [];
+    if (root.getAttribute && root.getAttribute("data-words")) nodes.push(root);
+    if (root.querySelectorAll) {
+      root.querySelectorAll("[data-words]").forEach(function (el) { nodes.push(el); });
+    }
+    nodes.forEach(function (el) {
+      var text = el.getAttribute("data-words") || "";
+      if (!text) return;
+      var words = el.querySelectorAll(".w");
+      var joined = Array.prototype.map.call(words, function (item) { return item.textContent; }).join(" ");
+      var spacers = el.querySelectorAll(".sp").length;
+      if (words.length && joined === text && spacers >= Math.max(0, text.split(" ").length - 1)) return;
+      fillWordWrap(el, text);
+    });
+  }
+
   function padSpaces(root) {
     if (!root) return;
+    restoreWords(root);
     var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
       acceptNode: function (node) {
         var parent = node.parentElement;
-        if (!parent || parent.classList.contains("sp")) return NodeFilter.FILTER_REJECT;
-        if (/^(SCRIPT|STYLE|TEXTAREA|INPUT|SELECT|OPTION|TABLE|THEAD|TBODY|TR|TH|TD|COL|COLGROUP)$/.test(parent.tagName)) return NodeFilter.FILTER_REJECT;
-        if (parent.closest && parent.closest("table, td, th, .addr")) return NodeFilter.FILTER_REJECT;
+        if (!parent || parent.classList.contains("sp") || parent.classList.contains("w")) return NodeFilter.FILTER_REJECT;
+        if (parent.closest && parent.closest(".words, [data-words]")) return NodeFilter.FILTER_REJECT;
+        if (/^(SCRIPT|STYLE|TEXTAREA|INPUT|SELECT|OPTION|COL|COLGROUP)$/.test(parent.tagName)) return NodeFilter.FILTER_REJECT;
+        if (parent.closest && parent.closest("#people tbody, #lookupPeople tbody, td.addr, .addr")) return NodeFilter.FILTER_REJECT;
         if (!node.nodeValue || node.nodeValue.indexOf(" ") < 0) return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_ACCEPT;
       }
@@ -255,19 +309,37 @@
     var nodes = [];
     while (walker.nextNode()) nodes.push(walker.currentNode);
     nodes.forEach(function (node) {
-      var parts = node.nodeValue.split(" ");
-      var frag = document.createDocumentFragment();
-      parts.forEach(function (part, index) {
-        if (index) {
-          var spacer = document.createElement("span");
-          spacer.className = "sp";
-          spacer.textContent = "\u00A0";
-          frag.appendChild(spacer);
-        }
-        if (part) frag.appendChild(document.createTextNode(part));
-      });
-      node.parentNode.replaceChild(frag, node);
+      var wrap = document.createElement("span");
+      fillWordWrap(wrap, node.nodeValue);
+      node.parentNode.replaceChild(wrap, node);
     });
+  }
+
+  function pageTranslated() {
+    return /translated/.test(document.documentElement.className) ||
+      !!document.querySelector(".goog-te-banner-frame, #goog-gt-tt");
+  }
+
+  function watchSpaces() {
+    var banner = document.getElementById("translateWarn");
+    function tick() {
+      if (banner) banner.hidden = !pageTranslated();
+      padSpaces(document.body);
+    }
+    tick();
+    var count = 0;
+    var timer = window.setInterval(function () {
+      tick();
+      count += 1;
+      if (count >= 20) window.clearInterval(timer);
+    }, 600);
+    if (window.MutationObserver) {
+      var obs = new MutationObserver(function () {
+        if (banner) banner.hidden = !pageTranslated();
+        if (pageTranslated()) padSpaces(document.body);
+      });
+      obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    }
   }
 
   function sendForm(url, form, headers, waitMs, onProgress) {
@@ -359,8 +431,14 @@
       .replace(/"/g, "&quot;");
   }
 
+  function vnNum(value) {
+    var text = String(value == null ? "" : value);
+    if (!/^\d+$/.test(text)) return text;
+    return text.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  }
+
   function stat(value, label) {
-    return "<div class='stat'><b>" + escapeHtml(value) + "</b><span>" + escapeHtml(label) + "</span></div>";
+    return "<div class='stat'><b>" + escapeHtml(vnNum(value)) + "</b><span class='words' data-words='" + escapeHtml(label) + "'></span></div>";
   }
 
   function setNote(id, text, kind) {
@@ -671,6 +749,7 @@
         stat(stats.unchanged || 0, "Giữ nguyên") +
         stat(stats.absorbed || 0, "Khách bị gộp") +
         stat(stats.skipped || 0, "Dòng trống");
+      padSpaces(document.getElementById("importStats"));
       var fileNote = (body.files || []).length + " file";
       if (body.fileErrors && body.fileErrors.length) fileNote += ", một số file lỗi bị bỏ qua";
       var emptyFiles = body.emptyFiles || [];
@@ -743,18 +822,24 @@
         stat(sessions.length, "Lần nạp") +
         stat(body.total || 0, "Khách trong kho") +
         stat((body.needReupload || []).length, "File cần nạp lại");
-      var html = "";
+      padSpaces(document.getElementById("sessionStats"));
+      var html = "<table class='sheet sess'><thead><tr>" +
+        "<th>Thời gian</th><th>Thêm</th><th>Bổ sung</th><th>File 0 dòng</th><th>Tình trạng</th>" +
+        "</tr></thead><tbody>";
       sessions.forEach(function (item) {
-        html += "<p class='note" + (item.missing || (item.emptyFiles || []).length ? " warn" : "") + "'>";
-        html += escapeHtml(vnTime(item.at)) + " — " + escapeHtml(item.summary || "");
-        if (item.missing) {
-          html += " Lô này không còn đủ trong kho. Hãy nạp lại file.";
-        }
-        if ((item.emptyFiles || []).length) {
-          html += " " + item.emptyFiles.length + " file không lấy được dòng.";
-        }
-        html += "</p>";
+        var empty = (item.emptyFiles || []).length;
+        var status = "Còn trong kho";
+        if (item.missing) status = "Không còn đủ — nạp lại file";
+        else if (empty) status = "Thiếu " + empty + " file 0 dòng — nạp lại";
+        html += "<tr" + (item.missing || empty ? " class='miss'" : "") + ">";
+        html += "<td>" + escapeHtml(vnTime(item.at)) + "</td>";
+        html += "<td>" + escapeHtml(vnNum(item.created || 0)) + "</td>";
+        html += "<td>" + escapeHtml(vnNum(item.updated || 0)) + "</td>";
+        html += "<td>" + escapeHtml(vnNum(empty)) + "</td>";
+        html += "<td>" + escapeHtml(status) + "</td>";
+        html += "</tr>";
       });
+      html += "</tbody></table>";
       document.getElementById("sessionList").innerHTML = html;
       padSpaces(document.getElementById("sessionList"));
       if (!sessions.length) {
@@ -793,6 +878,7 @@
       var shown = items.length;
       var matched = body.matched != null ? body.matched : body.count;
       document.getElementById("storeStats").innerHTML = stat(body.total, "Khách trong kho") + stat(shown, "Khách đang hiện");
+      padSpaces(document.getElementById("storeStats"));
       renderRows(items);
       padSpaces(document.getElementById("people"));
       if (query) {
@@ -828,6 +914,7 @@
       stat(stats.found || 0, "Có trong kho") +
       stat(stats.missing || 0, "Không có") +
       stat(stats.invalid || 0, "Dòng không phải số");
+    padSpaces(document.getElementById("lookupStats"));
     var items = body.items || [];
     if (!items.length) {
       document.getElementById("lookupPeople").innerHTML = "";
@@ -1004,7 +1091,7 @@
   document.getElementById("lookupGo").addEventListener("click", runLookup);
   document.getElementById("lookupExport").addEventListener("click", exportLookup);
   bindDrop();
-  padSpaces(document.body);
+  watchSpaces();
   loadCustomers();
   loadSessions();
 </script>
