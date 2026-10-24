@@ -79,6 +79,21 @@ class ServerSettings:
         self.tmp_dir().mkdir(parents=True, exist_ok=True)
         self.uploads_dir().mkdir(parents=True, exist_ok=True)
 
+    def cleanup_import_temps(self) -> None:
+        """Xóa file tạm nạp khách còn sót khi lần trước bị tắt giữa chừng."""
+        self.ensure_dirs()
+        for folder in (self.tmp_dir(), self.uploads_dir()):
+            for path in folder.glob("khach-sst-*"):
+                try:
+                    path.unlink()
+                except OSError:
+                    continue
+            for path in folder.glob("khach-up-*"):
+                try:
+                    path.unlink()
+                except OSError:
+                    continue
+
     def use_disk_temp(self) -> None:
         self.ensure_dirs()
         os.environ["TMPDIR"] = str(self.tmp_dir())

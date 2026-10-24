@@ -6,8 +6,10 @@ import csv
 import io
 import os
 import re
+import tempfile
 import zipfile
 import xml.etree.ElementTree as ET
+from array import array
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
@@ -26,6 +28,7 @@ from control_plane.vietnam_places import fold_vietnamese
 
 TableSource = bytes | bytearray | os.PathLike[str] | str
 IMPORT_BATCH = 2500
+SHARED_SPILL = 150_000
 SAMPLE_ROWS = 8
 DETECT_ROWS = 200
 PREVIEW_STORE = SAMPLE_ROWS + DETECT_ROWS + 1
@@ -83,6 +86,95 @@ def _si_text(item: ET.Element) -> str:
     return "".join(parts)
 
 
+class SharedStringStore:
+    """Chuỗi dùng chung của xlsx. File lớn ghi ra đĩa, không ôm hàng triệu chuỗi trong RAM."""
+
+    def __init__(self) -> None:
+        self._values: list[str] = []
+        self._path: Path | None = None
+        self._handle: Any = None
+        self._offsets: array[int] = array("Q")
+        self._spilled = False
+        self._cache: dict[int, str] = {}
+
+    def __len__(self) -> int:
+        return len(self._offsets) if self._spilled else len(self._values)
+
+    def prepare_disk(self) -> None:
+        if self._spilled:
+            return
+        from control_plane.settings import settings
+
+        settings.ensure_dirs()
+        handle = tempfile.NamedTemporaryFile(
+            prefix="khach-sst-",
+            suffix=".bin",
+            dir=str(settings.tmp_dir()),
+            delete=False,
+        )
+        self._path = Path(handle.name)
+        self._handle = handle
+        self._offsets = array("Q")
+        for value in self._values:
+            self._write(value)
+        self._values = []
+        self._spilled = True
+
+    def append(self, value: str) -> None:
+        if self._spilled:
+            self._write(value)
+            return
+        self._values.append(value)
+        if len(self._values) >= SHARED_SPILL:
+            self.prepare_disk()
+
+    def _write(self, value: str) -> None:
+        data = value.encode("utf-8")
+        self._offsets.append(self._handle.tell())
+        self._handle.write(len(data).to_bytes(4, "little"))
+        self._handle.write(data)
+
+    def finalize(self) -> None:
+        if self._handle is not None:
+            self._handle.flush()
+
+    def __getitem__(self, index: int) -> str:
+        if index < 0:
+            raise IndexError(index)
+        cached = self._cache.get(index)
+        if cached is not None:
+            return cached
+        if self._spilled:
+            if index >= len(self._offsets):
+                raise IndexError(index)
+            self._handle.seek(self._offsets[index])
+            size = int.from_bytes(self._handle.read(4), "little")
+            value = self._handle.read(size).decode("utf-8")
+        else:
+            if index >= len(self._values):
+                raise IndexError(index)
+            value = self._values[index]
+        if len(self._cache) >= 4096:
+            self._cache = {key: text for key, text in self._cache.items() if key < 64}
+        self._cache[index] = value
+        return value
+
+    def close(self) -> None:
+        if self._handle is not None:
+            try:
+                self._handle.close()
+            except OSError:
+                pass
+            self._handle = None
+        if self._path is not None:
+            self._path.unlink(missing_ok=True)
+            self._path = None
+        self._values = []
+        self._offsets = array("Q")
+        self._cache = {}
+        self._spilled = False
+
+
 def _shared_strings_from(source: Any) -> list[str]:
     values: list[str] = []
     try:
@@ -100,7 +192,28 @@ def _shared_strings(payload: bytes) -> list[str]:
     return _shared_strings_from(io.BytesIO(payload))
 
 
-def _cell_text(cell: ET.Element, shared: list[str]) -> str:
+def _fill_shared_strings(source: Any, store: SharedStringStore) -> None:
+    try:
+        for event, elem in ET.iterparse(source, events=("start", "end")):
+            if event == "start" and _local(elem.tag) == "sst":
+                try:
+                    unique = int(elem.attrib.get("uniqueCount") or 0)
+                except ValueError:
+                    unique = 0
+                if unique >= SHARED_SPILL:
+                    store.prepare_disk()
+                continue
+            if event != "end" or _local(elem.tag) != "si":
+                continue
+            store.append(_si_text(elem))
+            elem.clear()
+    except ET.ParseError:
+        store.finalize()
+        return
+    store.finalize()
+
+
+def _cell_text(cell: ET.Element, shared: Any) -> str:
     kind = cell.attrib.get("t", "")
     if kind == "inlineStr":
         parts: list[str] = []
@@ -123,7 +236,7 @@ def _cell_text(cell: ET.Element, shared: list[str]) -> str:
     return expand_scientific(collapse(value))
 
 
-def _parse_row(row: ET.Element, shared: list[str]) -> list[str]:
+def _parse_row(row: ET.Element, shared: Any) -> list[str]:
     cells: dict[int, str] = {}
     max_col = -1
     sequential = 0
@@ -146,7 +259,7 @@ def _parse_row(row: ET.Element, shared: list[str]) -> list[str]:
 
 def _sheet_rows_from(
     source: Any,
-    shared: list[str],
+    shared: Any,
     max_store: int | None = None,
 ) -> tuple[list[list[str]], int]:
     table: list[list[str]] = []
@@ -166,7 +279,7 @@ def _sheet_rows_from(
 
 def _sheet_rows(
     payload: bytes,
-    shared: list[str],
+    shared: Any,
     max_store: int | None = None,
 ) -> tuple[list[list[str]], int]:
     return _sheet_rows_from(io.BytesIO(payload), shared, max_store=max_store)
@@ -271,7 +384,7 @@ def _open_xlsx(data: TableSource) -> zipfile.ZipFile:
     return zipfile.ZipFile(os.fspath(data))
 
 
-def _iter_sheet_rows(source: Any, shared: list[str]) -> Iterator[list[str]]:
+def _iter_sheet_rows(source: Any, shared: Any) -> Iterator[list[str]]:
     try:
         for _event, elem in ET.iterparse(source, events=("end",)):
             if _local(elem.tag) != "row":
@@ -304,15 +417,16 @@ def _align_row(
 
 def iter_xlsx_rows(data: TableSource) -> Iterator[list[str]]:
     archive = None
+    shared = SharedStringStore()
     try:
         archive = _open_xlsx(data)
     except zipfile.BadZipFile as exc:
+        shared.close()
         raise ValueError("File Excel bị hỏng hoặc không phải .xlsx.") from exc
     try:
-        shared: list[str] = []
         if "xl/sharedStrings.xml" in archive.namelist():
             with archive.open("xl/sharedStrings.xml") as handle:
-                shared = _shared_strings_from(handle)
+                _fill_shared_strings(handle, shared)
         paths = _sheet_paths(archive)
         if not paths:
             raise ValueError("File Excel không có bảng tính.")
@@ -361,6 +475,7 @@ def iter_xlsx_rows(data: TableSource) -> Iterator[list[str]]:
     except (KeyError, ET.ParseError, zipfile.BadZipFile, OSError) as exc:
         raise ValueError("File Excel bị hỏng hoặc không đọc được.") from exc
     finally:
+        shared.close()
         if archive is not None:
             archive.close()
 

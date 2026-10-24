@@ -26,6 +26,7 @@ from control_plane.customers import (
     MAX_LOOKUP,
     collapse,
     fold_customers,
+    ingest_customers,
     lookup_by_phones,
     matches_query,
     phones_from_text,
@@ -298,7 +299,7 @@ def _preview_uploaded(
         "suggested": payload,
         "detectNote": explain_mapping(details, headers),
         "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
-        "applyNote": "Cách chọn cột này dùng cho mọi file trong lần nạp này. Không giới hạn số file và dung lượng. File nằm trên đĩa khi đọc, không nhét cả file vào bộ nhớ. Cột không trùng tên kho thì bỏ qua, không đoán nội dung ô.",
+        "applyNote": "Cách chọn cột này dùng cho mọi file trong lần nạp này. Không giới hạn số file và dung lượng. File nằm trên đĩa khi đọc. Nạp từng dòng, ghi từng lô vào SQLite, không tải cả kho khách vào bộ nhớ. Cột không trùng tên kho thì bỏ qua, không đoán nội dung ô.",
         "headerMismatch": different,
     }
 
@@ -353,35 +354,38 @@ def _import_uploaded(
             status_code=400,
             detail="Hãy chọn ít nhất một file Excel." + ((" " + " ".join(problems)) if problems else ""),
         )
-    stored = db.list_customers(settings.db_path)
     stats = _blank_import_stats()
-    stats["total"] = len(stored)
     changed: list[dict[str, str]] = []
     file_reports: list[dict[str, Any]] = []
     first_width: int | None = None
     now = utcnow()
     incoming_total = 0
     for name, payload in uploaded:
+        mapped: Any = None
         try:
             first_width, mapped = iter_mapped_file(name, payload, parsed, first_width)
-            batch: list[dict[str, str]] = []
-            count = 0
-            for row in mapped:
-                batch.append(row)
-                count += 1
-                if len(batch) >= IMPORT_BATCH:
-                    stored, part, _removed = _fold_import_batch(stored, batch, now)
-                    _add_import_stats(stats, part)
-                    _collect_changed(changed, stored)
-                    batch = []
-            if batch:
-                stored, part, _removed = _fold_import_batch(stored, batch, now)
-                _add_import_stats(stats, part)
-                _collect_changed(changed, stored)
-            incoming_total += count
-            file_reports.append({"name": name, "rows": count})
+            part, preview = ingest_customers(
+                settings.db_path,
+                mapped,
+                now,
+                flush_every=IMPORT_BATCH,
+            )
+            _add_import_stats(stats, part)
+            for row in preview:
+                if len(changed) >= 200:
+                    break
+                changed.append(public_customer(row))
+            incoming_total += int(part.get("incoming") or 0)
+            file_reports.append({"name": name, "rows": int(part.get("incoming") or 0)})
         except ValueError as exc:
             file_reports.append({"name": name, "rows": 0, "error": str(exc)})
+        finally:
+            closer = getattr(mapped, "close", None)
+            if closer is not None:
+                try:
+                    closer()
+                except Exception:
+                    pass
     problems.extend(str(item.get("error") or "") for item in file_reports if item.get("error"))
     problems = [item for item in problems if item]
     if incoming_total == 0:

@@ -262,7 +262,7 @@
       index += 1;
       if (index > 1 && options && options.onRetry) options.onRetry(index, tries);
       var body = options && options.makeBody ? options.makeBody() : (options && options.body);
-      var waitMs = upload ? 30 * 60 * 1000 : 60 * 1000;
+      var waitMs = upload ? 3 * 60 * 60 * 1000 : 60 * 1000;
       try {
         var response;
         if (upload && typeof FormData !== "undefined" && body instanceof FormData) {
@@ -594,6 +594,7 @@
       setNote(
         "importNote",
         "Đã đọc " + (stats.incoming || 0) + " dòng từ " + fileNote +
+          ". Thêm " + (stats.created || 0) + " khách mới, bổ sung " + (stats.updated || 0) +
           ". Chỉ gộp khi trùng số điện thoại. Không có số hoặc khác số thì vẫn thêm khách mới.",
         "ok"
       );

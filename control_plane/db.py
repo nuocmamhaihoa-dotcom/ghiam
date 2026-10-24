@@ -15,6 +15,7 @@ def connect(db_path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA synchronous=NORMAL;")
     conn.execute("PRAGMA temp_store=FILE;")
     conn.execute("PRAGMA cache_size=-8000;")
+    conn.execute("PRAGMA busy_timeout=8000;")
     return conn
 
 
@@ -747,79 +748,96 @@ def list_people(db_path: Path) -> list[dict[str, str]]:
     ]
 
 
+_CUSTOMER_SELECT = """
+    SELECT id, name, phone, address, admin_address, order_content, cod_amount,
+           facebook_uid, tiktok_id, created_at, updated_at
+    FROM customers
+"""
+
+
+def customer_from_sql_row(row: sqlite3.Row) -> dict[str, str]:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "phone": row["phone"],
+        "address": row["address"],
+        "adminAddress": row["admin_address"],
+        "orderContent": row["order_content"],
+        "codAmount": row["cod_amount"],
+        "facebookUid": row["facebook_uid"],
+        "tiktokId": row["tiktok_id"],
+        "createdAt": row["created_at"],
+        "updatedAt": row["updated_at"],
+    }
+
+
 def list_customers(db_path: Path, limit: int | None = None) -> list[dict[str, str]]:
-    sql = """
-        SELECT id, name, phone, address, admin_address, order_content, cod_amount,
-               facebook_uid, tiktok_id, created_at, updated_at
-        FROM customers
-        ORDER BY updated_at DESC, created_at DESC
-    """
+    sql = _CUSTOMER_SELECT + " ORDER BY updated_at DESC, created_at DESC"
     with session(db_path) as conn:
         if limit is None:
             rows = conn.execute(sql).fetchall()
         else:
             rows = conn.execute(sql + " LIMIT ?", (max(1, int(limit)),)).fetchall()
-    return [
-        {
-            "id": row["id"],
-            "name": row["name"],
-            "phone": row["phone"],
-            "address": row["address"],
-            "adminAddress": row["admin_address"],
-            "orderContent": row["order_content"],
-            "codAmount": row["cod_amount"],
-            "facebookUid": row["facebook_uid"],
-            "tiktokId": row["tiktok_id"],
-            "createdAt": row["created_at"],
-            "updatedAt": row["updated_at"],
-        }
-        for row in rows
-    ]
+    return [customer_from_sql_row(row) for row in rows]
+
+
+def customers_by_phone(conn: sqlite3.Connection, phone: str) -> list[dict[str, str]]:
+    if not phone:
+        return []
+    rows = conn.execute(
+        _CUSTOMER_SELECT + " WHERE phone=? ORDER BY created_at ASC, id ASC",
+        (phone,),
+    ).fetchall()
+    return [customer_from_sql_row(row) for row in rows]
+
+
+def write_customers(conn: sqlite3.Connection, rows: list[dict[str, Any]], removed_ids: list[str]) -> None:
+    dirty = [row for row in rows if row.get("write", True)]
+    if removed_ids:
+        conn.executemany("DELETE FROM customers WHERE id=?", [(customer_id,) for customer_id in removed_ids])
+    if not dirty:
+        return
+    conn.executemany(
+        """
+        INSERT INTO customers(
+          id, name, phone, address, admin_address, order_content, cod_amount,
+          facebook_uid, tiktok_id, created_at, updated_at
+        )
+        VALUES(?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET
+          name=excluded.name,
+          phone=excluded.phone,
+          address=excluded.address,
+          admin_address=excluded.admin_address,
+          order_content=excluded.order_content,
+          cod_amount=excluded.cod_amount,
+          facebook_uid=excluded.facebook_uid,
+          tiktok_id=excluded.tiktok_id,
+          created_at=excluded.created_at,
+          updated_at=excluded.updated_at
+        """,
+        [
+            (
+                row["id"],
+                row.get("name") or "",
+                row.get("phone") or "",
+                row.get("address") or "",
+                row.get("adminAddress") or "",
+                row.get("orderContent") or "",
+                row.get("codAmount") or "",
+                row.get("facebookUid") or "",
+                row.get("tiktokId") or "",
+                row.get("createdAt") or "",
+                row.get("updatedAt") or "",
+            )
+            for row in dirty
+        ],
+    )
 
 
 def replace_customers(db_path: Path, rows: list[dict[str, Any]], removed_ids: list[str]) -> None:
-    dirty = [row for row in rows if row.get("write", True)]
     with session(db_path) as conn:
-        if removed_ids:
-            conn.executemany("DELETE FROM customers WHERE id=?", [(customer_id,) for customer_id in removed_ids])
-        if not dirty:
-            return
-        conn.executemany(
-            """
-            INSERT INTO customers(
-              id, name, phone, address, admin_address, order_content, cod_amount,
-              facebook_uid, tiktok_id, created_at, updated_at
-            )
-            VALUES(?,?,?,?,?,?,?,?,?,?,?)
-            ON CONFLICT(id) DO UPDATE SET
-              name=excluded.name,
-              phone=excluded.phone,
-              address=excluded.address,
-              admin_address=excluded.admin_address,
-              order_content=excluded.order_content,
-              cod_amount=excluded.cod_amount,
-              facebook_uid=excluded.facebook_uid,
-              tiktok_id=excluded.tiktok_id,
-              created_at=excluded.created_at,
-              updated_at=excluded.updated_at
-            """,
-            [
-                (
-                    row["id"],
-                    row.get("name") or "",
-                    row.get("phone") or "",
-                    row.get("address") or "",
-                    row.get("adminAddress") or "",
-                    row.get("orderContent") or "",
-                    row.get("codAmount") or "",
-                    row.get("facebookUid") or "",
-                    row.get("tiktokId") or "",
-                    row.get("createdAt") or "",
-                    row.get("updatedAt") or "",
-                )
-                for row in dirty
-            ],
-        )
+        write_customers(conn, rows, removed_ids)
 
 
 def customer_count(db_path: Path) -> int:

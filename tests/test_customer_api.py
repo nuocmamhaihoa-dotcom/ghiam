@@ -78,6 +78,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("hàng mua", home.text)
         self.assertIn("giá COD", home.text)
         self.assertIn("không đoán nội dung ô", home.text)
+        self.assertIn("3 * 60 * 60 * 1000", home.text)
         self.assertIn("orderContentColumns", home.text)
         self.assertIn("giới tính", home.text)
         alias = self.client.get("/khach")
@@ -643,6 +644,30 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(imported.json()["total"], 1200)
         leftover = list((settings.data_dir / "uploads").glob("khach-up-*")) if (settings.data_dir / "uploads").exists() else []
         self.assertEqual(leftover, [])
+
+    def test_import_keeps_all_unique_phones_across_batches(self) -> None:
+        rows = [[f"K{index}", f"0905{index:06d}", f"Huế {index}"] for index in range(3500)]
+        imported = self.client.post(
+            "/v1/customers/import",
+            headers=self.headers,
+            data={
+                "mapping": json.dumps(
+                    {
+                        "name": {"index": 0, "header": "Tên khách"},
+                        "phone": {"index": 1, "header": "SĐT"},
+                        "address": {"index": 2, "header": "Địa chỉ"},
+                    }
+                )
+            },
+            files=[self._file("du.xlsx", ["Tên khách", "SĐT", "Địa chỉ"], rows)],
+        )
+        self.assertEqual(imported.status_code, 200, imported.text)
+        body = imported.json()
+        self.assertEqual(body["stats"]["incoming"], 3500)
+        self.assertEqual(body["stats"]["created"], 3500)
+        self.assertEqual(body["total"], 3500)
+        listed = self.client.get("/v1/customers", headers=self.headers)
+        self.assertEqual(listed.json()["total"], 3500)
 
 
 if __name__ == "__main__":

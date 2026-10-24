@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import re
 import uuid
-from typing import Any
+from typing import Any, Iterator
 from urllib.parse import parse_qs, urlparse
 
+from control_plane import db
 from control_plane.vietnam_places import fold_vietnamese, has_address_keyword, has_vietnam_place
 
 FIELDS = (
@@ -406,6 +407,128 @@ def fold_customers(
             "removed": len(removed_ids),
         },
         removed_ids,
+    )
+
+
+def merge_existing_with_incoming(
+    existing: list[dict[str, Any]],
+    incoming: dict[str, Any],
+    now: str,
+) -> tuple[dict[str, Any], list[str], str]:
+    """Ghép một dòng file vào các khách cùng SĐT. Ô đã có giữ, ô trống điền."""
+    incoming_row = _as_customer(incoming, False)
+    if not existing:
+        incoming_row["createdAt"] = now
+        incoming_row["updatedAt"] = now
+        incoming_row["write"] = True
+        incoming_row.pop("existing", None)
+        return incoming_row, [], "created"
+    members = [_as_customer(row, True) for row in existing] + [incoming_row]
+    merged = _merge_group(members, now)
+    extra_ids = [str(row.get("id") or "") for row in existing if str(row.get("id") or "") != merged["id"]]
+    extra_ids = [item for item in extra_ids if item]
+    changed = bool(merged.pop("changed"))
+    merged.pop("existing", None)
+    merged.pop("absorbed", None)
+    if changed:
+        merged["write"] = True
+        return merged, extra_ids, "updated"
+    merged["write"] = False
+    if extra_ids:
+        merged["write"] = True
+        return merged, extra_ids, "updated"
+    return merged, extra_ids, "unchanged"
+
+
+def ingest_customers(
+    db_path: Any,
+    incoming: Iterator[dict[str, Any]],
+    now: str,
+    flush_every: int = 400,
+) -> tuple[dict[str, int], list[dict[str, Any]]]:
+    """Nạp từng dòng vào SQLite. Không tải cả kho vào RAM. Ghi từng lô để không mất dở."""
+    created = 0
+    updated = 0
+    unchanged = 0
+    skipped = 0
+    absorbed = 0
+    incoming_count = 0
+    kept = 0
+    pending: dict[str, dict[str, Any]] = {}
+    pending_phone: dict[str, str] = {}
+    pending_deletes: list[str] = []
+    preview: list[dict[str, Any]] = []
+    flush_every = max(50, int(flush_every))
+
+    def flush(conn: Any) -> None:
+        if not pending and not pending_deletes:
+            return
+        db.write_customers(conn, list(pending.values()), pending_deletes)
+        conn.commit()
+        pending.clear()
+        pending_phone.clear()
+        pending_deletes.clear()
+
+    db.init_db(db_path)
+    conn = db.connect(db_path)
+    try:
+        for raw in incoming:
+            incoming_count += 1
+            row = clean_row(raw)
+            if not has_data(row):
+                skipped += 1
+                continue
+            repaired, changed = repair_customer_row(row)
+            if changed:
+                row = clean_row(repaired)
+            if not has_data(row):
+                skipped += 1
+                continue
+            kept += 1
+            phone = clean_phone(row.get("phone") or "")
+            if phone:
+                pending_id = pending_phone.get(phone)
+                if pending_id and pending_id in pending:
+                    existing = [pending[pending_id]]
+                else:
+                    existing = db.customers_by_phone(conn, phone)
+                merged, extra_ids, kind = merge_existing_with_incoming(existing, row, now)
+                for extra_id in extra_ids:
+                    pending.pop(extra_id, None)
+                    pending_deletes.append(extra_id)
+                    absorbed += 1
+                pending[merged["id"]] = merged
+                pending_phone[phone] = merged["id"]
+            else:
+                merged, extra_ids, kind = merge_existing_with_incoming([], row, now)
+                pending[merged["id"]] = merged
+            if kind == "created":
+                created += 1
+            elif kind == "updated":
+                updated += 1
+            else:
+                unchanged += 1
+            if merged.get("write") and len(preview) < 200:
+                preview.append(merged)
+            if len(pending) >= flush_every:
+                flush(conn)
+        flush(conn)
+        total = int(conn.execute("SELECT COUNT(*) AS n FROM customers").fetchone()["n"])
+    finally:
+        conn.close()
+    return (
+        {
+            "created": created,
+            "updated": updated,
+            "unchanged": unchanged,
+            "skipped": skipped,
+            "absorbed": absorbed,
+            "incoming": incoming_count,
+            "kept": kept,
+            "total": total,
+            "removed": absorbed,
+        },
+        preview,
     )
 
 

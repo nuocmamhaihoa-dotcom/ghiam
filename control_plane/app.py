@@ -124,6 +124,7 @@ def _remember_hub(kind: str, summary: str, detail: str | None = None, actor: str
 @app.on_event("startup")
 async def _startup() -> None:
     settings.ensure_dirs()
+    settings.cleanup_import_temps()
     db.init_db(settings.db_path)
     init_video_db(settings.video_db_path)
     merge_close_results(settings.video_db_path)

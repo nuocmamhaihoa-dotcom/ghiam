@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import io
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
+from control_plane import db
 from control_plane.customers import (
     clean_cod_amount,
     clean_facebook_uid,
@@ -13,6 +16,7 @@ from control_plane.customers import (
     clean_tiktok_id,
     expand_scientific,
     fold_customers,
+    ingest_customers,
     lookup_by_phones,
     matches_query,
     phones_from_text,
@@ -20,13 +24,17 @@ from control_plane.customers import (
     repair_stored_customers,
 )
 from control_plane.excel_import import (
+    SharedStringStore,
     _combine_sheets,
+    _fill_shared_strings,
     _shared_strings,
+    iter_xlsx_rows,
     mapping_from_form,
     preview_table,
     rows_from_files,
     write_xlsx,
 )
+from control_plane.settings import settings
 
 
 class CustomerCleanTests(unittest.TestCase):
@@ -473,6 +481,180 @@ class CustomerRepairTests(unittest.TestCase):
             self.assertEqual(rows["dump1"]["facebookUid"], "100007416894544")
             self.assertEqual(rows["ok1"]["name"], "Nguyễn Ngân")
             self.assertEqual(rows["ok1"]["address"], "Huế")
+
+
+class IngestSqlTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.folder = tempfile.TemporaryDirectory(prefix="khach-ingest-")
+        self.db_path = Path(self.folder.name) / "server.db"
+        db.init_db(self.db_path)
+
+    def tearDown(self) -> None:
+        self.folder.cleanup()
+
+    def test_ingest_keeps_every_unique_phone(self) -> None:
+        now = "2026-01-01T00:00:00+00:00"
+        incoming = ({"name": f"K{index}", "phone": f"0904{index:07d}"} for index in range(4000))
+        stats, _preview = ingest_customers(self.db_path, incoming, now, flush_every=80)
+        self.assertEqual(stats["incoming"], 4000)
+        self.assertEqual(stats["created"], 4000)
+        self.assertEqual(stats["skipped"], 0)
+        self.assertEqual(stats["total"], 4000)
+        later = (
+            {"name": "", "phone": f"0904{index:07d}", "address": f"Huế {index}"}
+            for index in range(4000)
+        )
+        filled, _preview = ingest_customers(self.db_path, later, "2026-01-02T00:00:00+00:00", flush_every=80)
+        self.assertEqual(filled["created"], 0)
+        self.assertEqual(filled["updated"], 4000)
+        self.assertEqual(filled["total"], 4000)
+        conn = db.connect(self.db_path)
+        try:
+            sample = db.customers_by_phone(conn, "09040000012")
+        finally:
+            conn.close()
+        self.assertEqual(len(sample), 1)
+        self.assertEqual(sample[0]["name"], "K12")
+        self.assertEqual(sample[0]["address"], "Huế 12")
+
+    def test_ingest_merges_same_phone_and_keeps_no_phone(self) -> None:
+        now = "2026-01-01T00:00:00+00:00"
+        incoming = iter(
+            [
+                {"name": "Lan", "phone": "0901111111", "address": ""},
+                {"name": "", "phone": "0901111111", "address": "Huế"},
+                {"name": "Không số A", "phone": ""},
+                {"name": "Không số B", "phone": ""},
+                {"name": "Không số A", "phone": ""},
+            ]
+        )
+        stats, _preview = ingest_customers(self.db_path, incoming, now, flush_every=50)
+        self.assertEqual(stats["incoming"], 5)
+        self.assertEqual(stats["created"], 4)
+        self.assertEqual(stats["updated"], 1)
+        self.assertEqual(stats["total"], 4)
+        conn = db.connect(self.db_path)
+        try:
+            lan = db.customers_by_phone(conn, "0901111111")
+        finally:
+            conn.close()
+        self.assertEqual(len(lan), 1)
+        self.assertEqual(lan[0]["name"], "Lan")
+        self.assertEqual(lan[0]["address"], "Huế")
+
+
+class SharedStringSpillTests(unittest.TestCase):
+    def test_store_spills_to_disk_and_reads_back(self) -> None:
+        previous = settings.data_dir
+        with tempfile.TemporaryDirectory(prefix="khach-sst-") as folder:
+            settings.data_dir = Path(folder)
+            settings.ensure_dirs()
+            store = SharedStringStore()
+            try:
+                store.prepare_disk()
+                store.append("Lan")
+                store.append("0901222333")
+                store.append("Huế")
+                store.finalize()
+                self.assertTrue(store._spilled)
+                self.assertEqual(store[0], "Lan")
+                self.assertEqual(store[1], "0901222333")
+                self.assertEqual(store[2], "Huế")
+                leftover = list(settings.tmp_dir().glob("khach-sst-*"))
+                self.assertEqual(len(leftover), 1)
+            finally:
+                store.close()
+                settings.data_dir = previous
+            self.assertEqual(list(Path(folder, "tmp").glob("khach-sst-*")), [])
+
+    def test_fill_spills_when_unique_count_is_high(self) -> None:
+        import control_plane.excel_import as excel_import
+
+        previous_spill = excel_import.SHARED_SPILL
+        previous_dir = settings.data_dir
+        payload = (
+            b'<?xml version="1.0"?><sst uniqueCount="8" xmlns="http://schemas.openxmlformats.org/'
+            b'spreadsheetml/2006/main">'
+            b"<si><t>A0</t></si><si><t>A1</t></si><si><t>A2</t></si><si><t>A3</t></si>"
+            b"</sst>"
+        )
+        with tempfile.TemporaryDirectory(prefix="khach-sst2-") as folder:
+            settings.data_dir = Path(folder)
+            settings.ensure_dirs()
+            excel_import.SHARED_SPILL = 3
+            store = SharedStringStore()
+            try:
+                _fill_shared_strings(io.BytesIO(payload), store)
+                self.assertTrue(store._spilled)
+                self.assertEqual(store[0], "A0")
+                self.assertEqual(store[3], "A3")
+            finally:
+                store.close()
+                excel_import.SHARED_SPILL = previous_spill
+                settings.data_dir = previous_dir
+
+    def test_iter_xlsx_rows_reads_spilled_shared_strings(self) -> None:
+        import control_plane.excel_import as excel_import
+
+        previous_spill = excel_import.SHARED_SPILL
+        previous_dir = settings.data_dir
+        strings = ["Tên khách", "SĐT", "Lan", "0901222333", "Minh", "0901444555"]
+        sst = (
+            '<?xml version="1.0"?><sst uniqueCount="6" xmlns="http://schemas.openxmlformats.org/'
+            'spreadsheetml/2006/main">'
+            + "".join(f"<si><t>{item}</t></si>" for item in strings)
+            + "</sst>"
+        )
+        sheet = (
+            '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/'
+            'spreadsheetml/2006/main"><sheetData>'
+            '<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>'
+            '<row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2" t="s"><v>3</v></c></row>'
+            '<row r="3"><c r="A3" t="s"><v>4</v></c><c r="B3" t="s"><v>5</v></c></row>'
+            "</sheetData></worksheet>"
+        )
+        workbook = """<?xml version="1.0"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+ xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets><sheet name="Khach" sheetId="1" r:id="rId1"/></sheets>
+</workbook>"""
+        workbook_rels = """<?xml version="1.0"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>"""
+        content_types = """<?xml version="1.0"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
+</Types>"""
+        rels = """<?xml version="1.0"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>"""
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("[Content_Types].xml", content_types)
+            archive.writestr("_rels/.rels", rels)
+            archive.writestr("xl/workbook.xml", workbook)
+            archive.writestr("xl/_rels/workbook.xml.rels", workbook_rels)
+            archive.writestr("xl/worksheets/sheet1.xml", sheet)
+            archive.writestr("xl/sharedStrings.xml", sst)
+        with tempfile.TemporaryDirectory(prefix="khach-sst3-") as folder:
+            settings.data_dir = Path(folder)
+            settings.ensure_dirs()
+            excel_import.SHARED_SPILL = 3
+            try:
+                rows = list(iter_xlsx_rows(buffer.getvalue()))
+            finally:
+                excel_import.SHARED_SPILL = previous_spill
+                settings.data_dir = previous_dir
+        self.assertEqual(rows[0], ["Tên khách", "SĐT"])
+        self.assertEqual(rows[1], ["Lan", "0901222333"])
+        self.assertEqual(rows[2], ["Minh", "0901444555"])
+        self.assertEqual(list(Path(folder, "tmp").glob("khach-sst-*")), [])
 
 
 if __name__ == "__main__":
