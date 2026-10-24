@@ -216,7 +216,13 @@ def _html(name: str) -> HTMLResponse:
     text = text.replace("__CONTROL_TOKEN__", baked)
     headers = {"Cache-Control": "no-cache"}
     if name == "khach.html":
-        headers = {"Cache-Control": "no-cache, no-store", "Content-Language": "vi"}
+        text = text.replace("__KHACH_BUILD__", "20261024c")
+        headers = {
+            "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "Content-Language": "vi",
+        }
     return HTMLResponse(text, headers=headers)
 
 

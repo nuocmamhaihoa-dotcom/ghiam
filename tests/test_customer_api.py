@@ -97,9 +97,12 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("Máy đã tự chọn cột", home.text)
         self.assertIn("fileMaps", home.text)
         self.assertIn("Dòng đọc", home.text)
-        self.assertIn("Cộng dòng các lần nạp", home.text)
+        self.assertIn("Cộng dòng mọi lần nạp", home.text)
         self.assertIn("Giữ nguyên", home.text)
         self.assertIn("File còn thiếu", home.text)
+        self.assertIn("Số điện thoại khác nhau", home.text)
+        self.assertIn("Không có SĐT", home.text)
+        self.assertIn("khach-build", home.text)
         self.assertIn("một khách cho mỗi số điện thoại", home.text)
         self.assertIn("Số 84", home.text)
         self.assertIn("không lấy UID Facebook", home.text)
@@ -827,6 +830,10 @@ class CustomerApiTests(unittest.TestCase):
         history = self.client.get("/v1/customers/sessions", headers=self.headers)
         self.assertEqual(history.status_code, 200, history.text)
         self.assertEqual(history.json()["total"], 1200)
+        self.assertEqual(history.json()["uniquePhones"], 1200)
+        self.assertEqual(history.json()["emptyPhone"], 0)
+        self.assertEqual(history.json()["duplicatePhones"], 0)
+        self.assertEqual(history.json()["rowSum"], 1200)
         self.assertTrue(history.json()["sessions"])
         latest = history.json()["sessions"][0]
         self.assertEqual(latest["incoming"], 1200)
@@ -1058,6 +1065,10 @@ class CustomerApiTests(unittest.TestCase):
         old = [item for item in history.json()["sessions"] if item["at"] == "2026-10-24T04:33:56+00:00"][0]
         self.assertEqual(old["emptyFiles"], [])
         self.assertEqual(old["resolvedEmpty"], ["delivery_export_1.xlsx"])
+        self.assertTrue(old["laterOk"])
+        self.assertEqual(history.json()["uniquePhones"], 1)
+        self.assertEqual(history.json()["emptyPhone"], 0)
+        self.assertEqual(history.json()["duplicatePhones"], 0)
 
     def test_lookup_file_skips_facebook_uid(self) -> None:
         db.replace_customers(

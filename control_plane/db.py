@@ -965,6 +965,29 @@ def customer_count(db_path: Path) -> int:
     return int(row["n"] if row else 0)
 
 
+def warehouse_stats(db_path: Path) -> dict[str, int]:
+    """Đếm kho một lần: tổng hàng, SĐT khác nhau, hàng không có SĐT."""
+    with session(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT
+              COUNT(*) AS total,
+              SUM(CASE WHEN phone = '' THEN 1 ELSE 0 END) AS empty_phone,
+              COUNT(DISTINCT CASE WHEN phone != '' THEN phone END) AS unique_phones
+            FROM customers
+            """
+        ).fetchone()
+    total = int(row["total"] or 0)
+    empty = int(row["empty_phone"] or 0)
+    unique = int(row["unique_phones"] or 0)
+    return {
+        "total": total,
+        "uniquePhones": unique,
+        "emptyPhone": empty,
+        "duplicatePhones": max(0, total - unique - empty),
+    }
+
+
 def customers_created_between(db_path: Path, start: str, end: str) -> int:
     with session(db_path) as conn:
         row = conn.execute(

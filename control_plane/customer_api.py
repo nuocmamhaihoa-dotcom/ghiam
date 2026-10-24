@@ -275,6 +275,7 @@ def _import_sessions() -> dict[str, Any]:
                 "resolvedEmpty": resolved,
                 "keptInWarehouse": item["keptInWarehouse"],
                 "missing": missing,
+                "laterOk": later_hit,
                 "readOk": read_ok,
                 "filesKept": item["filesKept"],
             }
@@ -286,11 +287,16 @@ def _import_sessions() -> dict[str, Any]:
             continue
         seen.add(name)
         unique_reupload.append(name)
+    warehouse = db.warehouse_stats(settings.db_path)
     return {
-        "total": db.customer_count(settings.db_path),
+        "total": warehouse["total"],
+        "uniquePhones": warehouse["uniquePhones"],
+        "emptyPhone": warehouse["emptyPhone"],
+        "duplicatePhones": warehouse["duplicatePhones"],
         "sessions": sessions,
         "needReupload": unique_reupload[:80],
         "complete": not unique_reupload,
+        "rowSum": sum(int(item.get("incoming") or 0) for item in sessions),
     }
 
 

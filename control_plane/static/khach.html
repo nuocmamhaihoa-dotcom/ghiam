@@ -7,6 +7,8 @@
   <meta name="supported-color-schemes" content="light only" />
   <meta name="google" content="notranslate" />
   <meta http-equiv="content-language" content="vi" />
+  <meta name="khach-build" content="__KHACH_BUILD__" />
+  <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate" />
   <title>Kho khách</title>
   <style>
     html { color-scheme: only light; }
@@ -1015,11 +1017,14 @@
       var sessions = body.sessions || [];
       var missing = sessions.filter(function (item) { return item.missing; }).length;
       var emptyCount = sessions.reduce(function (sum, item) { return sum + (item.emptyFiles || []).length; }, 0);
-      var readSum = sessions.reduce(function (sum, item) { return sum + (item.incoming || 0); }, 0);
+      var readSum = body.rowSum != null ? body.rowSum : sessions.reduce(function (sum, item) { return sum + (item.incoming || 0); }, 0);
+      var uniquePhones = body.uniquePhones != null ? body.uniquePhones : 0;
+      var emptyPhone = body.emptyPhone != null ? body.emptyPhone : 0;
       document.getElementById("sessionStats").innerHTML =
-        stat(sessions.length, "Lần nạp") +
         stat(body.total || 0, "Khách trong kho") +
-        stat(readSum, "Cộng dòng các lần nạp") +
+        stat(uniquePhones, "Số điện thoại khác nhau") +
+        stat(emptyPhone, "Không có SĐT") +
+        stat(readSum, "Cộng dòng mọi lần nạp") +
         stat((body.needReupload || []).length, "File còn thiếu");
       padSpaces(document.getElementById("sessionStats"));
       var html = "<table class='sheet sess'><thead><tr>" +
@@ -1030,10 +1035,12 @@
         var resolved = (item.resolvedEmpty || []).length;
         var status = "Đã đọc đủ";
         var unmapped = item.unmapped || 0;
+        var laterOk = !!item.laterOk;
         if (item.missing) status = "Không còn đủ — nạp lại file";
         else if (empty) status = "Thiếu " + empty + " file 0 dòng — nạp lại";
         else if (unmapped) status = "Thiếu " + vnNum(unmapped) + " dòng không lấy được dữ liệu — kiểm tra cột";
         else if (resolved) status = "Đã nạp lại file 0 dòng";
+        else if (laterOk && !item.readOk) status = "Đã nạp lại đủ ở lần sau";
         else if (item.readOk) status = "Đã đọc đủ " + vnNum(item.incoming || 0) + " dòng";
         else if ((item.created || 0) + (item.updated || 0) + (item.unchanged || 0) < (item.incoming || 0)) {
           status = "Chưa ghi đủ " + vnNum((item.created || 0) + (item.updated || 0) + (item.unchanged || 0)) + "/" + vnNum(item.incoming || 0);
@@ -1056,7 +1063,7 @@
       } else if (!body.complete) {
         setNote(
           "sessionNote",
-          "Kho hiện " + (body.total || 0) + " khách. Còn " +
+          "Kho hiện " + vnNum(body.total || 0) + " khách. Còn " +
             (body.needReupload || []).length + " file chưa nạp lại được." +
             (missing ? " Có lô cũ không còn trong kho." : "") +
             (emptyCount ? " Còn file 0 dòng." : ""),
@@ -1065,7 +1072,10 @@
       } else {
         setNote(
           "sessionNote",
-          "Mỗi dòng trong file đã đọc đều được ghi. Kho đếm một khách cho mỗi số điện thoại, nên tổng khách nhỏ hơn cộng dòng các lần nạp khi trùng số hoặc nạp lại cùng file. Cột Bổ sung / Giữ nguyên là dòng đã ghi vào khách sẵn có, không mất. File đã nạp lại thành công không còn bị đòi nạp nữa.",
+            "Kho đang có " + vnNum(body.total || 0) + " khách = " +
+            vnNum(uniquePhones) + " số điện thoại khác nhau + " +
+            vnNum(emptyPhone) + " khách không có SĐT. một khách cho mỗi số điện thoại. Cộng dòng mọi lần nạp " +
+            vnNum(readSum) + " vì cùng file được nạp lại và trùng số thì gộp, không mất khách. Cột Bổ sung / Giữ nguyên là dòng đã ghi vào khách sẵn có. File còn thiếu: 0. Không cần nạp lại.",
           "ok"
         );
       }
