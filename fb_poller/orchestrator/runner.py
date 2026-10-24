@@ -14,8 +14,7 @@ from fb_poller.storage.models import Tier
 from fb_poller.storage.repo import PostRepo
 from fb_poller.workers.browser_pool import BrowserPool
 from fb_poller.workers.job_hot import poll_post
-from fb_poller.workers.proxy_manager import ProxyManager, load_proxy_file
-from fb_poller.workers.rotate_4g import build_loop
+from fb_poller.workers.proxy_manager import ProxyManager
 
 console = Console()
 
@@ -36,7 +35,7 @@ async def _worker_loop(
     while not stop.is_set():
         if worker.needs_recycle:
             await pool.recycle_now(worker)
-            console.log(f"[worker-{slot}] recycled after 4G rotate")
+            console.log(f"[worker-{slot}] recycled")
         try:
             job = await asyncio.wait_for(queue.get(), timeout=1.0)
         except asyncio.TimeoutError:
@@ -92,13 +91,6 @@ async def run_poller(settings: Settings) -> None:
     metrics_path = settings.data_dir / "metrics" / f"{settings.worker_id}.jsonl"
     metrics = Metrics(path=metrics_path)
 
-    g4 = load_proxy_file(settings.proxies_4g_file)
-    if g4 and settings.workers != len(g4):
-        console.log(
-            f"[runner] kq2: WORKERS {settings.workers} → {len(g4)} (1 browser / 1 proxy 4G)"
-        )
-        settings.workers = len(g4)
-
     async with session_scope() as session:
         recovered = await PostRepo(session, settings).recover_scan_pool()
     if recovered["recovered"] or recovered["reset_fail"]:
@@ -108,9 +100,9 @@ async def run_poller(settings: Settings) -> None:
         )
 
     proxy_manager = ProxyManager(settings)
-    assigned = await proxy_manager.load_for_worker(settings.workers)
+    await proxy_manager.load_for_worker(settings.workers)
     console.log(
-        f"[runner] PA1 workers={settings.workers} proxies={assigned} "
+        f"[runner] PA1 workers={settings.workers} proxy=off (IP máy) "
         f"hot_interval={settings.hot_interval_sec}s hot_size={settings.hot_size}"
     )
 
@@ -150,24 +142,6 @@ async def run_poller(settings: Settings) -> None:
             console.print(table)
 
     tasks.append(asyncio.create_task(_status(), name="status"))
-
-    rotate = build_loop(settings)
-    if rotate.targets:
-        console.log(
-            f"[runner] kq2 4G rotate keys={len(rotate.targets)} "
-            f"every={int(rotate.interval_sec)}s stagger={int(rotate.interval_sec / max(1, len(rotate.targets)))}s"
-        )
-
-        async def _after_rotate(target, result) -> None:
-            mark = "ok" if result.ok else "fail"
-            console.log(f"[rotate-4g] {mark} {target.name} {result.message}")
-            if result.ok:
-                await proxy_manager.revive_endpoint(target.endpoint)
-                n = pool.mark_recycle_for_endpoint(target.endpoint)
-                if n:
-                    console.log(f"[rotate-4g] recycle {n} browser dùng {target.endpoint}")
-
-        tasks.append(asyncio.create_task(rotate.run_forever(stop, _after_rotate), name="rotate-4g"))
 
     loop = asyncio.get_running_loop()
 

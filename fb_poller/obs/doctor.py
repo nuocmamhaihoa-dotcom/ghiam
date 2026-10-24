@@ -54,7 +54,7 @@ def run_doctor() -> None:
 
     table.add_row("CPU cores", str(cores), f"WORKERS≈{suggested}")
     table.add_row("RAM GiB", str(ram), "≥32GB khuyến nghị cho 10+ workers")
-    table.add_row("WORKERS (.env)", str(settings.workers), "kq2: 10 (1 browser / 1 proxy 4G)")
+    table.add_row("WORKERS (.env)", str(settings.workers), f"nên ≈ {suggested}")
     table.add_row("HOT_SIZE", str(settings.hot_size), "100")
     table.add_row("HOT_INTERVAL_SEC", str(settings.hot_interval_sec), "45 trước, 30 sau KPI")
     table.add_row("HEADLESS", str(settings.headless), "true trên server/PC headless")
@@ -62,13 +62,8 @@ def run_doctor() -> None:
     table.add_row("Playwright", "ok" if chromium_ok else "missing", "playwright install chromium")
 
     posts = count_nonempty_lines(ROOT / "data" / "posts.txt")
-    static = count_nonempty_lines(Path(settings.proxies_static_file))
-    g4 = count_nonempty_lines(Path(settings.proxies_4g_file))
     table.add_row("posts.txt", str(posts), "≥1 URL permalink")
-    table.add_row("proxies_static", str(static), "dự phòng (gói tĩnh hết hạn thì bỏ)")
-    table.add_row("proxies_4g", str(g4), "kq2: 10 proxy, ưu tiên quét")
-    rotate_n = count_nonempty_lines(Path(settings.proxies_4g_rotate_file))
-    table.add_row("proxies_4g_rotate", str(rotate_n), "xoay IP mỗi 5 phút, lệch nhau")
+    table.add_row("proxy", "off", "quét đi IP máy")
     table.add_row("DB", settings.database_url, "SQLite 1 máy / Postgres khi 2 PC")
     console.print(table)
 
@@ -77,16 +72,6 @@ def run_doctor() -> None:
         warns.append(f"WORKERS={settings.workers} cao hơn gợi ý {suggested} — dễ timeout/CPU full.")
     if posts == 0:
         warns.append("Chưa có URL trong data/posts.txt")
-    if g4 == 0 and static < settings.workers:
-        warns.append(
-            f"Không có proxy 4G kq2 và proxy tĩnh ({static}) < WORKERS ({settings.workers})."
-        )
-    if g4 and rotate_n < g4:
-        warns.append(f"Thiếu link xoay 4G ({rotate_n}/{g4}).")
-    if g4 and settings.workers > g4:
-        warns.append(
-            f"WORKERS={settings.workers} > {g4} proxy 4G — worker thừa dùng chung IP 4G."
-        )
     if settings.workers >= 10 and ram > 0 and ram < 24:
         warns.append("RAM thấp so với số worker — giảm WORKERS.")
 

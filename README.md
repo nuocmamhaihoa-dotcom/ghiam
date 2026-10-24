@@ -31,9 +31,8 @@ Chi tiết vận hành 2 PC: [`deploy/PA1_RUNBOOK.md`](deploy/PA1_RUNBOOK.md).
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\pc_agent\windows\Install-Agent.ps1 -StartNow
-# dán URL/proxy vào data\ rồi:
+# dán URL vào data\ rồi:
 .\.venv\Scripts\fb-poller.exe import-urls .\data\posts.txt
-.\.venv\Scripts\fb-poller.exe import-proxies
 .\.venv\Scripts\fb-poller.exe rebalance-hot
 ```
 
@@ -68,13 +67,11 @@ cp .env.example .env
 ## Chuẩn bị dữ liệu
 
 1. Dán 300 permalink vào `data/posts.txt` (1 URL / dòng).
-2. Dán proxy tĩnh vào `data/proxies_static.txt` (dự phòng).
-3. Proxy 4G kq2 + link xoay: `data/proxies_4g.txt`, `data/proxies_4g_rotate.txt` (tự ấn mỗi 5 phút khi `fb-poller run`).
+2. Quét đi IP máy — đã gỡ proxy.
 
 ```bash
 fb-poller init-db
 fb-poller import-urls data/posts.txt
-fb-poller import-proxies
 fb-poller rebalance-hot
 fb-poller status
 ```
@@ -115,10 +112,7 @@ fb-poller run
 |---|---|
 | `fb-poller init-db` | Tạo schema |
 | `fb-poller import-urls FILE` | Import URL |
-| `fb-poller import-proxies` | Import proxy files |
-| `fb-poller recover` | Lấy lại bài bị chôn khi proxy chết / login wall |
-| `fb-poller check-4g` | Kiểm tra 10 proxy 4G kq2 còn sống |
-| `fb-poller rotate-4g` | Xem / ấn xoay IP 4G kq2 (poller tự ấn 5 phút) |
+| `fb-poller recover` | Lấy lại bài bị chôn khi login wall |
 | `fb-poller rebalance-hot` | Ép đúng `HOT_SIZE` bài Hot |
 | `fb-poller set-tier ID hot\|warm\|cold` | Gán tier thủ công |
 | `fb-poller probe` | Thử lấy comment guest |
@@ -147,9 +141,7 @@ fb_poller/
   orchestrator/     # tiered scheduler + runner
 data/
   posts.sample.txt
-  proxies_static.txt
-  proxies_4g.txt
-  proxies_4g_rotate.txt
+  posts.sample.txt
 ```
 
 ## KPI go/no-go trước khi hạ Hot xuống 30s

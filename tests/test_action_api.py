@@ -63,10 +63,11 @@ class ActionApiTests(unittest.TestCase):
     def test_proxy_check_is_remembered(self) -> None:
         response = self.client.post("/v1/proxies/check", headers=self.headers)
         self.assertEqual(response.status_code, 200, response.text)
+        self.assertTrue(response.json().get("removed"))
         listed = self.client.get("/v1/actions", headers=self.headers, params={"kind": "proxy_check"})
         self.assertEqual(listed.status_code, 200)
         self.assertGreaterEqual(listed.json()["count"], 1)
-        self.assertIn("Check proxy", listed.json()["items"][0]["summary"])
+        self.assertIn("Đã gỡ proxy", listed.json()["items"][0]["summary"])
 
     def test_recording_roundtrip_hides_password(self) -> None:
         created = self.client.post(

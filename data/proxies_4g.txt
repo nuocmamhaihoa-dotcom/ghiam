@@ -1,11 +1,1 @@
-# kq2 — 10 proxy 4G, xoay IP mỗi 5 phút (link trong proxies_4g_rotate.txt)
-103.125.189.149:8624:9rnbo:6wohm
-103.122.162.163:8236:zec1z:vq8j2
-51.79.185.150:8021:flnni:ol5ke
-157.10.49.123:8702:flnni:ol5ke
-103.229.53.131:8024:5xf0o:xuwx0
-103.16.160.43:8438:5xf0o:xuwx0
-103.186.67.59:8055:yrqcm:7vlgl
-103.183.114.192:8134:yrqcm:7vlgl
-157.10.49.123:8393:5bfeo:v4bzq
-103.16.160.43:8203:qh7wy:8j0iy
+# Đã gỡ proxy khỏi phần mềm. Quét đi IP máy.

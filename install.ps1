@@ -26,8 +26,6 @@ python -m venv .venv
 
 New-Item -ItemType Directory -Force -Path data, logs, data\metrics | Out-Null
 if (-not (Test-Path data\posts.txt)) { New-Item data\posts.txt -ItemType File | Out-Null }
-if (-not (Test-Path data\proxies_static.txt)) { New-Item data\proxies_static.txt -ItemType File | Out-Null }
-if (-not (Test-Path data\proxies_4g.txt)) { New-Item data\proxies_4g.txt -ItemType File | Out-Null }
 
 $dbPath = (Join-Path $Root "data\fb_poller.db") -replace '\\', '/'
 @"
@@ -46,8 +44,6 @@ HOT_MAX_COMMENTS_PAGE=20
 BROWSER_RESTART_EVERY_JOBS=80
 HEADLESS=true
 NAVIGATION_TIMEOUT_MS=15000
-PROXIES_STATIC_FILE=$Root\data\proxies_static.txt
-PROXIES_4G_FILE=$Root\data\proxies_4g.txt
 DATA_DIR=$Root\data
 "@ | Set-Content -Path .env -Encoding UTF8
 
@@ -56,11 +52,10 @@ DATA_DIR=$Root\data
 Write-Host ""
 Write-Host "Cài xong." -ForegroundColor Green
 Write-Host "1) Dán URL vào data\posts.txt"
-Write-Host "2) Dán proxy vào data\proxies_static.txt"
+Write-Host "2) Quét đi IP máy — không cần proxy"
 Write-Host "3) Import + chạy:"
 Write-Host "   .\.venv\Scripts\Activate.ps1"
 Write-Host "   fb-poller import-urls data\posts.txt"
-Write-Host "   fb-poller import-proxies"
 Write-Host "   fb-poller rebalance-hot"
 Write-Host "   fb-poller run"
 Write-Host "Hoặc dùng: .\scripts\fb-poller-ctl.ps1 start"

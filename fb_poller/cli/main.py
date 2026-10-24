@@ -19,7 +19,7 @@ from fb_poller.storage.repo import PostRepo
 from fb_poller.obs.metrics import Metrics
 from fb_poller.workers.job_hot import poll_post
 from fb_poller.workers.browser_pool import BrowserPool
-from fb_poller.workers.proxy_manager import ProxyManager, import_proxy_files
+from fb_poller.workers.proxy_manager import ProxyManager
 from fb_poller.workers.types import PostJob
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
@@ -59,16 +59,9 @@ def import_urls(
 
 @app.command("import-proxies")
 def import_proxies_cmd() -> None:
-    """Import proxies from data/proxies_static.txt and data/proxies_4g.txt."""
-    settings = get_settings()
-    remember_quietly(summary="Import proxy từ file static/4g", kind="cli", source="cli")
-
-    async def _run() -> None:
-        await init_db(settings)
-        result = await import_proxy_files(settings)
-        console.print(result)
-
-    asyncio.run(_run())
+    """Proxy đã gỡ — lệnh giữ để không gãy script cũ."""
+    remember_quietly(summary="Bỏ qua import proxy (đã gỡ khỏi phần mềm)", kind="cli", source="cli")
+    console.print("Đã gỡ proxy. Quét đi IP máy, không import.")
 
 
 @app.command("recover")
@@ -88,107 +81,14 @@ def recover_cmd() -> None:
 
 @app.command("check-4g")
 def check_4g_cmd() -> None:
-    """Kiểm tra 10 proxy 4G kq2 còn sống và lịch xoay."""
-    from fb_poller.workers.rotate_4g import build_loop, check_proxy_line
-
-    settings = get_settings()
-    loop = build_loop(settings)
-    if not loop.targets:
-        console.print("[yellow]Chưa có cặp proxy/link xoay 4G.[/yellow]")
-        raise typer.Exit(1)
-
-    async def _run() -> None:
-        table = Table(title="kq2 4G — kiểm tra sống")
-        table.add_column("#")
-        table.add_column("proxy")
-        table.add_column("IP ra")
-        table.add_column("ms")
-        table.add_column("xoay gần nhất")
-        live = 0
-        for t in loop.targets:
-            probe = await check_proxy_line(t.endpoint)
-            row = loop.state.get(str(t.index))
-            last = "-"
-            if row and row.last_ok_at:
-                last = time_fmt(row.last_ok_at) + (" ok" if row.last_ok else " fail")
-            if probe.get("ok"):
-                live += 1
-                ip = str(probe.get("exit_ip") or "")
-            else:
-                ip = str(probe.get("error") or "die")
-            table.add_row(str(t.index), t.endpoint, ip, str(probe.get("ms") or ""), last)
-        console.print(table)
-        console.print(f"Sống {live}/{len(loop.targets)}. Xoay tự động mỗi {int(loop.interval_sec)}s khi `fb-poller run`.")
-        if live < len(loop.targets):
-            raise typer.Exit(1)
-
-    asyncio.run(_run())
+    """Proxy đã gỡ."""
+    console.print("Đã gỡ proxy khỏi phần mềm.")
 
 
 @app.command("rotate-4g")
-def rotate_4g_cmd(
-    now: bool = typer.Option(False, "--now", help="Ấn các key đã đến hạn"),
-    force: bool = typer.Option(False, "--force", help="Ấn ngay, bỏ qua lịch 5 phút"),
-    index: Optional[int] = typer.Option(None, "--index", help="Chỉ key số này (1-10)"),
-) -> None:
-    """Xoay IP 4G kq2. Mặc định chỉ xem lịch; poller tự ấn mỗi 5 phút."""
-    from fb_poller.workers.rotate_4g import build_loop, press_rotate
-
-    settings = get_settings()
-    loop = build_loop(settings)
-    if not loop.targets:
-        console.print("[yellow]Chưa có cặp proxy/link xoay 4G.[/yellow]")
-        raise typer.Exit(1)
-
-    table = Table(title="kq2 4G xoay")
-    table.add_column("#")
-    table.add_column("proxy")
-    table.add_column("link")
-    table.add_column("lần ok gần nhất")
-    for t in loop.targets:
-        row = loop.state.get(str(t.index))
-        last = "-"
-        if row and row.last_ok_at:
-            last = time_fmt(row.last_ok_at) + (" ok" if row.last_ok else " fail")
-        table.add_row(str(t.index), t.endpoint, t.rotate_url, last)
-    console.print(table)
-
-    targets = loop.targets
-    if index is not None:
-        targets = [t for t in targets if t.index == index]
-        if not targets:
-            console.print(f"[red]Không có key {index}[/red]")
-            raise typer.Exit(1)
-
-    async def _run() -> None:
-        if force:
-            for t in targets:
-                result = await press_rotate(t)
-                loop.record(t, result)
-                mark = "ok" if result.ok else "fail"
-                console.print(f"{mark} {t.name}: {result.message}")
-            return
-        if now:
-            results = await loop.run_due()
-            if not results:
-                console.print("Chưa đến hạn xoay.")
-                return
-            for result in results:
-                mark = "ok" if result.ok else "fail"
-                console.print(f"{mark} key {result.index}: {result.message}")
-            return
-        console.print(
-            f"Tự xoay mỗi {int(loop.interval_sec)}s, lệch {int(loop.interval_sec / max(1, len(loop.targets)))}s. "
-            "Chạy `fb-poller run` để ấn tự động."
-        )
-
-    asyncio.run(_run())
-
-
-def time_fmt(ts: float) -> str:
-    from datetime import datetime, timezone
-
-    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
+def rotate_4g_cmd() -> None:
+    """Proxy đã gỡ — không xoay IP."""
+    console.print("Đã gỡ proxy khỏi phần mềm. Không xoay IP.")
 
 
 @app.command("rebalance-hot")

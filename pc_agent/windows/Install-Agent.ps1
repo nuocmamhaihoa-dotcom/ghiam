@@ -48,7 +48,7 @@ if ($LASTEXITCODE -ne 0) { & $pip install -e $InstallRoot }
 # 2) data + .env
 Write-Host "[2/5] Tạo data/ và .env..."
 New-Item -ItemType Directory -Force -Path (Join-Path $InstallRoot "data"), (Join-Path $InstallRoot "logs"), (Join-Path $InstallRoot "data\metrics") | Out-Null
-foreach ($f in @("posts.txt", "proxies_static.txt", "proxies_4g.txt")) {
+foreach ($f in @("posts.txt")) {
   $p = Join-Path $InstallRoot "data\$f"
   if (-not (Test-Path $p)) { New-Item -ItemType File -Path $p | Out-Null }
 }
@@ -70,8 +70,6 @@ HOT_MAX_COMMENTS_PAGE=20
 BROWSER_RESTART_EVERY_JOBS=80
 HEADLESS=true
 NAVIGATION_TIMEOUT_MS=15000
-PROXIES_STATIC_FILE=$InstallRoot\data\proxies_static.txt
-PROXIES_4G_FILE=$InstallRoot\data\proxies_4g.txt
 DATA_DIR=$InstallRoot\data
 "@ | Set-Content -Path (Join-Path $InstallRoot ".env") -Encoding UTF8
 
@@ -117,10 +115,9 @@ Write-Host "WORKERS    : $Workers"
 Write-Host ""
 Write-Host "Bước tiếp theo:"
 Write-Host "  1) Dán URL vào:   $InstallRoot\data\posts.txt"
-Write-Host "  2) Dán proxy vào: $InstallRoot\data\proxies_static.txt"
+Write-Host "  2) Quét đi IP máy — không cần proxy"
 Write-Host "  3) Import:"
 Write-Host "       & `"$fb`" import-urls `"$InstallRoot\data\posts.txt`""
-Write-Host "       & `"$fb`" import-proxies"
 Write-Host "       & `"$fb`" rebalance-hot"
 Write-Host "  4) Agent sẽ tự chạy ở lần đăng nhập tiếp theo."
 Write-Host "     Chạy ngay:  powershell -ExecutionPolicy Bypass -File `"$agentPs1`" -Once"

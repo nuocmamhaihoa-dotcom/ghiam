@@ -130,7 +130,6 @@ cmd_import() {
   else
     echo "data/posts.txt trống — hãy dán URL vào trước"
   fi
-  fb-poller import-proxies
   fb-poller recover
   fb-poller rebalance-hot
   fb-poller status
@@ -150,12 +149,6 @@ cmd_doctor() {
   fb-poller doctor
 }
 
-cmd_check_4g() {
-  ensure_installed
-  # shellcheck disable=SC1091
-  source "$ROOT/.venv/bin/activate"
-  fb-poller check-4g
-}
 
 cmd_install_service() {
   ensure_installed
@@ -212,10 +205,9 @@ Commands:
   restart           Restart
   status            Trạng thái process + DB
   logs [N]          Xem log (mặc định follow)
-  import            Import posts.txt + proxies, lấy lại bài, rebalance-hot
+  import            Import posts.txt, lấy lại bài, rebalance-hot
   probe [n] [w]     Probe n bài với w workers
   doctor            Kiểm tra tài nguyên PC + cấu hình
-  check-4g          Kiểm tra 10 proxy 4G kq2 còn sống
   install-service   Cài systemd user service (tự chạy)
   uninstall-service Gỡ systemd service
   help              Trợ giúp
@@ -233,7 +225,6 @@ case "$cmd" in
   import) cmd_import ;;
   probe) cmd_probe "${1:-10}" "${2:-2}" ;;
   doctor) cmd_doctor ;;
-  check-4g) cmd_check_4g ;;
   install-service) cmd_install_service ;;
   uninstall-service) cmd_uninstall_service ;;
   help|-h|--help) usage ;;

@@ -1,4 +1,4 @@
-"""Quét kq2 ưu tiên proxy 4G, thừa worker thì dùng chung 4G."""
+"""Quét kq2 không gắn proxy; repo assign vẫn giữ cho dữ liệu cũ."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 from fb_poller.config import Settings
 from fb_poller.storage.db import init_db, session_scope
 from fb_poller.storage.repo import ProxyRepo
-from fb_poller.workers.proxy_manager import parse_proxy_line
+from fb_poller.workers.proxy_manager import ProxyManager, parse_proxy_line
 
 
 class AssignForScanTests(unittest.IsolatedAsyncioTestCase):
@@ -70,6 +70,18 @@ class AssignForScanTests(unittest.IsolatedAsyncioTestCase):
             got = await repo.assign_for_scan("kq2", 1)
         self.assertEqual(got[0].health, "ok")
         self.assertEqual(got[0].proxy_type, "4g")
+
+    async def test_scan_does_not_attach_proxy(self) -> None:
+        mgr = ProxyManager(self.settings)
+        n = await mgr.load_for_worker(4)
+        self.assertEqual(n, 0)
+        self.assertIsNone(mgr.for_slot(0))
+
+    async def test_import_proxy_files_is_noop(self) -> None:
+        from fb_poller.workers.proxy_manager import import_proxy_files
+
+        result = await import_proxy_files(self.settings)
+        self.assertEqual(result, {"static": (0, 0), "4g": (0, 0)})
 
     def test_parse_4g_user_pass(self) -> None:
         parsed = parse_proxy_line("103.125.189.149:8624:9rnbo:6wohm")

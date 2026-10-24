@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cài fb-poller PA1 trên PC Linux — dùng CPU/RAM/proxy máy local để quét comment.
+# Cài fb-poller PA1 trên PC Linux — dùng CPU/RAM máy local để quét comment.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
@@ -121,8 +121,6 @@ HOT_MAX_COMMENTS_PAGE=20
 BROWSER_RESTART_EVERY_JOBS=80
 HEADLESS=true
 NAVIGATION_TIMEOUT_MS=15000
-PROXIES_STATIC_FILE=${ROOT}/data/proxies_static.txt
-PROXIES_4G_FILE=${ROOT}/data/proxies_4g.txt
 DATA_DIR=${ROOT}/data
 EOF
 
@@ -164,11 +162,10 @@ main() {
   echo
   echo "Bước tiếp theo:"
   echo "  1) Dán URL bài vào:     $ROOT/data/posts.txt"
-  echo "  2) Dán proxy tĩnh vào:  $ROOT/data/proxies_static.txt"
+  echo "  2) Quét đi IP máy — không cần proxy"
   echo "  3) Import dữ liệu:"
   echo "       source .venv/bin/activate"
   echo "       fb-poller import-urls data/posts.txt"
-  echo "       fb-poller import-proxies"
   echo "       fb-poller rebalance-hot"
   echo "  4) Chạy bằng tài nguyên PC:"
   echo "       ./scripts/fb-poller-ctl.sh start"

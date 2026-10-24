@@ -165,14 +165,10 @@ class RotateLoopTests(unittest.IsolatedAsyncioTestCase):
 
 
 class LoadTargetsTests(unittest.TestCase):
-    def test_pairs_repo_files_in_order(self) -> None:
+    def test_files_empty_after_proxy_removed(self) -> None:
         settings = Settings()
         targets = load_rotate_targets(settings)
-        self.assertEqual(len(targets), 10)
-        self.assertEqual(targets[0].endpoint, "103.125.189.149:8624:9rnbo:6wohm")
-        self.assertEqual(targets[0].rotate_url, "https://keymon.dknhanh00.workers.dev/xoay/1")
-        self.assertEqual(targets[9].endpoint, "103.16.160.43:8203:qh7wy:8j0iy")
-        self.assertEqual(targets[9].rotate_url, "https://keymon.dknhanh00.workers.dev/xoay/10")
+        self.assertEqual(targets, [])
 
 
 if __name__ == "__main__":

@@ -84,14 +84,9 @@ def load_proxy_file(path: Path) -> list[str]:
     return out
 
 
-async def import_proxy_files(settings: Settings) -> dict[str, tuple[int, int]]:
-    async with session_scope() as session:
-        repo = ProxyRepo(session)
-        static_lines = load_proxy_file(settings.proxies_static_file)
-        g4_lines = load_proxy_file(settings.proxies_4g_file)
-        static = await repo.upsert_endpoints(static_lines, "static")
-        g4 = await repo.upsert_endpoints(g4_lines, "4g")
-        return {"static": static, "4g": g4}
+async def import_proxy_files(_settings: Settings) -> dict[str, tuple[int, int]]:
+    """Proxy đã gỡ — không nạp list vào DB."""
+    return {"static": (0, 0), "4g": (0, 0)}
 
 
 class ProxyManager:
@@ -103,24 +98,9 @@ class ProxyManager:
         self._idx = 0
 
     async def load_for_worker(self, count: int) -> int:
-        from fb_poller.workers.rotate_4g import rotate_map
-
-        await import_proxy_files(self.settings)
-        urls = rotate_map(self.settings)
-        async with session_scope() as session:
-            repo = ProxyRepo(session)
-            proxies = await repo.assign_for_scan(self.settings.worker_id, count)
-            configs: list[ProxyConfig] = []
-            for p in proxies:
-                parsed = parse_proxy_line(p.endpoint)
-                if not parsed:
-                    continue
-                parsed.id = p.id
-                parsed.kind = p.proxy_type or "static"
-                parsed.rotate_url = urls.get(p.endpoint)
-                configs.append(parsed)
-            self._configs = configs
-        return len(self._configs)
+        """Phần mềm không dùng proxy — browser đi IP máy."""
+        self._configs = []
+        return 0
 
     def next(self) -> ProxyConfig | None:
         if not self._configs:

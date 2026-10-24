@@ -59,7 +59,6 @@ switch ($Command) {
   "import" {
     Ensure-Installed
     & $Fb import-urls (Join-Path $Root "data\posts.txt")
-    & $Fb import-proxies
     & $Fb rebalance-hot
     & $Fb status
   }

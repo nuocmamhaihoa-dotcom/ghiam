@@ -7,7 +7,7 @@ VPS đóng vai trò **trung tâm**:
 3. Phát update package cho agent (`/v1/updates/...`)  
 4. Registry PC (`/v1/agents`)
 
-PC chỉ dùng CPU/RAM/proxy local để quét; kết quả đẩy về VPS.
+PC chỉ dùng CPU/RAM local để quét (không proxy); kết quả đẩy về VPS.
 
 ## Cài trên VPS (đã có sẵn script)
 

@@ -52,18 +52,12 @@ Tuỳ chọn thêm fallback Internet:
   -ManifestUrl "https://github.com/<org>/<repo>/releases/latest/download/update-manifest.json"
 ```
 
-4. Dán URL/proxy:
-
-```text
-data\posts.txt
-data\proxies_static.txt
-```
+4. Dán URL bài vào `data\posts.txt` (quét đi IP máy, không proxy).
 
 5. Import:
 
 ```powershell
 .\.venv\Scripts\fb-poller.exe import-urls .\data\posts.txt
-.\.venv\Scripts\fb-poller.exe import-proxies
 .\.venv\Scripts\fb-poller.exe rebalance-hot
 ```
 
