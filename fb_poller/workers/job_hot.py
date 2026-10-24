@@ -91,7 +91,7 @@ async def poll_post(
     result = await _fetch_once(settings=settings, worker=worker, url=job.url)
     retries = 0
     # One soft retry for transient nav/timeout (same sticky browser/proxy)
-    if (not result.ok) and result.error_code in {"nav", "timeout"} and not result.blocked:
+    if (not result.ok) and result.error_code in {"nav", "timeout", "login_wall"} and not result.blocked:
         retries = 1
         await asyncio.sleep(0.4)
         result = await _fetch_once(settings=settings, worker=worker, url=job.url)

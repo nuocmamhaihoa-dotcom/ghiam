@@ -181,15 +181,14 @@ class PostRepo:
         guest_visible: bool | None = None,
     ) -> None:
         now = utcnow()
-        if guest_visible is not None:
-            post.guest_visible = guest_visible
-            if guest_visible is False:
-                post.status = PostStatus.guest_hidden.value
-
         if ok:
             post.fail_streak = 0
             post.last_success_at = now
             post.last_error = None
+            if guest_visible is True:
+                post.guest_visible = True
+                if post.status == PostStatus.guest_hidden.value:
+                    post.status = PostStatus.active.value
             recent = _parse_ids(post.recent_ids_json)
             for cid in reversed(new_ids):
                 if cid not in recent:
@@ -208,6 +207,13 @@ class PostRepo:
             if post.fail_streak >= self.settings.fail_streak_cooldown:
                 # cooldown: push next poll further
                 post.next_poll_at = now + timedelta(seconds=max(self.settings.cold_interval_sec, 300))
+            # Login wall sau proxy chết / xoay 4G không được chôn bài vĩnh viễn.
+            if (
+                guest_visible is False
+                and post.fail_streak >= self.settings.hide_after_fail_streak
+            ):
+                post.guest_visible = False
+                post.status = PostStatus.guest_hidden.value
 
         # Demote hot if boost expired and no longer needed — handled in rebalance
         hot_until = ensure_utc(post.hot_until)
@@ -226,6 +232,42 @@ class PostRepo:
             .where(Post.id == post_id)
             .values(guest_visible=False, status=PostStatus.guest_hidden.value)
         )
+
+    async def recover_scan_pool(self) -> dict[str, int]:
+        """Lấy lại bài bị chôn khi proxy cũ chết / 4G vừa xoay hiện login."""
+        now = utcnow()
+        hidden = list(
+            (
+                await self.session.scalars(
+                    select(Post).where(Post.status == PostStatus.guest_hidden.value)
+                )
+            ).all()
+        )
+        stalled = list(
+            (
+                await self.session.scalars(
+                    select(Post).where(
+                        Post.status == PostStatus.active.value,
+                        Post.fail_streak >= 1,
+                    )
+                )
+            ).all()
+        )
+        recovered = 0
+        for post in hidden:
+            post.status = PostStatus.active.value
+            post.guest_visible = None
+            post.fail_streak = 0
+            post.next_poll_at = now
+            post.last_error = None
+            recovered += 1
+        reset = 0
+        for post in stalled:
+            post.fail_streak = 0
+            post.next_poll_at = now
+            reset += 1
+        await self.session.flush()
+        return {"recovered": recovered, "reset_fail": reset}
 
 
 class CommentRepo:

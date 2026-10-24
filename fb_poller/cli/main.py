@@ -71,6 +71,21 @@ def import_proxies_cmd() -> None:
     asyncio.run(_run())
 
 
+@app.command("recover")
+def recover_cmd() -> None:
+    """Lấy lại bài bị chôn khi proxy cũ hết hạn / login wall giả."""
+    settings = get_settings()
+    remember_quietly(summary="Lấy lại hàng quét guest_hidden + fail_streak", kind="cli", source="cli")
+
+    async def _run() -> None:
+        await init_db(settings)
+        async with session_scope() as session:
+            result = await PostRepo(session, settings).recover_scan_pool()
+        console.print(result)
+
+    asyncio.run(_run())
+
+
 @app.command("check-4g")
 def check_4g_cmd() -> None:
     """Kiểm tra 10 proxy 4G kq2 còn sống và lịch xoay."""

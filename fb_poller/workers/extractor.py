@@ -291,12 +291,14 @@ async def extract_comments(page: Page, *, max_comments: int, sniffer: NetworkCom
     login_wall = bool(dom.get("loginWall")) or sniffer.saw_login_wall
 
     if not comments and login_wall:
+        # Login wall thường gặp khi vừa xoay 4G / proxy chết — không phải bài bị ẩn,
+        # cũng không phải IP bị ban.
         return ExtractResult(
             ok=False,
-            error_code="blocked",
+            error_code="login_wall",
             error_detail="login_wall_or_empty",
-            guest_visible=False,
-            blocked=True,
+            guest_visible=None,
+            blocked=False,
         )
 
     if not comments:

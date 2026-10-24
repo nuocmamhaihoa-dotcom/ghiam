@@ -14,7 +14,7 @@ from fb_poller.storage.models import Tier
 from fb_poller.storage.repo import PostRepo
 from fb_poller.workers.browser_pool import BrowserPool
 from fb_poller.workers.job_hot import poll_post
-from fb_poller.workers.proxy_manager import ProxyManager
+from fb_poller.workers.proxy_manager import ProxyManager, load_proxy_file
 from fb_poller.workers.rotate_4g import build_loop
 
 console = Console()
@@ -91,6 +91,21 @@ async def run_poller(settings: Settings) -> None:
     stop = asyncio.Event()
     metrics_path = settings.data_dir / "metrics" / f"{settings.worker_id}.jsonl"
     metrics = Metrics(path=metrics_path)
+
+    g4 = load_proxy_file(settings.proxies_4g_file)
+    if g4 and settings.workers != len(g4):
+        console.log(
+            f"[runner] kq2: WORKERS {settings.workers} → {len(g4)} (1 browser / 1 proxy 4G)"
+        )
+        settings.workers = len(g4)
+
+    async with session_scope() as session:
+        recovered = await PostRepo(session, settings).recover_scan_pool()
+    if recovered["recovered"] or recovered["reset_fail"]:
+        console.log(
+            f"[runner] lấy lại hàng quét recovered={recovered['recovered']} "
+            f"reset_fail={recovered['reset_fail']}"
+        )
 
     proxy_manager = ProxyManager(settings)
     assigned = await proxy_manager.load_for_worker(settings.workers)

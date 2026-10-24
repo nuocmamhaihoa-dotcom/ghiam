@@ -54,7 +54,7 @@ def run_doctor() -> None:
 
     table.add_row("CPU cores", str(cores), f"WORKERS≈{suggested}")
     table.add_row("RAM GiB", str(ram), "≥32GB khuyến nghị cho 10+ workers")
-    table.add_row("WORKERS (.env)", str(settings.workers), f"nên ≈ {suggested}")
+    table.add_row("WORKERS (.env)", str(settings.workers), "kq2: 10 (1 browser / 1 proxy 4G)")
     table.add_row("HOT_SIZE", str(settings.hot_size), "100")
     table.add_row("HOT_INTERVAL_SEC", str(settings.hot_interval_sec), "45 trước, 30 sau KPI")
     table.add_row("HEADLESS", str(settings.headless), "true trên server/PC headless")

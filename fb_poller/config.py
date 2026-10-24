@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     role: Literal["control", "worker", "all"] = Field(default="all", alias="ROLE")
 
     fail_streak_cooldown: int = Field(default=3, alias="FAIL_STREAK_COOLDOWN")
+    hide_after_fail_streak: int = Field(default=8, alias="HIDE_AFTER_FAIL_STREAK")
     recent_ids_keep: int = Field(default=100, alias="RECENT_IDS_KEEP")
 
     data_dir: Path = Field(default=ROOT / "data", alias="DATA_DIR")

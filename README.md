@@ -116,6 +116,7 @@ fb-poller run
 | `fb-poller init-db` | Tạo schema |
 | `fb-poller import-urls FILE` | Import URL |
 | `fb-poller import-proxies` | Import proxy files |
+| `fb-poller recover` | Lấy lại bài bị chôn khi proxy chết / login wall |
 | `fb-poller check-4g` | Kiểm tra 10 proxy 4G kq2 còn sống |
 | `fb-poller rotate-4g` | Xem / ấn xoay IP 4G kq2 (poller tự ấn 5 phút) |
 | `fb-poller rebalance-hot` | Ép đúng `HOT_SIZE` bài Hot |

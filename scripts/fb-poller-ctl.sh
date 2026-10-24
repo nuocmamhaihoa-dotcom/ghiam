@@ -131,6 +131,7 @@ cmd_import() {
     echo "data/posts.txt trống — hãy dán URL vào trước"
   fi
   fb-poller import-proxies
+  fb-poller recover
   fb-poller rebalance-hot
   fb-poller status
 }
@@ -211,7 +212,7 @@ Commands:
   restart           Restart
   status            Trạng thái process + DB
   logs [N]          Xem log (mặc định follow)
-  import            Import posts.txt + proxies + rebalance-hot
+  import            Import posts.txt + proxies, lấy lại bài, rebalance-hot
   probe [n] [w]     Probe n bài với w workers
   doctor            Kiểm tra tài nguyên PC + cấu hình
   check-4g          Kiểm tra 10 proxy 4G kq2 còn sống
