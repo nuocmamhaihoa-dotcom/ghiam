@@ -1,4 +1,4 @@
-"""Khớp cột Excel theo tên cột kho. Cột không giống thì bỏ qua, không đoán nội dung."""
+"""Khớp cột Excel theo tên cột kho; thiếu tên/SĐT/địa chỉ thì lấy cột còn lại."""
 
 from __future__ import annotations
 
@@ -84,6 +84,18 @@ _HEADER_HINTS: dict[str, tuple[str, ...]] = {
         "khach hang",
         "full name",
         "fullname",
+        "ten nguoi nhan",
+        "ten nguoi mua",
+        "ten nguoi dat",
+        "nguoi nhan",
+        "nguoi mua",
+        "ten kh",
+        "ho ten khach",
+        "customer",
+        "customer name",
+        "receiver",
+        "consignee",
+        "buyer",
     ),
     "phone": (
         "so dien thoai khach",
@@ -95,6 +107,18 @@ _HEADER_HINTS: dict[str, tuple[str, ...]] = {
         "mobile",
         "msisdn",
         "so dt",
+        "sdt khach",
+        "sdt nguoi nhan",
+        "sdt kh",
+        "so lien he",
+        "lien he",
+        "zalo",
+        "contact",
+        "phone number",
+        "mobile phone",
+        "whatsapp",
+        "so may",
+        "dt",
     ),
     "address": (
         "dia chi khach",
@@ -108,6 +132,14 @@ _HEADER_HINTS: dict[str, tuple[str, ...]] = {
         "ten duong",
         "pho",
         "street",
+        "dia chi chuan",
+        "dia chi nhan",
+        "dia chi giao",
+        "dia chi nguoi nhan",
+        "dia chi giao hang",
+        "shipping address",
+        "dia chi day du",
+        "dia chi cu the",
     ),
     "adminAddress": (
         "dia chi hanh chinh",
@@ -371,10 +403,47 @@ def _header_is_skipped(key: str) -> bool:
     return False
 
 
+def is_label_header(header: str) -> bool:
+    """Tên cột ngắn. Không lấy cả dòng khách (SĐT, địa chỉ dài) làm tên cột."""
+    text = collapse(header)
+    if not text:
+        return False
+    if looks_like_vn_phone(text):
+        return False
+    words = fold_vietnamese(text).split()
+    if not words or len(words) > 8 or len(text) > 60:
+        return False
+    if looks_like_address(text) and (len(words) >= 5 or (any(character.isdigit() for character in text) and len(words) >= 4)):
+        return False
+    return True
+
+
+def looks_like_label_row(row: list[str]) -> bool:
+    """True khi dòng này là tên cột, không phải dòng khách đầu tiên."""
+    cells = [collapse(cell) for cell in row if collapse(cell)]
+    if not cells:
+        return False
+    if any(looks_like_vn_phone(cell) for cell in cells):
+        return False
+    if any(not is_label_header(cell) for cell in cells):
+        return False
+    if any(header_field(cell) for cell in cells):
+        return True
+    return all(
+        len(fold_vietnamese(cell).split()) <= 3
+        and not looks_like_address(cell)
+        and not looks_like_name(cell)
+        for cell in cells
+    )
+
+
 def header_field(header: str) -> str | None:
+    if not is_label_header(header):
+        return None
     key = header_key(header)
     if not key or _header_is_skipped(key):
         return None
+    words = key.split()
     best: tuple[int, str] | None = None
     for field, hints in _HEADER_HINTS.items():
         for hint in hints:
@@ -387,6 +456,8 @@ def header_field(header: str) -> str | None:
                 or f" {hint} " in f" {key} "
             ):
                 hit = 50 + len(hint)
+            elif 2 <= len(hint) < 5 and " " not in hint and hint in words:
+                hit = 40 + len(hint)
             if hit and (best is None or hit > best[0]):
                 best = (hit, field)
     return best[1] if best else None
@@ -432,8 +503,68 @@ def score_column(header: str, values: list[str]) -> dict[str, float]:
     return scores
 
 
+_CORE_FIELDS = ("phone", "name", "address")
+
+
+def _used_indexes(mapping: dict[str, int | None], details: dict[str, dict[str, Any]]) -> set[int]:
+    used = {index for index in mapping.values() if index is not None}
+    for field in LINE_FIELDS:
+        item = details.get(field) or {}
+        for index in item.get("indexes") or []:
+            if index is not None:
+                used.add(int(index))
+    return used
+
+
+def _fill_core_from_values(
+    mapping: dict[str, int | None],
+    details: dict[str, dict[str, Any]],
+    headers: list[str],
+    column_values: list[list[str]],
+) -> None:
+    """Điền tên / SĐT / địa chỉ còn trống từ cột chưa dùng. Không đoán Facebook, TikTok, giới tính."""
+    used = _used_indexes(mapping, details)
+    skipped = {
+        index
+        for index, header in enumerate(headers)
+        if _header_is_skipped(header_key(header))
+    }
+    scorers = {
+        "phone": looks_like_vn_phone,
+        "name": looks_like_name,
+        "address": looks_like_address,
+    }
+    for field in _CORE_FIELDS:
+        if mapping.get(field) is not None:
+            continue
+        best_index: int | None = None
+        best_score = 0.0
+        for index, header in enumerate(headers):
+            if index in used or index in skipped:
+                continue
+            values = column_values[index] if index < len(column_values) else []
+            cells = [collapse(item) for item in values if collapse(item)]
+            if not cells:
+                continue
+            score = _ratio(sum(1 for item in cells if scorers[field](item)), len(cells))
+            if score > best_score:
+                best_score = score
+                best_index = index
+        if best_index is None or best_score < _MIN_SCORE:
+            continue
+        mapping[field] = best_index
+        used.add(best_index)
+        details[field] = {
+            "index": best_index,
+            "indexes": [best_index],
+            "score": best_score,
+            "header": collapse(headers[best_index]),
+            "reason": "cột này chứa " + _REASONS[field],
+            "fromHeader": False,
+        }
+
+
 def assign_fields(headers: list[str], column_values: list[list[str]]) -> tuple[dict[str, int | None], dict[str, dict[str, Any]]]:
-    del column_values
     mapping: dict[str, int | None] = {field: None for field in FIELDS}
     details: dict[str, dict[str, Any]] = {}
     matches: dict[str, list[int]] = {field: [] for field in FIELDS}
@@ -455,6 +586,7 @@ def assign_fields(headers: list[str], column_values: list[list[str]]) -> tuple[d
             "reason": "trùng tên cột kho",
             "fromHeader": True,
         }
+    _fill_core_from_values(mapping, details, headers, column_values)
     return mapping, details
 
 
@@ -484,7 +616,14 @@ def explain_mapping(details: dict[str, dict[str, Any]], headers: list[str]) -> s
         parts.append(f"{_label(field)} ← {', '.join(labels)} ({how})")
     if not parts:
         return "Không cột nào trùng tên với kho. Cột lạ (giới tính, ngày sinh, link...) bị bỏ qua. Hãy chọn tay nếu cần."
-    return "Khớp theo tên cột kho: " + "; ".join(parts) + ". Cột không giống kho đã bỏ qua."
+    guessed = [field for field in _CORE_FIELDS if (details.get(field) or {}).get("fromHeader") is False]
+    extra = ""
+    if guessed:
+        extra = " Thiếu tên cột thì lấy cột có số điện thoại / tên người / địa chỉ."
+    missing = [label for field, label in (("name", "tên"), ("phone", "số điện thoại")) if field not in details]
+    if missing:
+        extra += " Chưa thấy cột " + " và ".join(missing) + " — hãy chọn tay trước khi nạp."
+    return "Khớp cột: " + "; ".join(parts) + "." + extra + " Cột không giống kho (giới tính, ngày sinh, link...) đã bỏ qua."
 
 
 def _label(field: str) -> str:

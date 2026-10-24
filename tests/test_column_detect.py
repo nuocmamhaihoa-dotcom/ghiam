@@ -1,4 +1,4 @@
-"""Khớp cột theo tên kho; cột lạ bỏ qua, không đoán nội dung."""
+"""Khớp cột theo tên kho; thiếu tên/SĐT/địa chỉ thì lấy cột còn lại."""
 
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ class CellSignalTests(unittest.TestCase):
 
 
 class ColumnAssignTests(unittest.TestCase):
-    def test_generic_headers_are_skipped(self) -> None:
+    def test_generic_headers_still_take_name_phone_address(self) -> None:
         headers = ["Cột 1", "Cột 2", "Cột 3", "Cột 4", "Cột 5"]
         values = [
             ["Nguyễn Lan", "Trần Minh", "Lê Hoa"],
@@ -73,13 +73,13 @@ class ColumnAssignTests(unittest.TestCase):
             ["@lan.hue", "@minh.hn", "https://www.tiktok.com/@hoa.hue"],
         ]
         mapping = suggest_mapping(headers, values)
-        self.assertIsNone(mapping["name"])
-        self.assertIsNone(mapping["phone"])
-        self.assertIsNone(mapping["address"])
+        self.assertEqual(mapping["name"], 0)
+        self.assertEqual(mapping["phone"], 1)
+        self.assertEqual(mapping["address"], 2)
         self.assertIsNone(mapping["facebookUid"])
         self.assertIsNone(mapping["tiktokId"])
 
-    def test_unlabeled_columns_are_not_guessed_from_content(self) -> None:
+    def test_unlabeled_uid_column_is_not_guessed(self) -> None:
         headers = ["A", "B"]
         values = [
             ["1000123456789", "1000222333444"],
@@ -87,7 +87,7 @@ class ColumnAssignTests(unittest.TestCase):
         ]
         mapping = suggest_mapping(headers, values)
         self.assertIsNone(mapping["facebookUid"])
-        self.assertIsNone(mapping["name"])
+        self.assertEqual(mapping["name"], 1)
         self.assertIsNone(mapping["phone"])
 
     def test_header_uid_maps_facebook_even_when_cells_are_phones(self) -> None:
@@ -215,7 +215,7 @@ class ColumnAssignTests(unittest.TestCase):
         self.assertEqual(mapping["adminAddress"], 2)
         self.assertEqual(details["adminAddress"]["indexes"], [2, 3])
 
-    def test_unlabeled_address_parts_are_skipped(self) -> None:
+    def test_unlabeled_core_columns_are_filled_from_values(self) -> None:
         headers = ["A", "B", "C", "D"]
         values = [
             ["Nguyễn Lan", "Trần Minh"],
@@ -224,10 +224,42 @@ class ColumnAssignTests(unittest.TestCase):
             ["Phường Phú Hội", "Cầu Giấy"],
         ]
         mapping, details = assign_fields(headers, values)
-        self.assertIsNone(mapping["name"])
-        self.assertIsNone(mapping["phone"])
-        self.assertIsNone(mapping["address"])
-        self.assertEqual(details, {})
+        self.assertEqual(mapping["name"], 0)
+        self.assertEqual(mapping["phone"], 1)
+        self.assertEqual(mapping["address"], 2)
+        self.assertIsNone(mapping["adminAddress"])
+        self.assertFalse(details["name"]["fromHeader"])
+        self.assertFalse(details["phone"]["fromHeader"])
+
+    def test_receiver_headers_map_name_phone_address(self) -> None:
+        self.assertEqual(header_field("Tên người nhận"), "name")
+        self.assertEqual(header_field("SĐT người nhận"), "phone")
+        self.assertEqual(header_field("Địa chỉ người nhận"), "address")
+        self.assertEqual(header_field("Tên KH"), "name")
+        self.assertEqual(header_field("SĐT KH"), "phone")
+        mapping = suggest_mapping(
+            ["Tên người nhận", "SĐT người nhận", "Địa chỉ chuẩn"],
+            [[], [], []],
+        )
+        self.assertEqual(mapping["name"], 0)
+        self.assertEqual(mapping["phone"], 1)
+        self.assertEqual(mapping["address"], 2)
+
+    def test_data_row_is_not_used_as_header(self) -> None:
+        self.assertIsNone(header_field("0901222333"))
+        self.assertIsNone(
+            header_field("chuẩn57, Bùi Xương Trạch, P. Khương Đình, Q. Thanh Xuân, Tp. Hà Nội")
+        )
+        self.assertIsNone(header_field("lô 41 đường số 2, KCN An Đồn, Sơn Trà, Đà Nẵng"))
+        payload = write_xlsx(
+            ["Nguyễn Lan", "0901222333", "12 Lê Lợi, Quận 1, TP.HCM"],
+            [["Trần Minh", "0901444555", "Ha Noi"]],
+        )
+        preview = preview_table("khong-tieu-de.xlsx", payload)
+        self.assertEqual(preview["rowCount"], 2)
+        self.assertEqual(preview["suggested"]["name"], 0)
+        self.assertEqual(preview["suggested"]["phone"], 1)
+        self.assertEqual(preview["suggested"]["address"], 2)
 
     def test_labeled_tiktok_without_at_still_maps(self) -> None:
         payload = write_xlsx(

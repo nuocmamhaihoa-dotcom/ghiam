@@ -13,7 +13,7 @@ from array import array
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
-from control_plane.column_detect import suggest_mapping as detect_mapping
+from control_plane.column_detect import looks_like_label_row, suggest_mapping as detect_mapping
 from control_plane.customers import (
     FIELDS,
     LINE_FIELDS,
@@ -646,18 +646,32 @@ def describe_columns(headers: list[str]) -> list[dict[str, Any]]:
     return columns
 
 
+def _titles_from_row(row: list[str]) -> list[str]:
+    return [collapse(cell) or f"Cột {column_letter(index)}" for index, cell in enumerate(row)]
+
+
+def _split_header_row(rows: list[list[str]]) -> tuple[list[str], list[list[str]], bool]:
+    if not rows:
+        return [], [], False
+    first = rows[0]
+    if looks_like_label_row(first):
+        return _titles_from_row(first), rows[1:], False
+    width = max(len(row) for row in rows)
+    headers = [f"Cột {column_letter(index)}" for index in range(width)]
+    return headers, rows, True
+
+
 def preview_table(filename: str, data: TableSource) -> dict[str, Any]:
     stored, total = _read_table(filename, data, max_store=PREVIEW_STORE)
     truncated = total > len(stored)
     rows = _trim_table(stored)
     if not rows:
         raise ValueError("File không có dòng dữ liệu.")
-    headers = [collapse(cell) or f"Cột {column_letter(index)}" for index, cell in enumerate(rows[0])]
-    body = rows[1:]
+    headers, body, headerless = _split_header_row(rows)
     samples = body[:SAMPLE_ROWS]
     detect_rows = body[:DETECT_ROWS]
     if truncated:
-        row_count = max(len(body), total - 1)
+        row_count = total if headerless else max(len(body), total - 1)
     else:
         row_count = len(body)
     return {
@@ -720,13 +734,13 @@ def rows_from_table(rows: list[list[str]], mapping: dict[str, Any], allow_index:
     table = _trim_table(rows)
     if not table:
         return []
-    headers = [collapse(cell) or f"Cột {column_letter(index)}" for index, cell in enumerate(table[0])]
+    headers, body, _headerless = _split_header_row(table)
     indexes = {
         field: resolve_index(headers, mapping.get(field), allow_index=allow_index) for field in FIELDS
     }
     line_specs = {field: _address_specs(mapping.get(field)) for field in LINE_FIELDS}
     extracted: list[dict[str, str]] = []
-    for row in table[1:]:
+    for row in body:
         raw: dict[str, str] = {}
         for field in FIELDS:
             if field in LINE_FIELDS:
@@ -761,12 +775,18 @@ def _mapped_from_iter(
         if not any(collapse(cell) for cell in row):
             continue
         if headers is None:
-            headers = [collapse(cell) or f"Cột {column_letter(index)}" for index, cell in enumerate(row)]
+            if looks_like_label_row(row):
+                headers = _titles_from_row(row)
+                indexes = {
+                    field: resolve_index(headers, mapping.get(field), allow_index=allow_index) for field in FIELDS
+                }
+                line_specs = {field: _address_specs(mapping.get(field)) for field in LINE_FIELDS}
+                continue
+            headers = [f"Cột {column_letter(index)}" for index in range(len(row))]
             indexes = {
                 field: resolve_index(headers, mapping.get(field), allow_index=allow_index) for field in FIELDS
             }
             line_specs = {field: _address_specs(mapping.get(field)) for field in LINE_FIELDS}
-            continue
         raw: dict[str, str] = {}
         for field in FIELDS:
             if field in LINE_FIELDS:

@@ -57,9 +57,28 @@
     .stat { background: #f7f9fb; border-radius: 10px; padding: 0.7rem 0.75rem; }
     .stat b { display: block; font-size: 1.35rem; }
     .stat span { color: var(--muted); font-size: 0.92rem; }
-    table { width: 100%; border-collapse: collapse; }
+    table { width: 100%; border-collapse: collapse; min-width: 720px; }
     th, td { text-align: left; padding: 0.45rem 0.3rem; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 0.95rem; }
     td.addr { white-space: pre-line; }
+    @media (max-width: 700px) {
+      #people table, #lookupPeople table { min-width: 0; }
+      #people thead, #lookupPeople thead { display: none; }
+      #people tr, #lookupPeople tr {
+        display: block; border: 1px solid var(--line); border-radius: 12px;
+        padding: 0.65rem 0.75rem; margin: 0 0 0.65rem; background: #fff;
+      }
+      #people td, #lookupPeople td {
+        display: block; border: 0; padding: 0.2rem 0;
+      }
+      #people td::before, #lookupPeople td::before {
+        content: attr(data-label);
+        display: block;
+        color: var(--muted);
+        font-weight: 700;
+        font-size: 0.82rem;
+        margin-bottom: 0.1rem;
+      }
+    }
     .picks { display: grid; gap: 0.35rem; margin: 0.2rem 0 0.4rem; }
     .picks label { font-weight: 500; display: flex; gap: 0.45rem; align-items: center; }
     th { color: var(--muted); font-weight: 700; }
@@ -83,7 +102,7 @@
 <body translate="no" class="notranslate">
 <main translate="no">
   <h1>Kho khách Excel</h1>
-  <p class="lead">Nhập khách bằng file Excel, không dùng video. Không giới hạn số file và dung lượng: chọn thêm là cộng vào lần nạp này. Chỉ khớp cột khi tên cột giống kho (tên, SĐT, địa chỉ, địa chỉ hành chính, hàng mua, giá COD, UID Facebook, ID TikTok). Cột lạ như giới tính, ngày sinh, link thì bỏ qua, không đoán nội dung ô. Cùng một lần chọn cột dùng cho mọi file bạn thêm lúc đó. Chỉ gộp khi trùng số điện thoại. Không có số, hoặc khác số, thì mỗi dòng là một khách. Ô đã có giữ nguyên, ô trống được điền thêm. Có list số thì tra cứu hàng loạt ngay trong kho.</p>
+  <p class="lead">Nhập khách bằng file Excel, không dùng video. Không giới hạn số file và dung lượng: chọn thêm là cộng vào lần nạp này. Khớp tên cột kho trước (tên, SĐT, địa chỉ, địa chỉ hành chính, hàng mua, giá COD, UID Facebook, ID TikTok). Nếu file không có tên cột, hoặc thiếu cột tên / SĐT, thì lấy cột có tên người, số điện thoại và địa chỉ. Cột lạ như giới tính, ngày sinh, link thì bỏ qua. Cùng một lần chọn cột dùng cho mọi file bạn thêm lúc đó. Chỉ gộp khi trùng số điện thoại. Không có số, hoặc khác số, thì mỗi dòng là một khách. Ô đã có giữ nguyên, ô trống được điền thêm. Có list số thì tra cứu hàng loạt ngay trong kho.</p>
 
   <section>
     <h2>Thêm file Excel</h2>
@@ -563,6 +582,16 @@
       setNote("mapNote", "Hãy chọn ít nhất một cột dữ liệu.", "warn");
       return;
     }
+    var hasName = mapping.name && (mapping.name.header || mapping.name.index !== null);
+    var hasPhone = mapping.phone && (mapping.phone.header || mapping.phone.index !== null);
+    if (!hasName || !hasPhone) {
+      setNote(
+        "mapNote",
+        "Chưa chọn đủ " + (!hasName && !hasPhone ? "tên và số điện thoại" : !hasName ? "tên khách" : "số điện thoại") +
+          ". Hãy chọn đúng cột rồi nạp lại, nếu không kho sẽ thiếu dữ liệu.",
+        "warn"
+      );
+    }
     document.getElementById("confirm").disabled = true;
     setNote("mapNote", "Đang nạp " + pendingFiles.length + " file và gộp khách trùng…");
     try {
@@ -616,7 +645,16 @@
     }
     var html = "<table><thead><tr><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
     items.forEach(function (row) {
-      html += "<tr><td>" + escapeHtml(row.name) + "</td><td>" + escapeHtml(row.phone) + "</td><td class='addr'>" + escapeHtml(row.address) + "</td><td class='addr'>" + escapeHtml(row.adminAddress) + "</td><td class='addr'>" + escapeHtml(row.orderContent) + "</td><td>" + escapeHtml(row.codAmount) + "</td><td>" + escapeHtml(row.facebookUid) + "</td><td>" + escapeHtml(row.tiktokId) + "</td></tr>";
+      html += "<tr>" +
+        "<td data-label='Tên khách'>" + escapeHtml(row.name || "—") + "</td>" +
+        "<td data-label='Số điện thoại'>" + escapeHtml(row.phone || "—") + "</td>" +
+        "<td class='addr' data-label='Địa chỉ'>" + escapeHtml(row.address || "—") + "</td>" +
+        "<td class='addr' data-label='Địa chỉ hành chính'>" + escapeHtml(row.adminAddress || "—") + "</td>" +
+        "<td class='addr' data-label='Hàng mua'>" + escapeHtml(row.orderContent || "—") + "</td>" +
+        "<td data-label='COD'>" + escapeHtml(row.codAmount || "—") + "</td>" +
+        "<td data-label='UID Facebook'>" + escapeHtml(row.facebookUid || "—") + "</td>" +
+        "<td data-label='ID TikTok'>" + escapeHtml(row.tiktokId || "—") + "</td>" +
+        "</tr>";
     });
     html += "</tbody></table>";
     document.getElementById("people").innerHTML = html;

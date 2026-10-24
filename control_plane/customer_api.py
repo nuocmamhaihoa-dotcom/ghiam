@@ -299,7 +299,7 @@ def _preview_uploaded(
         "suggested": payload,
         "detectNote": explain_mapping(details, headers),
         "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
-        "applyNote": "Cách chọn cột này dùng cho mọi file trong lần nạp này. Không giới hạn số file và dung lượng. File nằm trên đĩa khi đọc. Nạp từng dòng, ghi từng lô vào SQLite, không tải cả kho khách vào bộ nhớ. Cột không trùng tên kho thì bỏ qua, không đoán nội dung ô.",
+        "applyNote": "Cách chọn cột này dùng cho mọi file trong lần nạp này. Không giới hạn số file và dung lượng. File nằm trên đĩa khi đọc. Nạp từng dòng, ghi từng lô vào SQLite, không tải cả kho khách vào bộ nhớ. Khớp tên cột trước; nếu thiếu tên hoặc SĐT thì lấy cột có tên người / số điện thoại / địa chỉ. Cột giới tính, ngày sinh, link thì bỏ qua.",
         "headerMismatch": different,
     }
 

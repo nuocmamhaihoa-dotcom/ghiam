@@ -77,7 +77,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("địa chỉ hành chính", home.text)
         self.assertIn("hàng mua", home.text)
         self.assertIn("giá COD", home.text)
-        self.assertIn("không đoán nội dung ô", home.text)
+        self.assertIn("giới tính, ngày sinh, link", home.text)
         self.assertIn("3 * 60 * 60 * 1000", home.text)
         self.assertIn("orderContentColumns", home.text)
         self.assertIn("giới tính", home.text)
@@ -101,7 +101,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(data["files"][0]["rowCount"], 1)
         self.assertEqual(data["suggested"]["name"], 0)
         self.assertIn("mọi file", data["applyNote"])
-        self.assertIn("Khớp theo tên cột kho", data["detectNote"])
+        self.assertIn("Khớp cột", data["detectNote"])
 
     def test_preview_skips_unlabeled_and_gender_columns(self) -> None:
         name, body = self._xlsx(
@@ -119,12 +119,12 @@ class CustomerApiTests(unittest.TestCase):
         )
         self.assertEqual(preview.status_code, 200, preview.text)
         data = preview.json()
-        self.assertIsNone(data["suggested"]["name"])
-        self.assertIsNone(data["suggested"]["phone"])
-        self.assertIsNone(data["suggested"]["address"])
+        self.assertEqual(data["suggested"]["name"], 0)
+        self.assertEqual(data["suggested"]["phone"], 1)
+        self.assertEqual(data["suggested"]["address"], 2)
         self.assertIsNone(data["suggested"]["facebookUid"])
         self.assertIsNone(data["suggested"]["tiktokId"])
-        self.assertIn("Không cột nào trùng tên với kho", data["detectNote"])
+        self.assertIn("số điện thoại", data["detectNote"])
 
     def test_import_repairs_gender_name_and_facebook_dump_address(self) -> None:
         name, body = self._xlsx(
@@ -668,6 +668,60 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(body["total"], 3500)
         listed = self.client.get("/v1/customers", headers=self.headers)
         self.assertEqual(listed.json()["total"], 3500)
+
+    def test_import_headerless_file_keeps_name_phone_address(self) -> None:
+        rows = [
+            ["Nguyễn Lan", "0901222333", "12 Lê Lợi, Quận 1, TP.HCM"],
+            ["Trần Minh", "0901444555", "Ha Noi"],
+        ]
+        imported = self.client.post(
+            "/v1/customers/import",
+            headers=self.headers,
+            data={
+                "mapping": json.dumps(
+                    {
+                        "name": {"index": 0, "header": "Cột A"},
+                        "phone": {"index": 1, "header": "Cột B"},
+                        "address": {"index": 2, "header": "Cột C"},
+                    }
+                )
+            },
+            files=[self._file("khong-tieu-de.xlsx", rows[0], rows[1:])],
+        )
+        self.assertEqual(imported.status_code, 200, imported.text)
+        self.assertEqual(imported.json()["stats"]["created"], 2)
+        listed = self.client.get("/v1/customers", headers=self.headers)
+        items = {item["phone"]: item for item in listed.json()["items"]}
+        self.assertEqual(items["0901222333"]["name"], "Nguyễn Lan")
+        self.assertIn("Lê Lợi", items["0901222333"]["address"])
+        self.assertEqual(items["0901444555"]["name"], "Trần Minh")
+
+    def test_import_receiver_headers_keeps_name_phone_address(self) -> None:
+        imported = self.client.post(
+            "/v1/customers/import",
+            headers=self.headers,
+            data={
+                "mapping": json.dumps(
+                    {
+                        "name": {"index": 0, "header": "Tên người nhận"},
+                        "phone": {"index": 1, "header": "SĐT người nhận"},
+                        "address": {"index": 2, "header": "Địa chỉ người nhận"},
+                    }
+                )
+            },
+            files=[
+                self._file(
+                    "nhan.xlsx",
+                    ["Tên người nhận", "SĐT người nhận", "Địa chỉ người nhận"],
+                    [["Nguyễn Lan", "0901222333", "Huế"]],
+                )
+            ],
+        )
+        self.assertEqual(imported.status_code, 200, imported.text)
+        item = self.client.get("/v1/customers", headers=self.headers).json()["items"][0]
+        self.assertEqual(item["name"], "Nguyễn Lan")
+        self.assertEqual(item["phone"], "0901222333")
+        self.assertEqual(item["address"], "Huế")
 
 
 if __name__ == "__main__":
