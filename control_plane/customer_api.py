@@ -147,6 +147,11 @@ _NAP_SUMMARY = re.compile(
     r"thêm\s+(\d+),\s+bổ sung\s+(\d+),\s+giữ\s+(\d+),\s+gộp\s+(\d+)",
     re.I,
 )
+_FILE_ROW = re.compile(r'\{\s*"name":\s*"([^"]+)",\s*"rows":\s*(\d+)')
+
+
+def _files_from_truncated(raw: str) -> list[dict[str, Any]]:
+    return [{"name": name, "rows": int(rows)} for name, rows in _FILE_ROW.findall(raw or "")]
 
 
 def _parse_iso(value: str) -> datetime | None:
@@ -173,7 +178,7 @@ def _import_sessions() -> dict[str, Any]:
             if isinstance(loaded, dict):
                 payload = loaded
         except json.JSONDecodeError:
-            payload = {}
+            payload = {"files": _files_from_truncated(raw)}
         stats = payload.get("stats") if isinstance(payload.get("stats"), dict) else {}
         match = _NAP_SUMMARY.search(str(action.get("summary") or ""))
         created = int(stats.get("created") or (match.group(1) if match else 0) or 0)
