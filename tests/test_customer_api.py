@@ -83,6 +83,8 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("3 * 60 * 60 * 1000", home.text)
         self.assertIn("table.sheet", home.text)
         self.assertIn("display: table-cell", home.text)
+        self.assertIn("overflow-wrap: anywhere", home.text)
+        self.assertIn("parent.closest(\"table, td, th, .addr\")", home.text)
         self.assertNotIn("data-label", home.text)
         self.assertNotIn("#people thead", home.text)
         self.assertNotIn("content: attr(data-label)", home.text)

@@ -59,11 +59,11 @@
     .stat span { color: var(--muted); font-size: 0.92rem; }
     table.sheet {
       display: table;
-      width: max-content;
+      width: auto;
       min-width: 100%;
       border-collapse: collapse;
       border-spacing: 0;
-      table-layout: auto;
+      table-layout: fixed;
     }
     table.sheet thead { display: table-header-group; }
     table.sheet tbody { display: table-row-group; }
@@ -76,6 +76,7 @@
       vertical-align: top;
       font-size: 0.92rem;
       background: #fff;
+      overflow: hidden;
     }
     table.sheet th {
       color: var(--ink);
@@ -84,10 +85,21 @@
       white-space: nowrap;
     }
     table.sheet td { white-space: nowrap; }
+    table.sheet col.col-name { width: 140px; }
+    table.sheet col.col-phone { width: 120px; }
+    table.sheet col.col-addr { width: 220px; }
+    table.sheet col.col-cod { width: 72px; }
+    table.sheet col.col-id { width: 110px; }
+    table.sheet col.col-flag { width: 56px; }
+    table.sheet col.col-query { width: 120px; }
+    #people table.sheet { width: 1212px; }
+    #lookupPeople table.sheet { width: 1388px; }
     table.sheet td.addr {
-      white-space: pre-line;
-      min-width: 200px;
-      max-width: 280px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      overflow: hidden;
+      max-width: 220px;
     }
     table.sheet tbody tr:nth-child(even) td { background: #f7f9fb; }
     .picks { display: grid; gap: 0.35rem; margin: 0.2rem 0 0.4rem; }
@@ -227,7 +239,8 @@
       acceptNode: function (node) {
         var parent = node.parentElement;
         if (!parent || parent.classList.contains("sp")) return NodeFilter.FILTER_REJECT;
-        if (/^(SCRIPT|STYLE|TEXTAREA|INPUT|SELECT|OPTION)$/.test(parent.tagName)) return NodeFilter.FILTER_REJECT;
+        if (/^(SCRIPT|STYLE|TEXTAREA|INPUT|SELECT|OPTION|TABLE|THEAD|TBODY|TR|TH|TD|COL|COLGROUP)$/.test(parent.tagName)) return NodeFilter.FILTER_REJECT;
+        if (parent.closest && parent.closest("table, td, th, .addr")) return NodeFilter.FILTER_REJECT;
         if (!node.nodeValue || node.nodeValue.indexOf(" ") < 0) return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_ACCEPT;
       }
@@ -389,7 +402,7 @@
     samples.forEach(function (row) {
       html += "<tr>";
       columns.forEach(function (col, index) {
-        html += "<td>" + escapeHtml(row[index] || "") + "</td>";
+        html += "<td class='addr'>" + escapeHtml(row[index] || "") + "</td>";
       });
       html += "</tr>";
     });
@@ -676,7 +689,7 @@
       document.getElementById("people").innerHTML = "<p class='note'>Chưa có khách, hoặc không khớp từ tìm.</p>";
       return;
     }
-    var html = "<table class='sheet'><thead><tr><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
+    var html = "<table class='sheet'><colgroup><col class='col-name'><col class='col-phone'><col class='col-addr'><col class='col-addr'><col class='col-addr'><col class='col-cod'><col class='col-id'><col class='col-id'></colgroup><thead><tr><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
     items.forEach(function (row) {
       html += "<tr>" +
         "<td>" + escapeHtml(row.name || "—") + "</td>" +
@@ -752,7 +765,7 @@
       document.getElementById("lookupExport").hidden = true;
       return;
     }
-    var html = "<table class='sheet'><thead><tr><th>Số tra cứu</th><th>Kho</th><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
+    var html = "<table class='sheet'><colgroup><col class='col-query'><col class='col-flag'><col class='col-name'><col class='col-phone'><col class='col-addr'><col class='col-addr'><col class='col-addr'><col class='col-cod'><col class='col-id'><col class='col-id'></colgroup><thead><tr><th>Số tra cứu</th><th>Kho</th><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
     items.forEach(function (item) {
       var customer = item.customer || {};
       html += "<tr><td>" + escapeHtml(item.query) + "</td><td>" + (item.found ? "Có" : "Không") + "</td><td>" + escapeHtml(customer.name) + "</td><td>" + escapeHtml(customer.phone) + "</td><td class='addr'>" + escapeHtml(customer.address) + "</td><td class='addr'>" + escapeHtml(customer.adminAddress) + "</td><td class='addr'>" + escapeHtml(customer.orderContent) + "</td><td>" + escapeHtml(customer.codAmount) + "</td><td>" + escapeHtml(customer.facebookUid) + "</td><td>" + escapeHtml(customer.tiktokId) + "</td></tr>";
