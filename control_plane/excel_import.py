@@ -861,6 +861,77 @@ def _header_signature(headers: list[str]) -> str:
     return "\n".join(header_key(str(header or "")) for header in headers)
 
 
+def phone_from_row_cells(row: Iterable[str], skip_indexes: set[int] | None = None) -> str:
+    """Số điện thoại trên dòng — chuẩn lọc trùng khi thêm file mới."""
+    skip = skip_indexes or set()
+    fallback = ""
+    for index, cell in enumerate(row):
+        if not looks_like_vn_phone(cell):
+            continue
+        phone = clean_phone(cell)
+        if not phone:
+            continue
+        if index in skip:
+            if not fallback:
+                fallback = phone
+            continue
+        return phone
+    return fallback
+
+
+def _phone_skip_indexes(indexes: dict[str, int | None]) -> set[int]:
+    skip: set[int] = set()
+    for field in ("facebookUid", "tiktokId"):
+        index = indexes.get(field)
+        if index is not None:
+            skip.add(index)
+    return skip
+
+
+def _with_row_phone(
+    cleaned: dict[str, str],
+    row: list[str],
+    indexes: dict[str, int | None],
+) -> dict[str, str]:
+    mapped = cleaned.get("phone") or ""
+    if mapped and looks_like_vn_phone(mapped):
+        return cleaned
+    found = phone_from_row_cells(row, _phone_skip_indexes(indexes))
+    if found == mapped:
+        return cleaned
+    updated = dict(cleaned)
+    updated["phone"] = found
+    return updated
+
+
+def _mapped_row(
+    row: list[str],
+    headers: list[str],
+    indexes: dict[str, int | None],
+    line_specs: dict[str, list[dict[str, Any]]],
+    allow_index: bool = True,
+) -> dict[str, str]:
+    if headers and len(row) < len(headers):
+        row = list(row) + [""] * (len(headers) - len(row))
+    raw: dict[str, str] = {}
+    for field in FIELDS:
+        if field in LINE_FIELDS:
+            parts = []
+            for spec in line_specs[field]:
+                index = resolve_index(headers, spec, allow_index=allow_index)
+                if index is not None and index < len(row):
+                    parts.append(row[index])
+            if not parts:
+                index = indexes[field]
+                if index is not None and index < len(row):
+                    parts.append(row[index])
+            raw[field] = join_address_lines(*parts)
+            continue
+        index = indexes[field]
+        raw[field] = row[index] if index is not None and index < len(row) else ""
+    return _with_row_phone(clean_row(raw), row, indexes)
+
+
 def rows_from_mapped_headers(
     headers: list[str],
     body: list[list[str]],
@@ -871,25 +942,7 @@ def rows_from_mapped_headers(
     line_specs = {field: _address_specs(mapping.get(field)) for field in LINE_FIELDS}
     extracted: list[dict[str, str]] = []
     for row in body:
-        if headers and len(row) < len(headers):
-            row = list(row) + [""] * (len(headers) - len(row))
-        raw: dict[str, str] = {}
-        for field in FIELDS:
-            if field in LINE_FIELDS:
-                parts = []
-                for spec in line_specs[field]:
-                    index = resolve_index(headers, spec, allow_index=True)
-                    if index is not None and index < len(row):
-                        parts.append(row[index])
-                if not parts:
-                    index = indexes[field]
-                    if index is not None and index < len(row):
-                        parts.append(row[index])
-                raw[field] = join_address_lines(*parts)
-                continue
-            index = indexes[field]
-            raw[field] = row[index] if index is not None and index < len(row) else ""
-        cleaned = clean_row(raw)
+        cleaned = _mapped_row(row, headers, indexes, line_specs)
         if has_phone(cleaned):
             extracted.append(cleaned)
     return extracted
@@ -989,25 +1042,7 @@ def rows_from_table(rows: list[list[str]], mapping: dict[str, Any], allow_index:
     line_specs = {field: _address_specs(mapping.get(field)) for field in LINE_FIELDS}
     extracted: list[dict[str, str]] = []
     for row in body:
-        if headers and len(row) < len(headers):
-            row = list(row) + [""] * (len(headers) - len(row))
-        raw: dict[str, str] = {}
-        for field in FIELDS:
-            if field in LINE_FIELDS:
-                parts = []
-                for spec in line_specs[field]:
-                    index = resolve_index(headers, spec, allow_index=allow_index)
-                    if index is not None and index < len(row):
-                        parts.append(row[index])
-                if not parts:
-                    index = indexes[field]
-                    if index is not None and index < len(row):
-                        parts.append(row[index])
-                raw[field] = join_address_lines(*parts)
-                continue
-            index = indexes[field]
-            raw[field] = row[index] if index is not None and index < len(row) else ""
-        cleaned = clean_row(raw)
+        cleaned = _mapped_row(row, headers, indexes, line_specs, allow_index=allow_index)
         if has_phone(cleaned):
             extracted.append(cleaned)
     return extracted
@@ -1025,6 +1060,7 @@ def _mapped_from_iter(
     tallies = counts if counts is not None else {}
     tallies.setdefault("fileRows", 0)
     tallies.setdefault("unmapped", 0)
+    tallies.setdefault("phonesOnFile", 0)
     for row in rows:
         if not any(collapse(cell) for cell in row):
             continue
@@ -1041,27 +1077,10 @@ def _mapped_from_iter(
                 field: resolve_index(headers, mapping.get(field), allow_index=allow_index) for field in FIELDS
             }
             line_specs = {field: _address_specs(mapping.get(field)) for field in LINE_FIELDS}
-        if headers and len(row) < len(headers):
-            row = list(row) + [""] * (len(headers) - len(row))
         tallies["fileRows"] += 1
-        raw: dict[str, str] = {}
-        for field in FIELDS:
-            if field in LINE_FIELDS:
-                parts = []
-                for spec in line_specs[field]:
-                    index = resolve_index(headers, spec, allow_index=allow_index)
-                    if index is not None and index < len(row):
-                        parts.append(row[index])
-                if not parts:
-                    index = indexes[field]
-                    if index is not None and index < len(row):
-                        parts.append(row[index])
-                raw[field] = join_address_lines(*parts)
-                continue
-            index = indexes[field]
-            raw[field] = row[index] if index is not None and index < len(row) else ""
-        cleaned = clean_row(raw)
+        cleaned = _mapped_row(row, headers, indexes, line_specs, allow_index=allow_index)
         if has_phone(cleaned):
+            tallies["phonesOnFile"] += 1
             yield cleaned
         elif has_data(cleaned):
             continue

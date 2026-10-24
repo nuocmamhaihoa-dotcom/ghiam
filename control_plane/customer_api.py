@@ -574,7 +574,7 @@ def _import_uploaded(
     incoming_total = 0
     for name, payload in uploaded:
         mapped: Any = None
-        file_counts = {"fileRows": 0, "unmapped": 0}
+        file_counts = {"fileRows": 0, "unmapped": 0, "phonesOnFile": 0}
         try:
             file_mapping = mapping_for_file(parsed, name, payload)
             first_width, mapped = iter_mapped_file(
@@ -597,6 +597,7 @@ def _import_uploaded(
                     "name": name,
                     "rows": int(part.get("incoming") or 0),
                     "fileRows": int(file_counts.get("fileRows") or 0),
+                    "phonesOnFile": int(file_counts.get("phonesOnFile") or 0),
                     "unmapped": int(file_counts.get("unmapped") or 0),
                 }
             )

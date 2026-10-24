@@ -31,8 +31,10 @@ from control_plane.excel_import import (
     _shared_strings,
     iter_xlsx_rows,
     mapping_from_form,
+    phone_from_row_cells,
     preview_table,
     rows_from_files,
+    rows_from_table,
     write_xlsx,
 )
 from control_plane.settings import settings
@@ -634,6 +636,41 @@ class IngestSqlTests(unittest.TestCase):
         self.assertEqual(minh[0]["name"], "Minh")
         self.assertEqual(minh[0]["phone"], "0352548360")
         self.assertEqual(minh[0]["address"], "Nha Trang\nQuy Nhơn")
+
+
+class PhoneOnRowTests(unittest.TestCase):
+    def test_phone_from_row_cells_skips_facebook_uid(self) -> None:
+        self.assertEqual(
+            phone_from_row_cells(["Lan", "Nữ", "100007416894544", "0901222333", "Huế"]),
+            "0901222333",
+        )
+        self.assertEqual(
+            phone_from_row_cells(["Lan", "Nữ", "100007416894544", "Huế"]),
+            "",
+        )
+        self.assertEqual(
+            phone_from_row_cells(["Lan", "84901444555", "100007416894544"], skip_indexes={1}),
+            "0901444555",
+        )
+
+    def test_rows_from_table_takes_phone_on_row_when_mapped_column_is_wrong(self) -> None:
+        rows = [
+            ["Tên", "Giới tính", "UID Facebook", "Ghi chú", "Địa chỉ"],
+            ["Lan", "Nữ", "100007416894544", "0901111111", "Huế"],
+            ["Minh", "Nam", "100007416894545", "0902222222", "Đà Nẵng"],
+            ["Không số", "Nữ", "100007416894546", "", "Nha Trang"],
+        ]
+        mapping = {
+            "name": {"index": 0, "header": "Tên"},
+            "phone": {"index": 1, "header": "Giới tính"},
+            "facebookUid": {"index": 2, "header": "UID Facebook"},
+            "address": {"index": 4, "header": "Địa chỉ"},
+        }
+        extracted = rows_from_table(rows, mapping)
+        self.assertEqual([row["phone"] for row in extracted], ["0901111111", "0902222222"])
+        self.assertEqual(extracted[0]["name"], "Lan")
+        self.assertEqual(extracted[0]["facebookUid"], "100007416894544")
+        self.assertEqual(extracted[0]["address"], "Huế")
 
 
 class SharedStringSpillTests(unittest.TestCase):
