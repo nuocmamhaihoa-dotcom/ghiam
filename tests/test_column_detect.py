@@ -15,6 +15,7 @@ from control_plane.column_detect import (
     looks_like_vn_phone,
     mapping_spec_chosen,
     suggest_mapping,
+    suggested_payload,
 )
 from control_plane.excel_import import preview_table, write_xlsx
 from control_plane.vietnam_places import has_vietnam_place
@@ -221,6 +222,30 @@ class ColumnAssignTests(unittest.TestCase):
         self.assertEqual(details["address"]["indexes"], [1])
         self.assertEqual(mapping["adminAddress"], 2)
         self.assertEqual(details["adminAddress"]["indexes"], [2, 3])
+
+    def test_hamlet_header_joins_address_and_street_stays_primary(self) -> None:
+        self.assertEqual(header_field("Thôn"), "address")
+        self.assertEqual(header_field("Xóm"), "address")
+        self.assertEqual(header_field("Ấp"), "address")
+        self.assertEqual(header_field("Làng"), "address")
+        self.assertEqual(header_field("Khu phố"), "address")
+        self.assertEqual(header_field("Tổ dân phố"), "address")
+        self.assertEqual(header_field("Xã"), "adminAddress")
+        self.assertEqual(header_field("Địa chỉ"), "address")
+        headers = ["Tên khách", "SĐT", "Tỉnh", "Huyện", "Xã", "Thôn", "Số nhà"]
+        values = [
+            ["Nguyễn Thị Nhàn"],
+            ["0349757089"],
+            ["Vĩnh Long"],
+            ["huyện Long Hồ"],
+            ["xã An Bình"],
+            ["thôn Trung"],
+            ["12 Lê Lợi"],
+        ]
+        payload, _details = suggested_payload(headers, values)
+        self.assertEqual(payload["address"], 6)
+        self.assertEqual(payload["addressColumns"], [6, 5, 4, 3, 2])
+        self.assertEqual(payload["adminAddressColumns"], [2, 3, 4])
 
     def test_unlabeled_core_columns_are_filled_from_values(self) -> None:
         headers = ["A", "B", "C", "D"]

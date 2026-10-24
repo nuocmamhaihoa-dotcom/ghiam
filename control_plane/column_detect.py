@@ -6,7 +6,12 @@ import re
 from typing import Any
 
 from control_plane.customers import FIELDS, LINE_FIELDS, collapse, expand_scientific
-from control_plane.vietnam_places import fold_vietnamese, has_address_keyword, has_vietnam_place
+from control_plane.vietnam_places import (
+    address_header_rank,
+    fold_vietnamese,
+    has_address_keyword,
+    has_vietnam_place,
+)
 
 _SCI = re.compile(r"^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$")
 _LETTER = re.compile(r"[^\W\d_]", re.UNICODE)
@@ -140,6 +145,15 @@ _HEADER_HINTS: dict[str, tuple[str, ...]] = {
         "shipping address",
         "dia chi day du",
         "dia chi cu the",
+        "thon",
+        "xom",
+        "ap",
+        "lang",
+        "buon",
+        "soc",
+        "khom",
+        "khu pho",
+        "to dan pho",
     ),
     "adminAddress": (
         "dia chi hanh chinh",
@@ -678,6 +692,51 @@ def suggest_mapping(
     return mapping
 
 
+def _address_sort_key(headers: list[str], index: int) -> tuple[int, int]:
+    header = headers[index] if 0 <= index < len(headers) else ""
+    rank = address_header_rank(header)
+    return (rank if rank is not None else 0, index)
+
+
+def _preferred_address_index(headers: list[str], indexes: list[int], current: Any) -> int | None:
+    """Số nhà đứng trước thôn. Cột «Địa chỉ» không khóa bậc thì giữ làm cột chính."""
+    pool: list[int] = []
+    for index in indexes:
+        try:
+            pool.append(int(index))
+        except (TypeError, ValueError):
+            continue
+    if not pool:
+        return None
+    try:
+        current_index = int(current) if current is not None and current != "" else None
+    except (TypeError, ValueError):
+        current_index = None
+    if current_index not in pool:
+        current_index = None
+
+    def rank_of(index: int) -> int | None:
+        header = headers[index] if 0 <= index < len(headers) else ""
+        return address_header_rank(header)
+
+    known: list[tuple[int, int]] = []
+    for index in pool:
+        rank = rank_of(index)
+        if rank is not None:
+            known.append((rank, index))
+    best_index = min(known)[1] if known else None
+    if current_index is None:
+        return best_index if best_index is not None else pool[0]
+    current_rank = rank_of(current_index)
+    if current_rank is None:
+        return current_index
+    if best_index is not None:
+        best_rank = rank_of(best_index)
+        if best_rank is not None and best_rank < current_rank:
+            return best_index
+    return current_index
+
+
 def suggested_payload(
     headers: list[str],
     column_values: list[list[str]] | None = None,
@@ -691,18 +750,19 @@ def suggested_payload(
             payload[f"{field}Columns"] = indexes
     address_indexes = [int(index) for index in (payload.get("addressColumns") or [])]
     admin_indexes = [int(index) for index in (payload.get("adminAddressColumns") or [])]
-    if admin_indexes:
-        primary = payload.get("address")
-        merged = list(address_indexes)
-        for index in admin_indexes:
-            if index not in merged:
-                merged.append(index)
-        merged.sort()
-        if primary is not None and int(primary) in merged:
-            merged = [int(primary)] + [index for index in merged if index != int(primary)]
-        payload["addressColumns"] = merged
-        if payload.get("address") is None and merged:
-            payload["address"] = merged[0]
+    merged = list(address_indexes)
+    for index in admin_indexes:
+        if index not in merged:
+            merged.append(index)
+    if merged:
+        primary = _preferred_address_index(headers, merged, payload.get("address"))
+        rest = sorted(
+            (index for index in merged if index != primary),
+            key=lambda index: _address_sort_key(headers, index),
+        )
+        payload["addressColumns"] = [primary, *rest] if primary is not None else rest
+        if primary is not None:
+            payload["address"] = primary
     return payload, details
 
 

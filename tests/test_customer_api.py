@@ -345,6 +345,25 @@ class CustomerApiTests(unittest.TestCase):
         listed = self.client.get("/v1/customers", headers=self.headers)
         self.assertEqual(listed.json()["items"][0]["address"], "12 Lê Lợi, Quận 1, TP.HCM")
 
+    def test_preview_preselects_hamlet_and_keeps_street_first(self) -> None:
+        name, body = self._xlsx(
+            "thon.xlsx",
+            ["Tên khách", "SĐT", "Tỉnh", "Huyện", "Xã", "Thôn", "Số nhà"],
+            [["Nguyễn Thị Nhàn", "0349757089", "Vĩnh Long", "huyện Long Hồ", "xã An Bình", "thôn Trung", "12 Lê Lợi"]],
+        )
+        preview = self.client.post(
+            "/v1/customers/preview",
+            headers=self.headers,
+            files=[("files", (name, body, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))],
+        )
+        self.assertEqual(preview.status_code, 200, preview.text)
+        suggested = preview.json()["groups"][0]["suggested"]
+        self.assertEqual(suggested["address"], 6)
+        self.assertEqual(suggested["addressColumns"], [6, 5, 4, 3, 2])
+        picks = preview.json()["groups"][0]["picks"]["address"]["suggested"]
+        self.assertEqual(picks[0], 6)
+        self.assertIn(5, picks)
+
     def test_import_admin_address_order_and_cod(self) -> None:
         name, body = self._xlsx(
             "don.xlsx",
