@@ -6,12 +6,14 @@ import unittest
 
 from control_plane.column_detect import (
     assign_fields,
+    complete_core_mapping,
     header_field,
     looks_like_address,
     looks_like_facebook_uid,
     looks_like_name,
     looks_like_tiktok_id,
     looks_like_vn_phone,
+    mapping_spec_chosen,
     suggest_mapping,
 )
 from control_plane.excel_import import preview_table, write_xlsx
@@ -260,6 +262,32 @@ class ColumnAssignTests(unittest.TestCase):
         self.assertEqual(preview["suggested"]["name"], 0)
         self.assertEqual(preview["suggested"]["phone"], 1)
         self.assertEqual(preview["suggested"]["address"], 2)
+
+    def test_complete_core_mapping_fills_name_and_phone(self) -> None:
+        headers = ["Cột A", "Cột B", "Cột C"]
+        values = [
+            ["Nguyễn Lan", "Trần Minh"],
+            ["0901222333", "0901444555"],
+            ["12 Lê Lợi, Quận 1, TP.HCM", "lô 41 đường số 2, Sơn Trà, Đà Nẵng"],
+        ]
+        completed = complete_core_mapping(
+            {"address": {"index": 2, "header": "lô 41 đường số 2, Sơn Trà, Đà Nẵng"}},
+            headers,
+            values,
+        )
+        self.assertTrue(mapping_spec_chosen(completed["name"]))
+        self.assertTrue(mapping_spec_chosen(completed["phone"]))
+        self.assertEqual(completed["name"]["index"], 0)
+        self.assertEqual(completed["phone"]["index"], 1)
+        self.assertEqual(completed["address"]["index"], 2)
+
+    def test_complete_core_mapping_keeps_chosen_name(self) -> None:
+        completed = complete_core_mapping(
+            {"name": {"index": 2, "header": "Cột C"}, "phone": {}, "address": {}},
+            ["A", "B", "Cột C"],
+            [["0901222333"], ["Huế"], ["Nguyễn Lan"]],
+        )
+        self.assertEqual(completed["name"]["index"], 2)
 
     def test_labeled_tiktok_without_at_still_maps(self) -> None:
         payload = write_xlsx(

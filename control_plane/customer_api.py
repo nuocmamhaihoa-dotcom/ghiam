@@ -37,6 +37,7 @@ from control_plane.excel_import import (
     FIELD_LABELS,
     IMPORT_BATCH,
     header_key,
+    fill_missing_core_mapping,
     iter_mapped_file,
     mapping_from_form,
     merge_preview_columns,
@@ -363,7 +364,8 @@ def _import_uploaded(
     for name, payload in uploaded:
         mapped: Any = None
         try:
-            first_width, mapped = iter_mapped_file(name, payload, parsed, first_width)
+            file_mapping = fill_missing_core_mapping(parsed, name, payload)
+            first_width, mapped = iter_mapped_file(name, payload, file_mapping, first_width)
             part, preview = ingest_customers(
                 settings.db_path,
                 mapped,

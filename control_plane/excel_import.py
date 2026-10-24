@@ -13,7 +13,12 @@ from array import array
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
-from control_plane.column_detect import looks_like_label_row, suggest_mapping as detect_mapping
+from control_plane.column_detect import (
+    complete_core_mapping,
+    looks_like_label_row,
+    mapping_spec_chosen,
+    suggest_mapping as detect_mapping,
+)
 from control_plane.customers import (
     FIELDS,
     LINE_FIELDS,
@@ -648,6 +653,26 @@ def describe_columns(headers: list[str]) -> list[dict[str, Any]]:
 
 def _titles_from_row(row: list[str]) -> list[str]:
     return [collapse(cell) or f"Cột {column_letter(index)}" for index, cell in enumerate(row)]
+
+
+def fill_missing_core_mapping(
+    mapping: dict[str, Any],
+    filename: str,
+    data: TableSource,
+) -> dict[str, Any]:
+    """Khi lần chọn cột thiếu tên / SĐT / địa chỉ, đọc mẫu file rồi tự điền."""
+    if all(mapping_spec_chosen(mapping.get(field)) for field in ("name", "phone", "address")):
+        return mapping
+    stored, _total = _read_table(filename, data, max_store=PREVIEW_STORE)
+    rows = _trim_table(stored)
+    if not rows:
+        return mapping
+    headers, body, _headerless = _split_header_row(rows)
+    return complete_core_mapping(
+        mapping,
+        headers,
+        column_values_from_rows(body[:DETECT_ROWS], len(headers)),
+    )
 
 
 def _split_header_row(rows: list[list[str]]) -> tuple[list[str], list[list[str]], bool]:

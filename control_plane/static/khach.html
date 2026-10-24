@@ -460,6 +460,24 @@
     padSpaces(document.getElementById("mapBox"));
   }
 
+  function fieldWasChosen(spec) {
+    if (!spec) return false;
+    if (spec.header) return true;
+    if (spec.index !== null && spec.index !== undefined && spec.index !== "") return true;
+    return !!(spec.columns && spec.columns.some(function (col) {
+      return col && (col.header || (col.index !== null && col.index !== undefined));
+    }));
+  }
+
+  function applyChosenMapping(mapping) {
+    if (!mapping) return;
+    var chosen = {};
+    fieldOrder.forEach(function (field) {
+      if (fieldWasChosen(mapping[field])) chosen[field] = mapping[field];
+    });
+    applyMapping(chosen);
+  }
+
   function applyMapping(mapping) {
     if (!mapping) return;
     fieldOrder.forEach(function (field) {
@@ -562,7 +580,7 @@
       var extra = body.fileErrors && body.fileErrors.length ? " Một số file lỗi vẫn bị bỏ qua." : "";
       setNote("uploadNote", "Đã đọc " + body.files.length + " file. Chọn thêm file là cộng vào lần này, không giới hạn số file và dung lượng." + extra);
       renderMap(body);
-      if (previous) applyMapping(previous);
+      if (previous) applyChosenMapping(previous);
     } catch (error) {
       setNote("uploadNote", networkMessage(error), "warn");
     }
@@ -588,7 +606,7 @@
       setNote(
         "mapNote",
         "Chưa chọn đủ " + (!hasName && !hasPhone ? "tên và số điện thoại" : !hasName ? "tên khách" : "số điện thoại") +
-          ". Hãy chọn đúng cột rồi nạp lại, nếu không kho sẽ thiếu dữ liệu.",
+          ". Máy chủ sẽ tự lấy cột tên người / số điện thoại / địa chỉ còn thiếu khi nạp.",
         "warn"
       );
     }

@@ -564,6 +564,51 @@ def _fill_core_from_values(
         }
 
 
+def mapping_spec_chosen(spec: Any) -> bool:
+    """True khi người dùng hoặc lần nạp trước đã chọn cột cho một trường."""
+    if spec is None or spec == "":
+        return False
+    if not isinstance(spec, dict):
+        return True
+    if collapse(str(spec.get("header") or "")):
+        return True
+    if spec.get("index") not in (None, ""):
+        return True
+    for item in spec.get("columns") or []:
+        if mapping_spec_chosen(item if isinstance(item, dict) else {"index": item}):
+            return True
+    return False
+
+
+def complete_core_mapping(
+    mapping: dict[str, Any],
+    headers: list[str],
+    column_values: list[list[str]] | None = None,
+) -> dict[str, Any]:
+    """Giữ cột đã chọn; nếu thiếu tên / SĐT / địa chỉ thì lấy từ cột còn lại."""
+    suggested, details = assign_fields(headers, column_values or [[] for _ in headers])
+    completed: dict[str, Any] = dict(mapping)
+    for field in _CORE_FIELDS:
+        if mapping_spec_chosen(completed.get(field)):
+            continue
+        index = suggested.get(field)
+        if index is None:
+            continue
+        header = collapse(headers[index]) if 0 <= index < len(headers) else ""
+        spec: dict[str, Any] = {"index": index, "header": header}
+        if field in LINE_FIELDS:
+            indexes = (details.get(field) or {}).get("indexes") or [index]
+            spec["columns"] = [
+                {
+                    "index": item,
+                    "header": collapse(headers[item]) if 0 <= item < len(headers) else "",
+                }
+                for item in indexes
+            ]
+        completed[field] = spec
+    return completed
+
+
 def assign_fields(headers: list[str], column_values: list[list[str]]) -> tuple[dict[str, int | None], dict[str, dict[str, Any]]]:
     mapping: dict[str, int | None] = {field: None for field in FIELDS}
     details: dict[str, dict[str, Any]] = {}
