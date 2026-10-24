@@ -1,0 +1,11 @@
+# Link xoay theo đúng thứ tự data/proxies_4g.txt (1 dòng = 1 proxy)
+https://keymon.dknhanh00.workers.dev/xoay/1
+https://keymon.dknhanh00.workers.dev/xoay/2
+https://keymon.dknhanh00.workers.dev/xoay/3
+https://keymon.dknhanh00.workers.dev/xoay/4
+https://keymon.dknhanh00.workers.dev/xoay/5
+https://keymon.dknhanh00.workers.dev/xoay/6
+https://keymon.dknhanh00.workers.dev/xoay/7
+https://keymon.dknhanh00.workers.dev/xoay/8
+https://keymon.dknhanh00.workers.dev/xoay/9
+https://keymon.dknhanh00.workers.dev/xoay/10

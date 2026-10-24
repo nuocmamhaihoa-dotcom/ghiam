@@ -17,6 +17,7 @@ class WorkerBrowser:
     context: BrowserContext
     page: Page
     jobs_done: int = 0
+    needs_recycle: bool = False
 
 
 class BrowserPool:
@@ -67,11 +68,11 @@ class BrowserPool:
         await context.route("**/*", _route)
         return context
 
-    async def maybe_recycle(self, worker: WorkerBrowser) -> None:
-        worker.jobs_done += 1
-        if worker.jobs_done < self.settings.browser_restart_every_jobs:
-            return
-        await worker.context.close()
+    async def recycle_now(self, worker: WorkerBrowser) -> None:
+        try:
+            await worker.context.close()
+        except Exception:
+            pass
         context = await self._new_context(worker.proxy)
         page = await context.new_page()
         page.set_default_timeout(self.settings.hot_job_timeout_ms)
@@ -79,6 +80,21 @@ class BrowserPool:
         worker.context = context
         worker.page = page
         worker.jobs_done = 0
+        worker.needs_recycle = False
+
+    def mark_recycle_for_endpoint(self, endpoint: str) -> int:
+        marked = 0
+        for worker in self.workers:
+            if worker.proxy and worker.proxy.raw == endpoint:
+                worker.needs_recycle = True
+                marked += 1
+        return marked
+
+    async def maybe_recycle(self, worker: WorkerBrowser) -> None:
+        worker.jobs_done += 1
+        if worker.jobs_done < self.settings.browser_restart_every_jobs and not worker.needs_recycle:
+            return
+        await self.recycle_now(worker)
 
     async def close(self) -> None:
         for w in self.workers:

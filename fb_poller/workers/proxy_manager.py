@@ -16,6 +16,8 @@ class ProxyConfig:
     username: str | None = None
     password: str | None = None
     raw: str = ""
+    kind: str = "static"
+    rotate_url: str | None = None
 
     def as_playwright(self) -> dict[str, str] | None:
         if not self.server:
@@ -73,7 +75,13 @@ def parse_proxy_line(line: str) -> ProxyConfig | None:
 def load_proxy_file(path: Path) -> list[str]:
     if not path.exists():
         return []
-    return [ln.strip() for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    out: list[str] = []
+    for ln in path.read_text(encoding="utf-8").splitlines():
+        s = ln.strip()
+        if not s or s.startswith("#"):
+            continue
+        out.append(s)
+    return out
 
 
 async def import_proxy_files(settings: Settings) -> dict[str, tuple[int, int]]:
@@ -95,15 +103,20 @@ class ProxyManager:
         self._idx = 0
 
     async def load_for_worker(self, count: int) -> int:
+        from fb_poller.workers.rotate_4g import rotate_map
+
+        urls = rotate_map(self.settings)
         async with session_scope() as session:
             repo = ProxyRepo(session)
-            proxies = await repo.assign_static(self.settings.worker_id, count)
+            proxies = await repo.assign_for_scan(self.settings.worker_id, count)
             configs: list[ProxyConfig] = []
             for p in proxies:
                 parsed = parse_proxy_line(p.endpoint)
                 if not parsed:
                     continue
                 parsed.id = p.id
+                parsed.kind = p.proxy_type or "static"
+                parsed.rotate_url = urls.get(p.endpoint)
                 configs.append(parsed)
             self._configs = configs
         return len(self._configs)

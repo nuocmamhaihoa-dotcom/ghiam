@@ -65,8 +65,10 @@ def run_doctor() -> None:
     static = count_nonempty_lines(Path(settings.proxies_static_file))
     g4 = count_nonempty_lines(Path(settings.proxies_4g_file))
     table.add_row("posts.txt", str(posts), "≥1 URL permalink")
-    table.add_row("proxies_static", str(static), f"≥ WORKERS ({settings.workers})")
-    table.add_row("proxies_4g", str(g4), "tuỳ chọn")
+    table.add_row("proxies_static", str(static), "dự phòng (gói tĩnh hết hạn thì bỏ)")
+    table.add_row("proxies_4g", str(g4), "kq2: 10 proxy, ưu tiên quét")
+    rotate_n = count_nonempty_lines(Path(settings.proxies_4g_rotate_file))
+    table.add_row("proxies_4g_rotate", str(rotate_n), "xoay IP mỗi 5 phút, lệch nhau")
     table.add_row("DB", settings.database_url, "SQLite 1 máy / Postgres khi 2 PC")
     console.print(table)
 
@@ -75,10 +77,15 @@ def run_doctor() -> None:
         warns.append(f"WORKERS={settings.workers} cao hơn gợi ý {suggested} — dễ timeout/CPU full.")
     if posts == 0:
         warns.append("Chưa có URL trong data/posts.txt")
-    if static < settings.workers:
+    if g4 == 0 and static < settings.workers:
         warns.append(
-            f"Proxy tĩnh ({static}) < WORKERS ({settings.workers}). "
-            "Nên gắn 1 sticky proxy / browser, hoặc chấp nhận chạy direct (dễ bị chặn)."
+            f"Không có proxy 4G kq2 và proxy tĩnh ({static}) < WORKERS ({settings.workers})."
+        )
+    if g4 and rotate_n < g4:
+        warns.append(f"Thiếu link xoay 4G ({rotate_n}/{g4}).")
+    if g4 and settings.workers > g4:
+        warns.append(
+            f"WORKERS={settings.workers} > {g4} proxy 4G — worker thừa dùng chung IP 4G."
         )
     if settings.workers >= 10 and ram > 0 and ram < 24:
         warns.append("RAM thấp so với số worker — giảm WORKERS.")

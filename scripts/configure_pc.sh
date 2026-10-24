@@ -27,7 +27,7 @@ read -r -p "HOT_SIZE [100]: " hot_size
 hot_size="${hot_size:-100}"
 
 mkdir -p data logs
-touch data/posts.txt data/proxies_static.txt data/proxies_4g.txt
+touch data/posts.txt data/proxies_static.txt data/proxies_4g.txt data/proxies_4g_rotate.txt
 
 cat > .env <<EOF
 DATABASE_URL=sqlite+aiosqlite://${ROOT}/data/fb_poller.db
@@ -47,6 +47,8 @@ HEADLESS=true
 NAVIGATION_TIMEOUT_MS=15000
 PROXIES_STATIC_FILE=${ROOT}/data/proxies_static.txt
 PROXIES_4G_FILE=${ROOT}/data/proxies_4g.txt
+PROXIES_4G_ROTATE_FILE=${ROOT}/data/proxies_4g_rotate.txt
+ROTATE_4G_INTERVAL_SEC=300
 DATA_DIR=${ROOT}/data
 EOF
 

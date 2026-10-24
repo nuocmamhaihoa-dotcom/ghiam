@@ -71,6 +71,72 @@ def import_proxies_cmd() -> None:
     asyncio.run(_run())
 
 
+@app.command("rotate-4g")
+def rotate_4g_cmd(
+    now: bool = typer.Option(False, "--now", help="Ấn các key đã đến hạn"),
+    force: bool = typer.Option(False, "--force", help="Ấn ngay, bỏ qua lịch 5 phút"),
+    index: Optional[int] = typer.Option(None, "--index", help="Chỉ key số này (1-10)"),
+) -> None:
+    """Xoay IP 4G kq2. Mặc định chỉ xem lịch; poller tự ấn mỗi 5 phút."""
+    from fb_poller.workers.rotate_4g import build_loop, press_rotate
+
+    settings = get_settings()
+    loop = build_loop(settings)
+    if not loop.targets:
+        console.print("[yellow]Chưa có cặp proxy/link xoay 4G.[/yellow]")
+        raise typer.Exit(1)
+
+    table = Table(title="kq2 4G xoay")
+    table.add_column("#")
+    table.add_column("proxy")
+    table.add_column("link")
+    table.add_column("lần ok gần nhất")
+    for t in loop.targets:
+        row = loop.state.get(str(t.index))
+        last = "-"
+        if row and row.last_ok_at:
+            last = time_fmt(row.last_ok_at) + (" ok" if row.last_ok else " fail")
+        table.add_row(str(t.index), t.endpoint, t.rotate_url, last)
+    console.print(table)
+
+    targets = loop.targets
+    if index is not None:
+        targets = [t for t in targets if t.index == index]
+        if not targets:
+            console.print(f"[red]Không có key {index}[/red]")
+            raise typer.Exit(1)
+
+    async def _run() -> None:
+        if force:
+            for t in targets:
+                result = await press_rotate(t)
+                loop.record(t, result)
+                mark = "ok" if result.ok else "fail"
+                console.print(f"{mark} {t.name}: {result.message}")
+            return
+        if now:
+            results = await loop.run_due()
+            if not results:
+                console.print("Chưa đến hạn xoay.")
+                return
+            for result in results:
+                mark = "ok" if result.ok else "fail"
+                console.print(f"{mark} key {result.index}: {result.message}")
+            return
+        console.print(
+            f"Tự xoay mỗi {int(loop.interval_sec)}s, lệch {int(loop.interval_sec / max(1, len(loop.targets)))}s. "
+            "Chạy `fb-poller run` để ấn tự động."
+        )
+
+    asyncio.run(_run())
+
+
+def time_fmt(ts: float) -> str:
+    from datetime import datetime, timezone
+
+    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
+
+
 @app.command("rebalance-hot")
 def rebalance_hot(
     hot_size: Optional[int] = typer.Option(None, help="Override HOT_SIZE"),

@@ -47,6 +47,16 @@ class Settings(BaseSettings):
         default=ROOT / "data" / "proxies_4g.txt",
         alias="PROXIES_4G_FILE",
     )
+    proxies_4g_rotate_file: Path = Field(
+        default=ROOT / "data" / "proxies_4g_rotate.txt",
+        alias="PROXIES_4G_ROTATE_FILE",
+    )
+    rotate_4g_interval_sec: int = Field(default=300, alias="ROTATE_4G_INTERVAL_SEC")
+    rotate_4g_timeout_sec: float = Field(default=15.0, alias="ROTATE_4G_TIMEOUT_SEC")
+    rotate_4g_state_file: Path = Field(
+        default=ROOT / "data" / "rotate_4g_state.json",
+        alias="ROTATE_4G_STATE_FILE",
+    )
 
     worker_id: str = Field(default="local-1", alias="WORKER_ID")
     role: Literal["control", "worker", "all"] = Field(default="all", alias="ROLE")

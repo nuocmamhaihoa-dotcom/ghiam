@@ -83,7 +83,7 @@ write_env() {
   worker_id="$(hostname)-1"
 
   mkdir -p "$ROOT/data" "$ROOT/data/metrics" "$ROOT/deploy" "$ROOT/logs"
-  touch "$ROOT/data/posts.txt" "$ROOT/data/proxies_static.txt" "$ROOT/data/proxies_4g.txt"
+  touch "$ROOT/data/posts.txt" "$ROOT/data/proxies_static.txt" "$ROOT/data/proxies_4g.txt" "$ROOT/data/proxies_4g_rotate.txt"
 
   case "$profile" in
     pc20)

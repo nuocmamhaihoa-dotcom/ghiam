@@ -13,7 +13,8 @@ cp deploy/env.pc20.example deploy/env.pc20   # or env.pc12
 
 Fill:
 - `data/posts.txt` — 300 permalinks
-- `data/proxies_static.txt` — sticky proxies (prefer ~20+ for workers)
+- `data/proxies_static.txt` — sticky proxies (dự phòng)
+- `data/proxies_4g.txt` + `data/proxies_4g_rotate.txt` — 10 proxy 4G kq2, tự xoay 5 phút
 
 ```bash
 fb-poller import-urls data/posts.txt

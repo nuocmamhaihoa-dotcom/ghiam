@@ -68,8 +68,8 @@ cp .env.example .env
 ## Chuẩn bị dữ liệu
 
 1. Dán 300 permalink vào `data/posts.txt` (1 URL / dòng).
-2. Dán proxy tĩnh vào `data/proxies_static.txt`.
-3. (Tuỳ chọn) proxy 4G vào `data/proxies_4g.txt`.
+2. Dán proxy tĩnh vào `data/proxies_static.txt` (dự phòng).
+3. Proxy 4G kq2 + link xoay: `data/proxies_4g.txt`, `data/proxies_4g_rotate.txt` (tự ấn mỗi 5 phút khi `fb-poller run`).
 
 ```bash
 fb-poller init-db
@@ -116,6 +116,7 @@ fb-poller run
 | `fb-poller init-db` | Tạo schema |
 | `fb-poller import-urls FILE` | Import URL |
 | `fb-poller import-proxies` | Import proxy files |
+| `fb-poller rotate-4g` | Xem / ấn xoay IP 4G kq2 (poller tự ấn 5 phút) |
 | `fb-poller rebalance-hot` | Ép đúng `HOT_SIZE` bài Hot |
 | `fb-poller set-tier ID hot\|warm\|cold` | Gán tier thủ công |
 | `fb-poller probe` | Thử lấy comment guest |
@@ -146,6 +147,7 @@ data/
   posts.sample.txt
   proxies_static.txt
   proxies_4g.txt
+  proxies_4g_rotate.txt
 ```
 
 ## KPI go/no-go trước khi hạ Hot xuống 30s

@@ -313,40 +313,49 @@ class ProxyRepo:
         await self.session.flush()
         return inserted, skipped
 
+    async def _healthy(self, proxy_type: str, worker_id: str | None = None, *, unassigned: bool = False) -> list[Proxy]:
+        stmt = select(Proxy).where(Proxy.proxy_type == proxy_type, Proxy.health == "ok")
+        if unassigned:
+            stmt = stmt.where(Proxy.assigned_worker.is_(None))
+        elif worker_id is not None:
+            stmt = stmt.where(Proxy.assigned_worker == worker_id)
+        return list((await self.session.scalars(stmt)).all())
+
     async def assign_static(self, worker_id: str, count: int) -> list[Proxy]:
         # Reuse already assigned
-        mine = list(
-            (
-                await self.session.scalars(
-                    select(Proxy).where(
-                        Proxy.assigned_worker == worker_id,
-                        Proxy.proxy_type == "static",
-                        Proxy.health == "ok",
-                    )
-                )
-            ).all()
-        )
+        mine = await self._healthy("static", worker_id)
         if len(mine) >= count:
             return mine[:count]
 
         need = count - len(mine)
-        free = list(
-            (
-                await self.session.scalars(
-                    select(Proxy)
-                    .where(
-                        Proxy.assigned_worker.is_(None),
-                        Proxy.proxy_type == "static",
-                        Proxy.health == "ok",
-                    )
-                    .limit(need)
-                )
-            ).all()
-        )
+        free = (await self._healthy("static", unassigned=True))[:need]
         for p in free:
             p.assigned_worker = worker_id
         await self.session.flush()
         return mine + free
+
+    async def assign_for_scan(self, worker_id: str, count: int) -> list[Proxy]:
+        """Ưu tiên 4G kq2; thiếu thì mới lấy proxy tĩnh. Worker thừa thì dùng chung 4G."""
+        if count <= 0:
+            return []
+        mine = await self._healthy("4g", worker_id)
+        free = await self._healthy("4g", unassigned=True)
+        seen: set[int] = set()
+        pool: list[Proxy] = []
+        for p in mine + free:
+            if p.id in seen:
+                continue
+            seen.add(p.id)
+            pool.append(p)
+        if pool:
+            for p in pool:
+                if p.assigned_worker is None:
+                    p.assigned_worker = worker_id
+            await self.session.flush()
+            if len(pool) >= count:
+                return pool[:count]
+            return [pool[i % len(pool)] for i in range(count)]
+        return await self.assign_static(worker_id, count)
 
     async def mark_sick(self, proxy_id: int) -> None:
         proxy = await self.session.get(Proxy, proxy_id)

@@ -15,6 +15,7 @@ from fb_poller.storage.repo import PostRepo
 from fb_poller.workers.browser_pool import BrowserPool
 from fb_poller.workers.job_hot import poll_post
 from fb_poller.workers.proxy_manager import ProxyManager
+from fb_poller.workers.rotate_4g import build_loop
 
 console = Console()
 
@@ -30,8 +31,12 @@ async def _worker_loop(
     warm_cold_sem: asyncio.Semaphore,
 ) -> None:
     worker = pool.workers[slot]
-    console.log(f"[worker-{slot}] ready proxy={worker.proxy.raw if worker.proxy else 'direct'}")
+    kind = worker.proxy.kind if worker.proxy else "direct"
+    console.log(f"[worker-{slot}] ready proxy={worker.proxy.raw if worker.proxy else 'direct'} kind={kind}")
     while not stop.is_set():
+        if worker.needs_recycle:
+            await pool.recycle_now(worker)
+            console.log(f"[worker-{slot}] recycled after 4G rotate")
         try:
             job = await asyncio.wait_for(queue.get(), timeout=1.0)
         except asyncio.TimeoutError:
@@ -130,6 +135,23 @@ async def run_poller(settings: Settings) -> None:
             console.print(table)
 
     tasks.append(asyncio.create_task(_status(), name="status"))
+
+    rotate = build_loop(settings)
+    if rotate.targets:
+        console.log(
+            f"[runner] kq2 4G rotate keys={len(rotate.targets)} "
+            f"every={int(rotate.interval_sec)}s stagger={int(rotate.interval_sec / max(1, len(rotate.targets)))}s"
+        )
+
+        async def _after_rotate(target, result) -> None:
+            mark = "ok" if result.ok else "fail"
+            console.log(f"[rotate-4g] {mark} {target.name} {result.message}")
+            if result.ok:
+                n = pool.mark_recycle_for_endpoint(target.endpoint)
+                if n:
+                    console.log(f"[rotate-4g] recycle {n} browser dùng {target.endpoint}")
+
+        tasks.append(asyncio.create_task(rotate.run_forever(stop, _after_rotate), name="rotate-4g"))
 
     loop = asyncio.get_running_loop()
 
