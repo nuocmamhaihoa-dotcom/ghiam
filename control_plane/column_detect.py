@@ -313,9 +313,11 @@ def looks_like_facebook_uid(value: str) -> bool:
         return True
     expanded = expand_scientific(text)
     digits = _digits(expanded)
-    if expanded != text and 5 <= len(digits) <= 20:
+    if len(digits) < 13 or digits.startswith("0"):
+        return False
+    if expanded != text and 13 <= len(digits) <= 20:
         return not looks_like_vn_phone(expanded)
-    if re.fullmatch(r"\d{5,20}", expanded):
+    if re.fullmatch(r"\d{13,20}", expanded):
         return True
     return False
 

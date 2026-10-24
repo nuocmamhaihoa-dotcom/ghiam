@@ -1250,13 +1250,18 @@
     }
     try {
       var response = lookupFiles.length
-        ? await api("/v1/customers/lookup/export", { method: "POST", makeBody: lookupForm, tries: 3 })
+        ? await api("/v1/customers/lookup/export", {
+          method: "POST",
+          makeBody: lookupForm,
+          tries: 3,
+          waitMs: 3 * 60 * 60 * 1000
+        })
         : await api("/v1/customers/lookup/export", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: lookupJsonBody(),
           tries: 4,
-          waitMs: 60 * 1000
+          waitMs: 3 * 60 * 60 * 1000
         });
       if (!response.ok) {
         setNote("lookupNote", "Không tải được kết quả Excel.", "warn");
@@ -1277,8 +1282,9 @@
   }
 
   async function exportBook() {
+    setNote("listNote", "Đang tạo file Excel kho khách… kho lớn có thể mất vài phút.");
     try {
-      var response = await api("/v1/customers/export");
+      var response = await api("/v1/customers/export", { waitMs: 3 * 60 * 60 * 1000, tries: 1 });
       if (!response.ok) {
         setNote("listNote", "Không tải được file Excel.", "warn");
         return;
@@ -1292,6 +1298,7 @@
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
+      setNote("listNote", "Đã tải file Excel kho khách.");
     } catch (error) {
       setNote("listNote", "Không tải được file Excel.", "warn");
     }

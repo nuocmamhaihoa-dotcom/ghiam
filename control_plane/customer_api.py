@@ -16,7 +16,8 @@ from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
+from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 from starlette.formparsers import MultiPartException
@@ -46,7 +47,7 @@ from control_plane.excel_import import (
     merge_preview_columns,
     phones_from_files,
     preview_table,
-    write_xlsx,
+    write_xlsx_to_path,
 )
 from control_plane.settings import settings
 
@@ -760,45 +761,72 @@ async def customers_lookup(
     return {"stats": stats, "files": file_reports, "fileErrors": stats.get("fileErrors") or [], "items": items}
 
 
+def _unlink_temp(path: str) -> None:
+    try:
+        Path(path).unlink(missing_ok=True)
+    except OSError:
+        return
+
+
+def _xlsx_file_response(dest: Path, download_name: str) -> FileResponse:
+    filename = quote(download_name)
+    return FileResponse(
+        path=dest,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename=download_name,
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+        background=BackgroundTask(_unlink_temp, str(dest)),
+    )
+
+
+def _new_xlsx_path(prefix: str) -> Path:
+    handle = tempfile.NamedTemporaryFile(prefix=prefix, suffix=".xlsx", delete=False)
+    dest = Path(handle.name)
+    handle.close()
+    return dest
+
+
 @router.post("/v1/customers/lookup/export")
 async def customers_lookup_export(
     request: Request,
     authorization: str | None = Header(default=None),
-) -> Response:
+) -> FileResponse:
     _auth(authorization)
     db.init_db(settings.db_path)
     items, _stats, _reports = await _lookup_from_request(request)
     headers = ["Số tra cứu", "Có trong kho", *FIELD_LABELS.values()]
-    body: list[list[str]] = []
-    for item in items:
-        customer = item.get("customer") or {}
-        body.append(
-            [
+
+    def rows() -> Any:
+        for item in items:
+            customer = item.get("customer") or {}
+            yield [
                 item.get("query") or "",
                 "Có" if item.get("found") else "Không",
                 *[customer.get(field) or "" for field in FIELDS],
             ]
-        )
-    payload = write_xlsx(headers, body)
-    filename = quote("tra-cuu-khach.xlsx")
-    return Response(
-        content=payload,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
-    )
+
+    dest = _new_xlsx_path("tra-cuu-")
+    try:
+        write_xlsx_to_path(headers, rows(), dest)
+    except Exception:
+        dest.unlink(missing_ok=True)
+        raise
+    return _xlsx_file_response(dest, "tra-cuu-khach.xlsx")
 
 
 @router.get("/v1/customers/export")
-def customers_export(authorization: str | None = Header(default=None)) -> Response:
+def customers_export(authorization: str | None = Header(default=None)) -> FileResponse:
     _auth(authorization)
     db.init_db(settings.db_path)
-    rows = db.list_customers(settings.db_path)
     headers = [FIELD_LABELS[field] for field in FIELDS]
-    body = [[row.get(field) or "" for field in FIELDS] for row in rows]
-    payload = write_xlsx(headers, body)
-    filename = quote("kho-khach.xlsx")
-    return Response(
-        content=payload,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
-    )
+    dest = _new_xlsx_path("kho-khach-")
+    try:
+        write_xlsx_to_path(
+            headers,
+            ([row.get(field) or "" for field in FIELDS] for row in db.iter_customers(settings.db_path)),
+            dest,
+        )
+    except Exception:
+        dest.unlink(missing_ok=True)
+        raise
+    return _xlsx_file_response(dest, "kho-khach.xlsx")

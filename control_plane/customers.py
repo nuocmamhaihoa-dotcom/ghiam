@@ -27,6 +27,7 @@ _COD_MILLION = re.compile(r"(?i)(\d+(?:[.,]\d+)?)\s*tr(?:ieu)?\b")
 _SCI = re.compile(r"^([+-]?)(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$")
 _DIGITS = re.compile(r"^\d{5,20}$")
 _PHONE_BREAK = set(" -().\t")
+_PHONE_CHUNK = re.compile(r"(?:\+?84|0)?[3-9][\d.\-\s()]{7,18}")
 
 
 def collapse(value: Any) -> str:
@@ -105,6 +106,32 @@ def clean_phone(value: Any) -> str:
     if len(digits) == 9 and digits[:1] in "35789":
         return "0" + digits
     return ("+" + digits) if leading_plus and not digits.startswith("84") else digits
+
+
+def is_facebook_id_digits(value: Any) -> bool:
+    """UID Facebook 13–20 số, không phải SĐT 0xx/84xx."""
+    text = expand_scientific(collapse(value))
+    if not text:
+        return False
+    digits = "".join(character for character in text if character.isdigit())
+    if not (13 <= len(digits) <= 20) or digits.startswith("0") or digits.startswith("84"):
+        return False
+    return bool(re.fullmatch(r"\d{13,20}", text))
+
+
+def extract_phone(value: Any) -> str:
+    """Lấy số khách từ ô: số chuẩn, số thiếu/thừa chữ số, số lẫn chữ. Không lấy UID Facebook."""
+    text = expand_scientific(collapse(value))
+    if not text or is_facebook_id_digits(text):
+        return ""
+    phone = clean_phone(text)
+    if phone and not is_facebook_id_digits(phone):
+        return phone
+    for chunk in _PHONE_CHUNK.findall(text):
+        phone = clean_phone(chunk)
+        if phone and not is_facebook_id_digits(phone):
+            return phone
+    return ""
 
 
 def phone_lookup_keys(value: Any) -> list[str]:
@@ -271,15 +298,18 @@ def has_data(row: dict[str, str]) -> bool:
 
 
 def has_phone(row: dict[str, str]) -> bool:
-    return bool(clean_phone(row.get("phone") or ""))
+    raw = row.get("phone") or ""
+    phone = extract_phone(raw) or clean_phone(raw)
+    return bool(phone) and not is_facebook_id_digits(phone)
 
 
 def identity_keys(row: dict[str, str]) -> list[tuple[str, str]]:
-    """Chỉ gộp khi trùng số điện thoại. Không có số thì bỏ qua."""
-    phone = clean_phone(row.get("phone") or "")
-    if not phone:
+    """Chỉ gộp khi trùng số điện thoại. 0xx / 84xx / thiếu 0 là cùng một khách."""
+    raw = row.get("phone") or ""
+    phone = extract_phone(raw) or clean_phone(raw)
+    if not phone or is_facebook_id_digits(phone):
         return []
-    return [("phone", phone)]
+    return [("phone", key) for key in (phone_lookup_keys(phone) or [phone])]
 
 
 def _new_id() -> str:
@@ -520,9 +550,17 @@ def ingest_customers(
             if not has_phone(row):
                 skipped += 1
                 continue
+            phone = extract_phone(row.get("phone") or "") or clean_phone(row.get("phone") or "")
+            if not phone or is_facebook_id_digits(phone):
+                skipped += 1
+                continue
+            row["phone"] = phone
             kept += 1
-            phone = clean_phone(row.get("phone") or "")
-            pending_id = pending_phone.get(phone)
+            pending_id = ""
+            for key in phone_lookup_keys(phone) or [phone]:
+                pending_id = pending_phone.get(key) or ""
+                if pending_id:
+                    break
             if pending_id and pending_id in pending:
                 existing = [pending[pending_id]]
             else:
@@ -533,7 +571,8 @@ def ingest_customers(
                 pending_deletes.append(extra_id)
                 absorbed += 1
             pending[merged["id"]] = merged
-            pending_phone[phone] = merged["id"]
+            for key in phone_lookup_keys(merged.get("phone") or phone) or [phone]:
+                pending_phone[key] = merged["id"]
             if kind == "created":
                 created += 1
             elif kind == "updated":
@@ -598,13 +637,13 @@ def phones_from_text(text: str, limit: int = MAX_LOOKUP) -> tuple[list[str], dic
             continue
         raw += 1
         found: list[str] = []
-        whole = clean_phone(stripped)
-        if whole:
+        whole = extract_phone(stripped) or clean_phone(stripped)
+        if whole and not is_facebook_id_digits(whole):
             found.append(whole)
         for piece in _SPLIT_FIELDS.split(stripped):
             for token in piece.split():
-                phone = clean_phone(token)
-                if phone and phone not in found:
+                phone = extract_phone(token) or clean_phone(token)
+                if phone and not is_facebook_id_digits(phone) and phone not in found:
                     found.append(phone)
         if not found:
             invalid += 1
@@ -699,10 +738,7 @@ def _is_date_line(value: str) -> bool:
 
 
 def _is_uid_digits(value: str) -> bool:
-    text = collapse(value)
-    if not text or not text.isdigit() or clean_phone(text):
-        return False
-    return 5 <= len(text) <= 20
+    return is_facebook_id_digits(value)
 
 
 def _is_name_line(value: str) -> bool:
@@ -756,7 +792,9 @@ def repair_customer_row(row: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     if not _is_facebook_dump(current["name"], lines):
         return dict(row), False
     found_name = ""
-    found_phone = clean_phone(current["phone"])
+    found_phone = extract_phone(current["phone"]) or clean_phone(current["phone"])
+    if is_facebook_id_digits(found_phone):
+        found_phone = ""
     found_uid = clean_facebook_uid(current["facebookUid"])
     kept_address: list[str] = []
     past_gender = False
@@ -771,8 +809,8 @@ def repair_customer_row(row: dict[str, Any]) -> tuple[dict[str, Any], bool]:
             if uid and not found_uid:
                 found_uid = uid
             continue
-        phone = clean_phone(line)
-        if phone:
+        phone = extract_phone(line) or clean_phone(line)
+        if phone and not is_facebook_id_digits(phone) and not is_facebook_id_digits(line):
             if not found_phone:
                 found_phone = phone
             continue

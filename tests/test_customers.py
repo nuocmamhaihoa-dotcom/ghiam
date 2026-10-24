@@ -14,6 +14,9 @@ from control_plane.customers import (
     clean_facebook_uid,
     clean_phone,
     clean_tiktok_id,
+    extract_phone,
+    has_phone,
+    is_facebook_id_digits,
     phone_lookup_keys,
     expand_scientific,
     fold_customers,
@@ -39,6 +42,8 @@ from control_plane.excel_import import (
     rows_from_table,
     write_xlsx,
     write_xlsx_sheets,
+    write_xlsx_to_path,
+    _usable_mapped_phone,
 )
 from control_plane.settings import settings
 
@@ -56,6 +61,24 @@ class CustomerCleanTests(unittest.TestCase):
         self.assertIn("0901234567", phone_lookup_keys("84901234567"))
         self.assertIn("84901234567", phone_lookup_keys("0901234567"))
         self.assertIn("0901234567", phone_lookup_keys("901234567"))
+
+    def test_extract_phone_keeps_short_and_skips_facebook(self) -> None:
+        self.assertEqual(extract_phone("0901222333"), "0901222333")
+        self.assertEqual(extract_phone("901222333"), "0901222333")
+        self.assertEqual(extract_phone("901222333.0"), "0901222333")
+        self.assertEqual(extract_phone("LH: 0901 222 333 gặp chiều"), "0901222333")
+        self.assertEqual(extract_phone("09012223331"), "09012223331")
+        self.assertEqual(extract_phone("1000123456789"), "")
+        self.assertEqual(extract_phone("1.000123456789e+12"), "")
+        self.assertFalse(is_facebook_id_digits("0901222333"))
+        self.assertFalse(is_facebook_id_digits("901222333"))
+        self.assertFalse(is_facebook_id_digits("10001"))
+        self.assertFalse(is_facebook_id_digits("09012223331"))
+        self.assertTrue(is_facebook_id_digits("1000123456789"))
+        self.assertTrue(has_phone({"phone": "09012223331"}))
+        self.assertTrue(has_phone({"phone": "901222333"}))
+        self.assertFalse(has_phone({"phone": "1000123456789"}))
+        self.assertFalse(has_phone({"phone": "1.000123456789e+12"}))
 
     def test_facebook_uid_from_url_and_scientific(self) -> None:
         self.assertEqual(clean_facebook_uid("https://www.facebook.com/profile.php?id=1000123456789"), "1000123456789")
@@ -133,6 +156,22 @@ class CustomerMergeTests(unittest.TestCase):
         self.assertEqual(same_stats["unchanged"], 1)
         self.assertEqual(same_stats["updated"], 0)
         self.assertEqual(same[0]["address"], "Hà Nội\nSài Gòn")
+
+    def test_same_phone_84_and_0_in_one_batch_merge(self) -> None:
+        folded, stats, _removed = fold_customers(
+            [],
+            [
+                {"name": "Lan", "phone": "0901222333", "address": "Huế"},
+                {"name": "Tên khác", "phone": "84901222333", "address": "Đà Nẵng"},
+            ],
+            "2026-01-01T00:00:00+00:00",
+        )
+        self.assertEqual(stats["created"], 1)
+        self.assertEqual(stats["skipped"], 0)
+        self.assertEqual(len(folded), 1)
+        self.assertEqual(folded[0]["name"], "Lan")
+        self.assertEqual(folded[0]["phone"], "0901222333")
+        self.assertEqual(folded[0]["address"], "Huế\nĐà Nẵng")
 
     def test_same_name_different_phones_stay_apart(self) -> None:
         folded, stats, _removed = fold_customers(
@@ -643,6 +682,37 @@ class IngestSqlTests(unittest.TestCase):
         self.assertEqual(minh[0]["phone"], "0352548360")
         self.assertEqual(minh[0]["address"], "Nha Trang\nQuy Nhơn")
 
+    def test_ingest_same_batch_84_and_0_merge(self) -> None:
+        now = "2026-01-01T00:00:00+00:00"
+        stats, _preview = ingest_customers(
+            self.db_path,
+            iter(
+                [
+                    {"name": "Lan", "phone": "0901222333", "address": "Huế"},
+                    {"name": "Tên khác", "phone": "84901222333", "address": "Đà Nẵng"},
+                    {"name": "Minh", "phone": "0352548360", "address": "Nha Trang"},
+                    {"name": "", "phone": "00352548360", "address": "Quy Nhơn"},
+                    {"name": "UID", "phone": "1000123456789", "address": "Bỏ"},
+                ]
+            ),
+            now,
+        )
+        self.assertEqual(stats["created"], 2)
+        self.assertEqual(stats["total"], 2)
+        self.assertGreaterEqual(stats["skipped"], 1)
+        conn = db.connect(self.db_path)
+        try:
+            lan = db.customers_by_phone(conn, "84901222333")
+            minh = db.customers_by_phone(conn, "0352548360")
+        finally:
+            conn.close()
+        self.assertEqual(len(lan), 1)
+        self.assertEqual(lan[0]["name"], "Lan")
+        self.assertEqual(lan[0]["address"], "Huế\nĐà Nẵng")
+        self.assertEqual(len(minh), 1)
+        self.assertEqual(minh[0]["name"], "Minh")
+        self.assertEqual(minh[0]["address"], "Nha Trang\nQuy Nhơn")
+
 
 class PhoneOnRowTests(unittest.TestCase):
     def test_phone_from_row_cells_skips_facebook_uid(self) -> None:
@@ -682,6 +752,9 @@ class PhoneOnRowTests(unittest.TestCase):
         self.assertEqual(phone_from_cell("LH: 0901.222.333 gặp chiều"), "0901222333")
         self.assertEqual(phone_from_cell("100007416894544"), "")
         self.assertEqual(phone_from_cell("84901444555"), "0901444555")
+        self.assertEqual(_usable_mapped_phone("1000123456789"), "")
+        self.assertEqual(_usable_mapped_phone("1.000123456789e+12"), "")
+        self.assertEqual(_usable_mapped_phone("0901222333"), "0901222333")
 
 
 class CompleteRowImportTests(unittest.TestCase):
@@ -825,6 +898,24 @@ class CompleteRowImportTests(unittest.TestCase):
         incoming, reports = rows_from_files([("danh-ba.csv", text.encode("utf-8"))], mapping)
         self.assertEqual(reports[0]["rows"], 2)
         self.assertEqual({row["phone"] for row in incoming}, {"0901111111", "0902222222"})
+
+    def test_write_xlsx_to_path_splits_sheets_and_streams(self) -> None:
+        dest = Path(self.folder.name) / "kho.xlsx"
+        rows = [[f"K{index}", f"0901{index:06d}", "Huế"] for index in range(5)]
+        write_xlsx_to_path(["Tên", "SĐT", "Địa chỉ"], rows, dest, sheet_rows=2)
+        self.assertTrue(dest.exists())
+        self.assertGreater(dest.stat().st_size, 200)
+        with zipfile.ZipFile(dest) as archive:
+            sheets = [name for name in archive.namelist() if name.startswith("xl/worksheets/")]
+            self.assertEqual(len(sheets), 3)
+            workbook = archive.read("xl/workbook.xml").decode("utf-8")
+            self.assertIn("Khach", workbook)
+            self.assertIn("Khach 2", workbook)
+            self.assertIn("Khach 3", workbook)
+            first = archive.read("xl/worksheets/sheet1.xml").decode("utf-8")
+            self.assertIn("K0", first)
+            self.assertIn("K1", first)
+            self.assertNotIn("K2", first)
 
     def test_headerless_second_sheet_is_not_dropped_by_combine(self) -> None:
         combined = _combine_sheets(

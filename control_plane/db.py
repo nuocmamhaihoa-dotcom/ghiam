@@ -783,6 +783,20 @@ def list_customers(db_path: Path, limit: int | None = None) -> list[dict[str, st
     return [customer_from_sql_row(row) for row in rows]
 
 
+def iter_customers(db_path: Path, chunk: int = 500) -> Iterator[dict[str, str]]:
+    """Đọc kho từng lô. Không tải 1,3 triệu dòng vào RAM cùng lúc."""
+    sql = _CUSTOMER_SELECT + " ORDER BY updated_at DESC, created_at DESC"
+    size = max(50, int(chunk))
+    with session(db_path) as conn:
+        cursor = conn.execute(sql)
+        while True:
+            rows = cursor.fetchmany(size)
+            if not rows:
+                break
+            for row in rows:
+                yield customer_from_sql_row(row)
+
+
 def customers_by_phone(conn: sqlite3.Connection, phone: str) -> list[dict[str, str]]:
     if not phone:
         return []

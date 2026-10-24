@@ -32,8 +32,10 @@ from control_plane.customers import (
     clean_row,
     collapse,
     expand_scientific,
+    extract_phone,
     has_data,
     has_phone,
+    is_facebook_id_digits,
     join_address_lines,
 )
 from control_plane.vietnam_places import fold_vietnamese
@@ -45,7 +47,7 @@ SAMPLE_ROWS = 8
 DETECT_ROWS = 200
 PREVIEW_STORE = SAMPLE_ROWS + DETECT_ROWS + 1
 _COL_REF = re.compile(r"^([A-Z]+)(\d+)$")
-_PHONE_CHUNK = re.compile(r"(?:\+?84|0)?[3-9][\d.\-\s()]{7,18}")
+EXCEL_SHEET_ROWS = 1_000_000
 
 FIELD_LABELS = {
     "name": "Tên khách",
@@ -772,13 +774,43 @@ def _chosen_mapping_for_file(mapping: dict[str, Any], filename: str) -> dict[str
     return _field_mapping_only(mapping)
 
 
+def _read_first_xlsx_sheet(data: TableSource, max_store: int | None = None) -> tuple[list[list[str]], int]:
+    archive = None
+    shared = SharedStringStore()
+    rows: list[list[str]] = []
+    total = 0
+    try:
+        archive = _open_xlsx(data)
+        if "xl/sharedStrings.xml" in archive.namelist():
+            with archive.open("xl/sharedStrings.xml") as handle:
+                _fill_shared_strings(handle, shared)
+        paths = _sheet_paths(archive)
+        if not paths:
+            return [], 0
+        with archive.open(paths[0]) as handle:
+            for row in _iter_sheet_rows(handle, shared):
+                total += 1
+                if max_store is None or len(rows) < max_store:
+                    rows.append(row)
+        return rows, total
+    except (zipfile.BadZipFile, KeyError, ET.ParseError, OSError):
+        return _read_xlsx(data, max_store=max_store)
+    finally:
+        shared.close()
+        if archive is not None:
+            archive.close()
+
+
 def mapping_for_file(
     mapping: dict[str, Any],
     filename: str,
     data: TableSource,
 ) -> dict[str, Any]:
     """Mỗi file tự khớp cột. Chỉ lấy lựa chọn tay khi trùng tên tiêu đề của file đó."""
-    stored, _total = _read_table(filename, data, max_store=PREVIEW_STORE)
+    if _is_xlsx_source(filename, data):
+        stored, _total = _read_first_xlsx_sheet(data, max_store=PREVIEW_STORE)
+    else:
+        stored, _total = _read_table(filename, data, max_store=PREVIEW_STORE)
     rows = _trim_table(stored)
     if not rows:
         return _chosen_mapping_for_file(mapping, filename)
@@ -884,25 +916,8 @@ def _header_signature(headers: list[str]) -> str:
 
 
 def phone_from_cell(value: str) -> str:
-    """Lấy số Việt trong ô: cả ô, hoặc số lẫn trong chữ. Không lấy UID Facebook."""
-    text = expand_scientific(collapse(value))
-    if not text:
-        return ""
-    if looks_like_facebook_uid(text) and not looks_like_vn_phone(text):
-        return ""
-    if looks_like_vn_phone(text):
-        phone = clean_phone(text)
-        if phone:
-            return phone
-    for chunk in _PHONE_CHUNK.findall(text):
-        if looks_like_vn_phone(chunk):
-            phone = clean_phone(chunk)
-            if phone:
-                return phone
-        phone = clean_phone(chunk)
-        if phone and looks_like_vn_phone(phone):
-            return phone
-    return ""
+    """Lấy số khách trong ô: cả ô, hoặc số lẫn trong chữ. Không lấy UID Facebook."""
+    return extract_phone(value)
 
 
 def _usable_mapped_phone(value: str) -> str:
@@ -910,10 +925,9 @@ def _usable_mapped_phone(value: str) -> str:
     if extracted:
         return extracted
     phone = clean_phone(value)
-    if not phone:
+    if not phone or is_facebook_id_digits(phone) or is_facebook_id_digits(value):
         return ""
-    digits = "".join(character for character in phone if character.isdigit())
-    if looks_like_facebook_uid(value) and len(digits) >= 14:
+    if looks_like_facebook_uid(value):
         return ""
     return phone
 
@@ -1264,37 +1278,43 @@ def rows_from_files(
     return incoming, reports
 
 
-def write_xlsx_sheets(sheets: list[tuple[str, list[list[str]]]]) -> bytes:
-    """Nhiều sheet. Mỗi sheet là toàn bộ dòng (gồm tiêu đề nếu có)."""
+def _xlsx_escape(value: str) -> str:
+    return (
+        str(value or "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
 
-    def xml_escape(value: str) -> str:
-        return (
-            str(value or "")
-            .replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace('"', "&quot;")
-        )
 
-    def cell_xml(column: int, row_number: int, value: str) -> str:
-        return (
-            f'<c r="{column_letter(column)}{row_number}" t="inlineStr">'
-            f'<is><t xml:space="preserve">{xml_escape(value)}</t></is></c>'
-        )
+def _xlsx_cell(column: int, row_number: int, value: str) -> str:
+    return (
+        f'<c r="{column_letter(column)}{row_number}" t="inlineStr">'
+        f'<is><t xml:space="preserve">{_xlsx_escape(value)}</t></is></c>'
+    )
 
-    def sheet_xml(rows: list[list[str]]) -> str:
-        lines = [
-            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
-            '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>',
-        ]
-        for row_number, row in enumerate(rows, start=1):
-            cells = "".join(cell_xml(index, row_number, cell) for index, cell in enumerate(row))
-            lines.append(f'<row r="{row_number}">{cells}</row>')
-        lines.append("</sheetData></worksheet>")
-        return "\n".join(lines)
 
+def _xlsx_row_xml(row_number: int, row: Iterable[str]) -> str:
+    cells = "".join(_xlsx_cell(index, row_number, cell) for index, cell in enumerate(row))
+    return f'<row r="{row_number}">{cells}</row>\n'
+
+
+def _xlsx_sheet_header() -> str:
+    return (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        "<sheetData>\n"
+    )
+
+
+def _xlsx_sheet_footer() -> str:
+    return "</sheetData></worksheet>\n"
+
+
+def _xlsx_pack(dest: Path | io.BytesIO, sheets: list[tuple[str, Path | str]]) -> None:
     if not sheets:
-        sheets = [("Khach", [])]
+        sheets = [("Khach", "")]
     overrides = [
         f'<Override PartName="/xl/worksheets/sheet{index}.xml" '
         'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
@@ -1316,8 +1336,8 @@ def write_xlsx_sheets(sheets: list[tuple[str, list[list[str]]]]) -> bytes:
 </Relationships>
 """
     sheet_nodes = "".join(
-        f'<sheet name="{xml_escape(name or f"Sheet{index}")}" sheetId="{index}" r:id="rId{index}"/>'
-        for index, (name, _rows) in enumerate(sheets, start=1)
+        f'<sheet name="{_xlsx_escape(name or f"Sheet{index}")}" sheetId="{index}" r:id="rId{index}"/>'
+        for index, (name, _body) in enumerate(sheets, start=1)
     )
     workbook = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
@@ -1337,19 +1357,88 @@ def write_xlsx_sheets(sheets: list[tuple[str, list[list[str]]]]) -> bytes:
         )
         + "</Relationships>\n"
     )
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+    with zipfile.ZipFile(dest, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("[Content_Types].xml", content_types)
         archive.writestr("_rels/.rels", rels)
         archive.writestr("xl/workbook.xml", workbook)
         archive.writestr("xl/_rels/workbook.xml.rels", workbook_rels)
-        for index, (_name, rows) in enumerate(sheets, start=1):
-            archive.writestr(f"xl/worksheets/sheet{index}.xml", sheet_xml(rows))
+        for index, (_name, body) in enumerate(sheets, start=1):
+            part = f"xl/worksheets/sheet{index}.xml"
+            if isinstance(body, Path):
+                archive.write(body, part)
+            else:
+                archive.writestr(part, body)
+
+
+def write_xlsx_sheets(sheets: list[tuple[str, list[list[str]]]]) -> bytes:
+    """Nhiều sheet. Mỗi sheet là toàn bộ dòng (gồm tiêu đề nếu có)."""
+    packed: list[tuple[str, str]] = []
+    for name, rows in sheets or [("Khach", [])]:
+        xml = [_xlsx_sheet_header()]
+        for row_number, row in enumerate(rows, start=1):
+            xml.append(_xlsx_row_xml(row_number, row))
+        xml.append(_xlsx_sheet_footer())
+        packed.append((name or "Khach", "".join(xml)))
+    buffer = io.BytesIO()
+    _xlsx_pack(buffer, packed)
     return buffer.getvalue()
 
 
 def write_xlsx(headers: list[str], rows: list[list[str]]) -> bytes:
     return write_xlsx_sheets([("Khach", [headers, *rows])])
+
+
+def write_xlsx_to_path(
+    headers: list[str],
+    rows: Iterable[list[str]],
+    dest: Path,
+    *,
+    sheet_rows: int = EXCEL_SHEET_ROWS,
+) -> Path:
+    """Ghi Excel ra đĩa từng dòng, chia sheet trước 1.048.576 dòng. Không giữ cả kho trong RAM."""
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    limit = max(1, int(sheet_rows))
+    header_row = [str(item or "") for item in headers]
+    with tempfile.TemporaryDirectory(prefix="kho-xlsx-") as tmp:
+        tmp_path = Path(tmp)
+        sheet_files: list[tuple[str, Path]] = []
+        sheet_index = 1
+        sheet_path = tmp_path / f"sheet{sheet_index}.xml"
+        handle = sheet_path.open("w", encoding="utf-8")
+        data_in_sheet = 0
+        row_number = 1
+        try:
+            handle.write(_xlsx_sheet_header())
+            handle.write(_xlsx_row_xml(row_number, header_row))
+
+            def close_sheet() -> None:
+                handle.write(_xlsx_sheet_footer())
+                handle.close()
+                name = "Khach" if sheet_index == 1 else f"Khach {sheet_index}"
+                sheet_files.append((name, sheet_path))
+
+            for row in rows:
+                if data_in_sheet >= limit:
+                    close_sheet()
+                    sheet_index += 1
+                    sheet_path = tmp_path / f"sheet{sheet_index}.xml"
+                    handle = sheet_path.open("w", encoding="utf-8")
+                    data_in_sheet = 0
+                    row_number = 1
+                    handle.write(_xlsx_sheet_header())
+                    handle.write(_xlsx_row_xml(row_number, header_row))
+                row_number += 1
+                data_in_sheet += 1
+                handle.write(_xlsx_row_xml(row_number, [str(cell or "") for cell in row]))
+            if not handle.closed:
+                close_sheet()
+        except Exception:
+            if not handle.closed:
+                handle.close()
+            raise
+        _xlsx_pack(dest, sheet_files)
+    return dest
 
 
 def phones_from_files(files: Iterable[tuple[str, TableSource]]) -> tuple[list[str], list[dict[str, Any]]]:

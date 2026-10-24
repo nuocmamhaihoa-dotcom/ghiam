@@ -38,6 +38,9 @@ class CellSignalTests(unittest.TestCase):
         self.assertTrue(looks_like_facebook_uid("https://www.facebook.com/profile.php?id=1000123456789"))
         self.assertFalse(looks_like_facebook_uid("0901222333"))
         self.assertFalse(looks_like_facebook_uid("Nguyễn Lan"))
+        self.assertFalse(looks_like_facebook_uid("10001"))
+        self.assertFalse(looks_like_facebook_uid("100012345"))
+        self.assertFalse(looks_like_facebook_uid("09012223331"))
 
     def test_tiktok_needs_at_sign(self) -> None:
         self.assertTrue(looks_like_tiktok_id("@lan.hue"))
