@@ -1,4 +1,4 @@
-"""Gộp khách trùng: điền ô trống, địa chỉ mới thay địa chỉ cũ."""
+"""Gộp khách trùng: điền ô trống, thông tin khác thêm dòng trong cùng ô."""
 
 from __future__ import annotations
 
@@ -148,8 +148,8 @@ class CustomerMergeTests(unittest.TestCase):
             "2026-01-02T00:00:00+00:00",
         )
         self.assertEqual(stats["updated"], 1)
-        self.assertEqual(again[0]["name"], "Nguyễn A")
-        self.assertEqual(again[0]["address"], "Sài Gòn")
+        self.assertEqual(again[0]["name"], "Nguyễn A\nTên khác")
+        self.assertEqual(again[0]["address"], "Hà Nội\nSài Gòn")
         self.assertEqual(again[0]["facebookUid"], "1")
         same, same_stats, _removed = fold_customers(
             again,
@@ -158,15 +158,53 @@ class CustomerMergeTests(unittest.TestCase):
         )
         self.assertEqual(same_stats["unchanged"], 1)
         self.assertEqual(same_stats["updated"], 0)
-        self.assertEqual(same[0]["address"], "Sài Gòn")
-        replaced, replaced_stats, _removed = fold_customers(
+        self.assertEqual(same[0]["name"], "Nguyễn A\nTên khác")
+        self.assertEqual(same[0]["address"], "Hà Nội\nSài Gòn")
+        added, added_stats, _removed = fold_customers(
             same,
-            [{"name": "Tên khác", "phone": "0901234567", "address": "Hà Nội"}],
+            [{"name": "Tên khác", "phone": "0901234567", "address": "Đà Nẵng"}],
             "2026-01-04T00:00:00+00:00",
         )
-        self.assertEqual(replaced_stats["updated"], 1)
-        self.assertEqual(replaced[0]["name"], "Nguyễn A")
-        self.assertEqual(replaced[0]["address"], "Hà Nội")
+        self.assertEqual(added_stats["updated"], 1)
+        self.assertEqual(added[0]["name"], "Nguyễn A\nTên khác")
+        self.assertEqual(added[0]["address"], "Hà Nội\nSài Gòn\nĐà Nẵng")
+
+    def test_later_import_appends_cod_and_fills_blank_fields(self) -> None:
+        stored, _stats, _removed = fold_customers(
+            [],
+            [{"name": "Lan", "phone": "0901555666", "codAmount": "230k", "facebookUid": "100"}],
+            "2026-01-01T00:00:00+00:00",
+        )
+        again, stats, _removed = fold_customers(
+            stored,
+            [
+                {
+                    "name": "Lan",
+                    "phone": "0901555666",
+                    "codAmount": "120000",
+                    "facebookUid": "100",
+                    "tiktokId": "@ban.gach",
+                    "address": "Huế",
+                }
+            ],
+            "2026-01-02T00:00:00+00:00",
+        )
+        self.assertEqual(stats["updated"], 1)
+        self.assertEqual(again[0]["name"], "Lan")
+        self.assertEqual(again[0]["codAmount"], "230000\n120000")
+        self.assertEqual(again[0]["facebookUid"], "100")
+        self.assertEqual(again[0]["tiktokId"], "ban.gach")
+        self.assertEqual(again[0]["address"], "Huế")
+        same, same_stats, _removed = fold_customers(
+            again,
+            [{"phone": "0901555666", "codAmount": "230000", "tiktokId": "ban.gach", "address": ""}],
+            "2026-01-03T00:00:00+00:00",
+        )
+        self.assertEqual(same_stats["unchanged"], 1)
+        self.assertEqual(same_stats["updated"], 0)
+        self.assertEqual(same[0]["codAmount"], "230000\n120000")
+        self.assertEqual(same[0]["address"], "Huế")
+        self.assertEqual(same[0]["tiktokId"], "ban.gach")
 
     def test_blank_address_keeps_stored_and_admin_still_appends(self) -> None:
         stored = [
@@ -197,7 +235,10 @@ class CustomerMergeTests(unittest.TestCase):
             "2026-01-03T00:00:00+00:00",
         )
         self.assertEqual(replaced_stats["updated"], 1)
-        self.assertEqual(replaced[0]["address"], "12 Nguyễn Huệ, P.Bến Nghé, TP.HCM")
+        self.assertEqual(
+            replaced[0]["address"],
+            "12 Lê Lợi\nQuận 1\nTP.HCM\n12 Nguyễn Huệ, P.Bến Nghé, TP.HCM",
+        )
         self.assertEqual(replaced[0]["adminAddress"], "Phường 1\nQuận 1")
 
     def test_absorbed_stored_addresses_are_composed(self) -> None:
@@ -226,7 +267,7 @@ class CustomerMergeTests(unittest.TestCase):
         self.assertEqual(stats["updated"], 1)
         self.assertEqual(len(folded), 1)
         self.assertEqual(folded[0]["phone"], "0901111111")
-        self.assertEqual(folded[0]["address"], "12 Lê Lợi, Quận 1, TP.HCM")
+        self.assertEqual(folded[0]["address"], "12 Lê Lợi\nQuận 1\nTP.HCM")
         self.assertEqual(removed, ["b"])
 
     def test_same_phone_84_and_0_in_one_batch_merge(self) -> None:
@@ -241,9 +282,9 @@ class CustomerMergeTests(unittest.TestCase):
         self.assertEqual(stats["created"], 1)
         self.assertEqual(stats["skipped"], 0)
         self.assertEqual(len(folded), 1)
-        self.assertEqual(folded[0]["name"], "Lan")
+        self.assertEqual(folded[0]["name"], "Lan\nTên khác")
         self.assertEqual(folded[0]["phone"], "0901222333")
-        self.assertEqual(folded[0]["address"], "Đà Nẵng")
+        self.assertEqual(folded[0]["address"], "Huế\nĐà Nẵng")
 
     def test_same_name_different_phones_stay_apart(self) -> None:
         folded, stats, _removed = fold_customers(
@@ -270,7 +311,8 @@ class CustomerMergeTests(unittest.TestCase):
         self.assertEqual(len(folded), 1)
         self.assertEqual(stats["created"], 1)
         self.assertEqual(folded[0]["phone"], "0338174222")
-        self.assertEqual(folded[0]["name"], "Sơn")
+        self.assertEqual(folded[0]["name"], "Sơn\nsơn(hg)")
+        self.assertEqual(folded[0]["address"], "Đà Nẵng\nHà Nội")
 
     def test_rows_without_phone_are_skipped(self) -> None:
         folded, stats, _removed = fold_customers(
@@ -827,13 +869,13 @@ class IngestSqlTests(unittest.TestCase):
         finally:
             conn.close()
         self.assertEqual(len(lan), 1)
-        self.assertEqual(lan[0]["name"], "Lan")
-        self.assertEqual(lan[0]["address"], "Đà Nẵng")
+        self.assertEqual(lan[0]["name"], "Lan\nTên khác")
+        self.assertEqual(lan[0]["address"], "Huế\nĐà Nẵng")
         self.assertEqual(lan[0]["codAmount"], "120000")
         self.assertEqual(len(minh), 1)
         self.assertEqual(minh[0]["name"], "Minh")
         self.assertEqual(minh[0]["phone"], "0352548360")
-        self.assertEqual(minh[0]["address"], "Quy Nhơn")
+        self.assertEqual(minh[0]["address"], "Nha Trang\nQuy Nhơn")
 
     def test_ingest_same_batch_84_and_0_merge(self) -> None:
         now = "2026-01-01T00:00:00+00:00"
@@ -860,11 +902,11 @@ class IngestSqlTests(unittest.TestCase):
         finally:
             conn.close()
         self.assertEqual(len(lan), 1)
-        self.assertEqual(lan[0]["name"], "Lan")
-        self.assertEqual(lan[0]["address"], "Đà Nẵng")
+        self.assertEqual(lan[0]["name"], "Lan\nTên khác")
+        self.assertEqual(lan[0]["address"], "Huế\nĐà Nẵng")
         self.assertEqual(len(minh), 1)
         self.assertEqual(minh[0]["name"], "Minh")
-        self.assertEqual(minh[0]["address"], "Quy Nhơn")
+        self.assertEqual(minh[0]["address"], "Nha Trang\nQuy Nhơn")
 
 
 class PhoneOnRowTests(unittest.TestCase):

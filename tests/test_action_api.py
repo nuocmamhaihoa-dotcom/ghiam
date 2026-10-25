@@ -31,12 +31,17 @@ def tearDownModule() -> None:
 
 class ActionApiTests(unittest.TestCase):
     def setUp(self) -> None:
+        self._prev_video = (settings.video_db_path, settings.video_dir)
+        settings.video_db_path = Path(_TMP) / "video.db"
+        settings.video_dir = Path(_TMP) / "videos"
+        settings.video_dir.mkdir(parents=True, exist_ok=True)
         self._client_cm = TestClient(app)
         self.client = self._client_cm.__enter__()
         self.headers = {"Authorization": "Bearer test-token"}
 
     def tearDown(self) -> None:
         self._client_cm.__exit__(None, None, None)
+        settings.video_db_path, settings.video_dir = self._prev_video
 
     def test_requires_token(self) -> None:
         response = self.client.get("/v1/actions")

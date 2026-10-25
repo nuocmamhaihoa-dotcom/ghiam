@@ -108,7 +108,7 @@ class AccountApiTests(unittest.TestCase):
         self.assertIn("Hạn mức tra cứu", home.text)
         self.assertIn("boot()", home.text)
         self.assertIn('var serverToken = "";', home.text)
-        self.assertIn("20261025e", home.text)
+        self.assertIn("20261025f", home.text)
         self.assertIn("min-width: 1100px", home.text)
         self.assertIn("Cách nạp kho và tra cứu", home.text)
         self.assertNotIn("page-token", home.text)

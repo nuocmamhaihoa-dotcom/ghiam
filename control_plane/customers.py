@@ -1,6 +1,7 @@
-"""Kho khách: chuẩn hoá, nhận diện trùng, bổ sung ô trống.
+"""Kho khách: chuẩn hoá, nhận diện trùng theo số điện thoại, bổ sung ô trống.
 
-Địa chỉ mới thay địa chỉ cũ. Ô khác đã có thì giữ, ô trống thì điền thêm.
+Cùng số điện thoại là một khách. Ô trống được điền. Thông tin khác thì giữ
+dòng cũ và thêm dòng mới bên dưới trong cùng ô. Trùng thì không thêm lại.
 """
 
 from __future__ import annotations
@@ -78,8 +79,26 @@ def expand_scientific(value: str) -> str:
 
 
 def clean_name(value: Any) -> str:
-    text = collapse(value)
-    return text if len(text) <= 120 else text[:120].rstrip()
+    text = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
+    if "\n" not in text:
+        collapsed = collapse(text)
+        return collapsed if len(collapsed) <= 120 else collapsed[:120].rstrip()
+    lines: list[str] = []
+    seen: set[str] = set()
+    for raw in text.split("\n"):
+        line = collapse(raw)
+        if not line:
+            continue
+        if len(line) > 120:
+            line = line[:120].rstrip()
+        key = line.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        lines.append(line)
+        if len(lines) >= 24:
+            break
+    return "\n".join(lines)
 
 
 def name_key(value: str) -> str:
@@ -277,14 +296,14 @@ def split_address_lines(value: Any) -> list[str]:
         line = " ".join(raw.split())
         if not line:
             continue
-        if len(line) > 200:
-            line = line[:200].rstrip()
+        if len(line) > 400:
+            line = line[:400].rstrip()
         key = line.casefold() if line.isascii() else unicodedata.normalize("NFC", line).casefold()
         if key in seen:
             continue
         seen.add(key)
         lines.append(line)
-        if len(lines) >= 12:
+        if len(lines) >= 24:
             break
     return lines
 
@@ -293,8 +312,54 @@ def join_address_lines(*parts: Any) -> str:
     return "\n".join(split_address_lines("\n".join(str(part or "") for part in parts)))
 
 
+_LINE_CAP = 24
+
+
+def _line_key(line: str) -> str:
+    if line.isascii():
+        return line.casefold()
+    return unicodedata.normalize("NFC", line).casefold()
+
+
+def _plain_lines(value: Any) -> list[str]:
+    text = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
+    lines: list[str] = []
+    seen: set[str] = set()
+    for raw in text.split("\n"):
+        line = " ".join(raw.split())
+        if not line:
+            continue
+        key = _line_key(line)
+        if key in seen:
+            continue
+        seen.add(key)
+        lines.append(line)
+    return lines
+
+
+def append_distinct_lines(current: str, new: str, limit: int = _LINE_CAP) -> str:
+    """Giữ nguyên dòng cũ. Dòng mới khác thì thêm bên dưới trong cùng ô. Trùng thì bỏ."""
+    if not str(new or "").strip():
+        return current
+    lines = _plain_lines(current)
+    seen = {_line_key(line) for line in lines}
+    added = False
+    for line in _plain_lines(new):
+        key = _line_key(line)
+        if key in seen:
+            continue
+        if len(lines) >= limit:
+            break
+        seen.add(key)
+        lines.append(line)
+        added = True
+    if not added:
+        return current
+    return "\n".join(lines)
+
+
 def clean_address(value: Any) -> str:
-    """Một dòng địa chỉ giữ đến 400 ký tự. Nhiều dòng thì tối đa 12 dòng × 200 ký tự."""
+    """Một dòng địa chỉ giữ đến 400 ký tự. Nhiều dòng thì tối đa 24 dòng, mỗi dòng 400 ký tự."""
     if not value:
         return ""
     text = str(value).replace("\r\n", "\n").replace("\r", "\n")
@@ -378,7 +443,27 @@ def _cod_number(text: str) -> str:
         return ""
 
 
-def clean_cod_amount(value: Any) -> str:
+def _clean_each_line(value: Any, cleaner: Any) -> str:
+    text = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
+    if "\n" not in text:
+        return cleaner(value)
+    lines: list[str] = []
+    seen: set[str] = set()
+    for raw in text.split("\n"):
+        line = cleaner(raw)
+        if not line:
+            continue
+        key = line.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        lines.append(line)
+        if len(lines) >= 24:
+            break
+    return "\n".join(lines)
+
+
+def _clean_one_cod_amount(value: Any) -> str:
     text = collapse(value)
     if not text:
         return ""
@@ -403,7 +488,11 @@ def clean_cod_amount(value: Any) -> str:
     return str(int(digits))
 
 
-def clean_facebook_uid(value: Any) -> str:
+def clean_cod_amount(value: Any) -> str:
+    return _clean_each_line(value, _clean_one_cod_amount)
+
+
+def _clean_one_facebook_uid(value: Any) -> str:
     text = expand_scientific(collapse(value))
     if not text:
         return ""
@@ -421,11 +510,15 @@ def clean_facebook_uid(value: Any) -> str:
     return text[:80]
 
 
+def clean_facebook_uid(value: Any) -> str:
+    return _clean_each_line(value, _clean_one_facebook_uid)
+
+
 def facebook_key(value: str) -> str:
     return clean_facebook_uid(value).casefold()
 
 
-def clean_tiktok_id(value: Any) -> str:
+def _clean_one_tiktok_id(value: Any) -> str:
     text = expand_scientific(collapse(value))
     if not text:
         return ""
@@ -437,6 +530,10 @@ def clean_tiktok_id(value: Any) -> str:
             text = parts[0]
     text = text.lstrip("@")
     return text[:80]
+
+
+def clean_tiktok_id(value: Any) -> str:
+    return _clean_each_line(value, _clean_one_tiktok_id)
 
 
 def tiktok_key(value: str) -> str:
@@ -540,28 +637,27 @@ class _UnionFind:
         self.rank[root_left] += 1
 
 
+def _incoming_address_line(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return arranged_address(text) or text
+
+
 def _pick(members: list[dict[str, Any]], field: str) -> str:
-    if field == "address":
-        incoming = [str(row.get(field) or "") for row in members if not row["existing"] and row.get(field)]
-        for text in reversed(incoming):
-            arranged = arranged_address(text)
-            if arranged:
-                return arranged
-        existing = [str(row.get(field) or "") for row in members if row["existing"] and row.get(field)]
-        if len(existing) <= 1:
-            return existing[0] if existing else ""
-        return compose_address([(index, "", text) for index, text in enumerate(existing)]) or existing[0]
-    if field in LINE_FIELDS:
-        existing = [str(row.get(field) or "") for row in members if row["existing"] and row.get(field)]
-        incoming = [str(row.get(field) or "") for row in members if not row["existing"] and row.get(field)]
-        return join_address_lines(*existing, *incoming)
-    for row in members:
-        if row["existing"] and row.get(field):
-            return str(row[field])
-    for row in members:
-        if not row["existing"] and row.get(field):
-            return str(row[field])
-    return ""
+    ordered = [row for row in members if row["existing"]] + [row for row in members if not row["existing"]]
+    if field == "phone":
+        for row in ordered:
+            if row.get(field):
+                return str(row[field])
+        return ""
+    value = ""
+    for row in ordered:
+        piece = str(row.get(field) or "")
+        if field == "address" and piece and not row["existing"]:
+            piece = _incoming_address_line(piece)
+        value = append_distinct_lines(value, piece)
+    return value
 
 
 def _merge_group(members: list[dict[str, Any]], now: str) -> dict[str, Any]:
@@ -597,10 +693,9 @@ def fold_customers(
 ) -> tuple[list[dict[str, Any]], dict[str, int], list[str]]:
     """Ghép khách mới vào kho khi trùng số điện thoại.
 
-    Một số điện thoại là một hàng. Ô trống được bổ sung. Địa chỉ mới thay
-    địa chỉ cũ; ô địa chỉ trống thì giữ địa chỉ đang có. Hàng mua và địa chỉ
-    hành chính mới thêm dòng. Ô đã có mà không đổi thì giữ nguyên.
-    Không có số điện thoại thì bỏ qua, không lưu.
+    Một số điện thoại là một hàng. Ô trống được điền. Thông tin khác mà khác
+    nhau thì giữ dòng cũ và thêm dòng mới bên dưới trong cùng ô. Trùng thì
+    không thêm. Không có số điện thoại thì bỏ qua, không lưu.
     """
     kept_incoming: list[dict[str, Any]] = []
     skipped = 0
@@ -677,8 +772,8 @@ def _merge_one(
 ) -> tuple[dict[str, Any], list[str], str]:
     """Một khách sẵn có + một dòng đã làm sạch.
 
-    Ô trống điền thêm. Địa chỉ mới thay địa chỉ cũ. Hàng mua và địa chỉ
-    hành chính mới nối thêm dòng. Ô đã có mà không đổi thì giữ.
+    Số điện thoại giữ nguyên. Ô trống được điền. Tên, địa chỉ và thông tin
+    khác nếu khác thì thêm một dòng bên dưới trong cùng ô.
     """
     merged: dict[str, Any] = {
         "id": str(current.get("id") or "") or _new_id(),
@@ -689,22 +784,15 @@ def _merge_one(
     for field in FIELDS:
         value = str(current.get(field) or "")
         new = incoming.get(field) or ""
-        if field == "address":
-            arranged = arranged_address(new) if new else ""
-            if arranged and arranged != value:
-                value = arranged
-                changed = True
-            merged[field] = value
+        if field == "phone":
+            merged[field] = value or new
             continue
-        if new and new != value:
-            if field in LINE_FIELDS:
-                joined = join_address_lines(value, new) if value else new
-                if joined != value:
-                    value = joined
-                    changed = True
-            elif not value:
-                value = new
-                changed = True
+        if field == "address":
+            new = _incoming_address_line(new)
+        merged_value = append_distinct_lines(value, new)
+        if merged_value != value:
+            value = merged_value
+            changed = True
         merged[field] = value
     merged["write"] = changed
     if changed:
@@ -721,7 +809,7 @@ def merge_existing_with_incoming(
 ) -> tuple[dict[str, Any], list[str], str]:
     """Ghép một dòng file vào các khách cùng SĐT.
 
-    Ô trống điền thêm. Địa chỉ mới thay địa chỉ cũ. Ô đã có không đổi thì giữ.
+    Ô trống điền thêm. Thông tin khác thì thêm dòng trong cùng ô. SĐT không đổi.
     """
     cleaned = incoming if incoming_clean else clean_row(incoming)
     if len(existing) == 1:

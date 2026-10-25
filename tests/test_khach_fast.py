@@ -289,13 +289,13 @@ class PhoneKeyTests(unittest.TestCase):
 
 class CleanTextTests(unittest.TestCase):
     def test_long_lines_are_cut_by_line_and_stay_stable(self) -> None:
-        lines = [f"Địa chỉ số {index} " + ("x" * 230) for index in range(14)]
+        lines = [f"Địa chỉ số {index} " + ("x" * 230) for index in range(26)]
         cleaned = clean_address("\n".join(lines))
         parts = cleaned.split("\n")
-        self.assertEqual(len(parts), 12)
-        self.assertTrue(all(len(part) <= 200 and part == part.strip() for part in parts))
+        self.assertEqual(len(parts), 24)
+        self.assertTrue(all(len(part) <= 400 and part == part.strip() for part in parts))
         self.assertEqual(clean_address(cleaned), cleaned)
-        self.assertEqual(split_address_lines("a" * 199 + " b"), ["a" * 199])
+        self.assertEqual(split_address_lines("a" * 399 + " b"), ["a" * 399])
 
     def test_cp1258_csv_after_ascii_head(self) -> None:
         def cp1258(text: str) -> bytes:
@@ -613,12 +613,12 @@ class IngestFastPathTests(unittest.TestCase):
             )
             stats, _preview = ingest_customers(path, rows, now, flush_every=50)
             self.assertEqual(stats["created"], 1)
-            self.assertEqual(stats["updated"], 1)
-            self.assertEqual(stats["unchanged"], 1)
+            self.assertEqual(stats["updated"], 2)
+            self.assertEqual(stats["unchanged"], 0)
             found = db.customers_for_phones(path, ["0901222333"])["0901222333"]
         self.assertEqual(len(found), 1)
-        self.assertEqual(found[0]["name"], "Lan")
-        self.assertEqual(found[0]["address"], "Đà Nẵng")
+        self.assertEqual(found[0]["name"], "Lan\nMinh")
+        self.assertEqual(found[0]["address"], "Huế\nĐà Nẵng")
 
 
 if __name__ == "__main__":
