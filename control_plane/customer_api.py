@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+import ctypes
 import gc
 import json
+import logging
+import os
 import re
 import shutil
 import sys
 import tempfile
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -55,6 +59,7 @@ from control_plane.settings import settings
 
 router = APIRouter()
 _heavy_lock = asyncio.Lock()
+_LOG = logging.getLogger(__name__)
 
 
 def _charge(actor: accounts.Actor, phones: list[str]) -> dict[str, Any]:
@@ -468,10 +473,11 @@ def _preview_uploaded(
             status_code=400,
             detail="Hãy chọn ít nhất một file Excel." + ((" " + " ".join(problems)) if problems else ""),
         )
+    count_rows = len(uploaded) <= 40
     previews: list[dict[str, Any]] = []
     for name, payload in uploaded:
         try:
-            previews.append(preview_table(name, payload))
+            previews.append(preview_table(name, payload, count_rows=count_rows))
         except ValueError as exc:
             problems.append(f"{name}: {exc}")
     if not previews:
@@ -524,7 +530,17 @@ def _preview_uploaded(
         "suggested": payload,
         "detectNote": detect_note,
         "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
-        "applyNote": "Mỗi file tự khớp cột theo tiêu đề của file đó. Không giới hạn số file và dung lượng. File nạp thành công được giữ lại trên đĩa. Nạp từng dòng, ghi từng lô vào SQLite, cộng vào kho, không xóa khách cũ. Khớp tên cột trước; nếu thiếu tên hoặc SĐT thì lấy cột có tên người / số điện thoại / địa chỉ. Cột giới tính, ngày sinh, link thì bỏ qua.",
+        "applyNote": (
+            "Mỗi file tự khớp cột theo tiêu đề của file đó. Không giới hạn số file và dung lượng. "
+            "File nạp thành công được giữ lại trên đĩa. Nạp từng dòng, ghi từng lô vào SQLite, cộng vào kho, không xóa khách cũ. "
+            "Khớp tên cột trước; nếu thiếu tên hoặc SĐT thì lấy cột có tên người / số điện thoại / địa chỉ. "
+            "Cột giới tính, ngày sinh, link thì bỏ qua."
+            + (
+                " Nhiều file nên chưa đếm hết số dòng trước khi nạp. Bấm nạp vẫn đọc từng file."
+                if not count_rows
+                else ""
+            )
+        ),
         "headerMismatch": different,
     }
 
@@ -698,6 +714,7 @@ def _import_files(
                     "completedFiles": file_index + 1,
                 }
             )
+        _release_memory()
     problems.extend(str(item.get("error") or "") for item in file_reports if item.get("error"))
     problems = [item for item in problems if item]
     if incoming_total == 0:
@@ -728,7 +745,7 @@ def _import_files(
         ),
         at=now,
     )
-    gc.collect()
+    _release_memory()
     return {
         "stats": stats,
         "files": file_reports,
@@ -769,12 +786,33 @@ def _resolve_uploads(raw: Any) -> list[tuple[str, Path]]:
         raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
 
 
+def _release_memory() -> None:
+    """Trả bộ nhớ về hệ thống sau mỗi file, để lần nạp dài không bị giết vì RSS chỉ tăng."""
+    gc.collect()
+    try:
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except Exception:
+        return
+
+
 def _import_job(
     context: khach_jobs.JobContext,
     uploaded: list[tuple[str, Path]],
     mapping_text: str,
     start_index: int = 0,
 ) -> dict[str, Any]:
+    start = max(0, int(start_index or 0))
+    context.report(
+        {
+            "phase": "waiting",
+            "fileIndex": start,
+            "completedFiles": start,
+            "fileCount": len(uploaded),
+            "file": uploaded[start][0] if uploaded and start < len(uploaded) else "",
+        },
+        force=True,
+    )
+
     def report(progress: dict[str, Any]) -> None:
         context.report(progress, force="completedFiles" in progress)
 
@@ -785,7 +823,7 @@ def _import_job(
             [],
             progress=report,
             link=True,
-            start_index=start_index,
+            start_index=start,
         )
 
 
@@ -884,13 +922,42 @@ def _as_int(value: Any) -> int:
         return 0
 
 
-def _resume_start(progress: Any) -> int:
-    """File tiếp theo. completedFiles là số file đã xong; không có thì fileIndex là file đang dở."""
-    if not isinstance(progress, dict):
-        return 0
+def _checkpoint(job: dict[str, Any]) -> int | None:
+    """Mốc file tiếp theo của một việc. Thiếu khóa thì không coi là 0."""
+    progress = job.get("progress") if isinstance(job.get("progress"), dict) else {}
+    info = job.get("info") if isinstance(job.get("info"), dict) else {}
+    points: list[int] = []
     if "completedFiles" in progress:
-        return _as_int(progress.get("completedFiles"))
-    return _as_int(progress.get("fileIndex"))
+        points.append(_as_int(progress.get("completedFiles")))
+    if "fileIndex" in progress and progress.get("fileIndex") is not None:
+        points.append(_as_int(progress.get("fileIndex")))
+    if "resumeFrom" in info and info.get("resumeFrom") is not None:
+        points.append(_as_int(info.get("resumeFrom")))
+    if not points:
+        return None
+    return max(points)
+
+
+def _best_start(job: dict[str, Any]) -> int:
+    """Mốc cao nhất trên cả chuỗi nối tiếp. Việc con đang chờ, chưa có tiến độ, không kéo về file 1."""
+    seen: set[str] = set()
+    best: int | None = None
+    current: dict[str, Any] | None = job
+    while current is not None:
+        job_id = str(current.get("id") or "")
+        if job_id and job_id in seen:
+            break
+        if job_id:
+            seen.add(job_id)
+        point = _checkpoint(current)
+        if point is not None:
+            best = point if best is None else max(best, point)
+        info = current.get("info") if isinstance(current.get("info"), dict) else {}
+        parent_id = str(info.get("resumeOf") or "")
+        if not parent_id or parent_id in seen:
+            break
+        current = khach_jobs.get_job(parent_id)
+    return 0 if best is None else best
 
 
 def _upload_ids(uploaded: list[tuple[str, Path]]) -> list[str]:
@@ -962,19 +1029,50 @@ def _resume_anchor(job_id: str) -> dict[str, Any]:
     return current
 
 
+def _file_at_best(job: dict[str, Any]) -> str:
+    """Tên file ở mốc cao nhất. Việc con đang chờ thường không có tên file."""
+    seen: set[str] = set()
+    best: int | None = None
+    label = ""
+    current: dict[str, Any] | None = job
+    while current is not None:
+        job_id = str(current.get("id") or "")
+        if job_id and job_id in seen:
+            break
+        if job_id:
+            seen.add(job_id)
+        point = _checkpoint(current)
+        progress = current.get("progress") if isinstance(current.get("progress"), dict) else {}
+        name = str(progress.get("file") or "")
+        if point is not None and (best is None or point >= best):
+            best = point
+            if name:
+                label = name
+        info = current.get("info") if isinstance(current.get("info"), dict) else {}
+        parent_id = str(info.get("resumeOf") or "")
+        if not parent_id or parent_id in seen:
+            break
+        current = khach_jobs.get_job(parent_id)
+    if label:
+        return label
+    progress = job.get("progress") if isinstance(job.get("progress"), dict) else {}
+    return str(progress.get("file") or "")
+
+
 def _paused_summary(job: dict[str, Any]) -> dict[str, Any]:
     progress = job.get("progress") if isinstance(job.get("progress"), dict) else {}
     info = job.get("info") if isinstance(job.get("info"), dict) else {}
     files = info.get("files") if isinstance(info.get("files"), list) else []
     uploads = info.get("uploads") if isinstance(info.get("uploads"), list) else []
     file_count = _as_int(progress.get("fileCount")) or len(files)
+    start = _best_start(job)
     return {
         "id": job.get("id"),
         "status": job.get("status"),
-        "file": str(progress.get("file") or ""),
-        "fileIndex": _as_int(progress.get("fileIndex")),
+        "file": _file_at_best(job),
+        "fileIndex": _as_int(progress.get("fileIndex")) if progress.get("fileIndex") is not None else start,
         "fileCount": file_count,
-        "resumeFrom": _resume_start(progress),
+        "resumeFrom": start,
         "incoming": _as_int(progress.get("incoming")),
         "canResume": bool(files or uploads),
     }
@@ -988,13 +1086,8 @@ def _child_id(job: dict[str, Any]) -> str:
     return khach_jobs.request_job_id(f"resume-{job.get('id')}") or ""
 
 
-@router.get("/v1/customers/imports/paused")
-def customers_imports_paused(
-    request: Request,
-    authorization: str | None = Header(default=None),
-) -> dict[str, Any]:
-    """Các lần nạp dừng giữa chừng. Không kèm danh sách file."""
-    _manager(_actor(request))
+def _paused_import_jobs() -> list[dict[str, Any]]:
+    """Lần nạp dừng mà chưa có lần nối tiếp mới hơn. Không kèm danh sách file."""
     found: list[dict[str, Any]] = []
     try:
         paths = list(khach_jobs.jobs_root().glob("*.json"))
@@ -1007,7 +1100,8 @@ def customers_imports_paused(
         if not job or job.get("kind") != "import":
             continue
         status = job.get("status")
-        if status == "interrupted" or (status == "error" and (job.get("info") or {}).get("resumeOf")):
+        info = job.get("info") if isinstance(job.get("info"), dict) else {}
+        if status == "interrupted" or (status == "error" and info.get("resumeOf")):
             found.append(job)
     known = {str(job.get("id") or "") for job in found}
     visible: list[dict[str, Any]] = []
@@ -1015,9 +1109,88 @@ def customers_imports_paused(
         child_id = _child_id(job)
         if child_id and child_id != str(job.get("id") or "") and (child_id in known or khach_jobs.get_job(child_id) is not None):
             continue
-        visible.append(_paused_summary(job))
+        visible.append(job)
+    return visible
+
+
+@router.get("/v1/customers/imports/paused")
+def customers_imports_paused(
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Các lần nạp dừng giữa chừng. Không kèm danh sách file."""
+    _manager(_actor(request))
+    visible = [_paused_summary(job) for job in _paused_import_jobs()]
     visible.sort(key=lambda item: (int(item.get("fileCount") or 0), str(item.get("id") or "")), reverse=True)
     return {"jobs": visible[:20]}
+
+
+def _begin_resume(job_id: str) -> dict[str, Any]:
+    """Tạo lần nối tiếp từ mốc cao nhất. Việc đang chạy thì trả về việc đó."""
+    anchor = _resume_anchor(job_id)
+    if anchor.get("status") in ("queued", "waiting", "running", "done"):
+        return anchor
+    uploaded = _files_for_job(anchor)
+    mapping_text = _mapping_text_for_job(anchor)
+    start = _best_start(anchor)
+    info = anchor.get("info") if isinstance(anchor.get("info"), dict) else {}
+    child_info = {
+        "files": [name for name, _path in uploaded],
+        "rows": _as_int(info.get("rows")),
+        "uploads": _upload_ids(uploaded),
+        "mapping": mapping_text,
+        "resumeOf": anchor["id"],
+        "resumeFrom": start,
+    }
+
+    def work(
+        context: khach_jobs.JobContext,
+        uploaded: list[tuple[str, Path]] = uploaded,
+        mapping_text: str = mapping_text,
+        start: int = start,
+    ) -> dict[str, Any]:
+        return _import_job(context, uploaded, mapping_text, start)
+
+    job = khach_jobs.start_job("import", f"resume-{anchor['id']}", work, child_info)
+    khach_jobs.remember_resume(str(anchor["id"]), str(job["id"]))
+    return job
+
+
+def _resume_sort_key(job: dict[str, Any]) -> tuple[int, float]:
+    progress = job.get("progress") if isinstance(job.get("progress"), dict) else {}
+    info = job.get("info") if isinstance(job.get("info"), dict) else {}
+    files = info.get("files") if isinstance(info.get("files"), list) else []
+    file_count = _as_int(progress.get("fileCount")) or len(files)
+    start = _best_start(job)
+    remaining = max(0, file_count - start) if file_count else 10**9
+    return (remaining, -float(job.get("updatedAt") or 0))
+
+
+def continue_paused_imports() -> None:
+    """Sau khi máy chủ sống lại, nối tiếp từng lần nạp dở. Phần còn ít chạy trước."""
+    if os.environ.get("KHACH_AUTO_RESUME", "1") == "0":
+        return
+    time.sleep(2)
+    try:
+        db.init_db(settings.db_path)
+        leaves = _paused_import_jobs()
+    except Exception:
+        _LOG.exception("Không liệt kê được lần nạp dở để nối tiếp")
+        return
+    leaves.sort(key=_resume_sort_key)
+    for job in leaves:
+        job_id = str(job.get("id") or "")
+        if not job_id:
+            continue
+        try:
+            child = _begin_resume(job_id)
+        except HTTPException:
+            continue
+        except Exception:
+            _LOG.exception("Không nối tiếp được lần nạp %s", job_id)
+            continue
+        if child.get("status") in ("queued", "waiting", "running"):
+            khach_jobs.wait_job(str(child.get("id") or ""), 7 * 24 * 3600)
 
 
 @router.post("/v1/customers/imports/{job_id}/resume")
@@ -1029,26 +1202,7 @@ async def customers_import_resume(
     """Nối tiếp từ file dở. Bấm lần nữa trả về đúng việc đang chạy, không nạp trùng."""
     _manager(_actor(request))
     db.init_db(settings.db_path)
-    anchor = await run_in_threadpool(_resume_anchor, job_id)
-    if anchor.get("status") in ("queued", "waiting", "running", "done"):
-        return {"job": anchor}
-    uploaded = await run_in_threadpool(_files_for_job, anchor)
-    mapping_text = _mapping_text_for_job(anchor)
-    start = _resume_start(anchor.get("progress"))
-    info = anchor.get("info") if isinstance(anchor.get("info"), dict) else {}
-    child_info = {
-        "files": [name for name, _path in uploaded],
-        "rows": _as_int(info.get("rows")),
-        "uploads": _upload_ids(uploaded),
-        "mapping": mapping_text,
-        "resumeOf": anchor["id"],
-    }
-
-    def work(context: khach_jobs.JobContext, uploaded: list[tuple[str, Path]] = uploaded, mapping_text: str = mapping_text, start: int = start) -> dict[str, Any]:
-        return _import_job(context, uploaded, mapping_text, start)
-
-    job = khach_jobs.start_job("import", f"resume-{anchor['id']}", work, child_info)
-    khach_jobs.remember_resume(str(anchor["id"]), str(job["id"]))
+    job = await run_in_threadpool(_begin_resume, job_id)
     waited = await run_in_threadpool(khach_jobs.wait_job, job["id"], 1.5)
     return {"job": waited or job}
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -45,7 +46,7 @@ from control_plane.recordings import (
 )
 from control_plane.settings import ROOT, settings
 from control_plane.accounts_api import router as accounts_router
-from control_plane.customer_api import router as customer_router
+from control_plane.customer_api import continue_paused_imports, router as customer_router
 from control_plane.video_api import router as video_router
 from control_plane.video_store import init_db as init_video_db
 from control_plane.video_store import merge_close_results
@@ -140,6 +141,8 @@ async def _startup() -> None:
         if not cd_copy.exists():
             cd_copy.write_text("\n".join(lines) + "\n", encoding="utf-8")
     start_background_checker()
+    if os.environ.get("KHACH_AUTO_RESUME", "1") != "0":
+        threading.Thread(target=continue_paused_imports, name="khach-auto-resume", daemon=True).start()
 
 
 def _auth(authorization: str | None) -> None:
@@ -218,7 +221,7 @@ def _html(name: str) -> HTMLResponse:
     text = text.replace("__CONTROL_TOKEN__", baked)
     headers = {"Cache-Control": "no-cache"}
     if name == "khach.html":
-        text = text.replace("__KHACH_BUILD__", "20261025h")
+        text = text.replace("__KHACH_BUILD__", "20261025i")
         headers = {
             "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
             "Pragma": "no-cache",

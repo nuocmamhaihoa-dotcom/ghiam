@@ -18,6 +18,7 @@ os.environ["CONTROL_TOKEN"] = "test-token"
 os.environ["CONTROL_PROXIES_FILE"] = str(Path(_TMP) / "proxies.txt")
 os.environ["CONTROL_PACKAGES_DIR"] = str(Path(_TMP) / "packages")
 os.environ["CONTROL_PROXY_CHECK_SEC"] = "86400"
+os.environ["KHACH_AUTO_RESUME"] = "0"
 Path(_TMP, "proxies.txt").write_text("", encoding="utf-8")
 
 from fastapi.testclient import TestClient  # noqa: E402
@@ -134,6 +135,8 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("loadPaused", home.text)
         self.assertIn("/v1/customers/imports/paused", home.text)
         self.assertIn("continueImport", home.text)
+        self.assertIn("tự chạy tiếp từ file chưa xong", home.text)
+        self.assertIn("resumedBy", home.text)
         self.assertIn("Tải Excel kết quả không phải gửi lại file", home.text)
         self.assertIn("Một ô có hai số", home.text)
         self.assertIn("lookupError", home.text)
@@ -1004,6 +1007,73 @@ class CustomerApiTests(unittest.TestCase):
         self.assertTrue(closed["result"].get("alreadyDone"))
         self.assertEqual(db.customer_count(settings.db_path), 2)
         self.assertEqual(len(self.client.get("/v1/customers/sessions", headers=self.headers).json()["sessions"]), 2)
+
+    def test_resume_keeps_the_later_checkpoint_when_the_child_has_no_progress(self) -> None:
+        first = write_xlsx(["Tên khách", "SĐT", "Địa chỉ"], [["An", "0912000111", "Huế"]])
+        second = write_xlsx(["Tên khách", "SĐT", "Địa chỉ"], [["Bình", "0912000222", "Đà Nẵng"]])
+        self._upload("checkpoint-mot.xlsx", first, modified=601)
+        self._upload("checkpoint-hai.xlsx", second, modified=602)
+        parent_id = "a1" * 16
+        child_id = "b2" * 16
+        mapping = {
+            "name": {"index": 0, "header": "Tên khách"},
+            "phone": {"index": 1, "header": "SĐT"},
+            "address": {"index": 2, "header": "Địa chỉ", "columns": [{"index": 2, "header": "Địa chỉ"}]},
+        }
+        names = ["checkpoint-mot.xlsx", "checkpoint-hai.xlsx"]
+        root = settings.data_dir / "khach-jobs"
+        root.mkdir(parents=True, exist_ok=True)
+        now = time.time()
+        parent = {
+            "id": parent_id,
+            "kind": "import",
+            "status": "running",
+            "progress": {"phase": "map", "file": names[1], "fileIndex": 1, "fileCount": 2},
+            "info": {"files": names, "rows": 2, "mapping": mapping, "resumedBy": child_id},
+            "result": None,
+            "error": None,
+            "requestId": "",
+            "pid": 0,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        child = {
+            "id": child_id,
+            "kind": "import",
+            "status": "running",
+            "progress": {"phase": "waiting", "fileCount": 2},
+            "info": {"files": names, "rows": 2, "mapping": mapping, "resumeOf": parent_id},
+            "result": None,
+            "error": None,
+            "requestId": "",
+            "pid": 0,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        (root / f"{parent_id}.json").write_text(json.dumps(parent), encoding="utf-8")
+        (root / f"{child_id}.json").write_text(json.dumps(child), encoding="utf-8")
+        paused = self.client.get("/v1/customers/imports/paused", headers=self.headers)
+        self.assertEqual(paused.status_code, 200, paused.text)
+        listed = [item for item in paused.json()["jobs"] if item["id"] == child_id]
+        self.assertEqual(len(listed), 1, paused.text)
+        self.assertEqual(listed[0]["resumeFrom"], 1)
+        self.assertEqual(listed[0]["fileCount"], 2)
+        self.assertNotIn(parent_id, [item["id"] for item in paused.json()["jobs"]])
+        resumed = self.client.post(f"/v1/customers/imports/{child_id}/resume", headers=self.headers)
+        self.assertEqual(resumed.status_code, 200, resumed.text)
+        done = self._wait_job(resumed.json()["job"])
+        self.assertEqual(done["status"], "done", done)
+        stats = done["result"]["stats"]
+        self.assertEqual((stats["incoming"], stats["created"], stats["unchanged"]), (1, 1, 0))
+        self.assertEqual(db.customer_count(settings.db_path), 1)
+        self.assertEqual(
+            self.client.get("/v1/customers", headers=self.headers, params={"q": "0912000111"}).json()["matched"],
+            0,
+        )
+        self.assertEqual(
+            self.client.get("/v1/customers", headers=self.headers, params={"q": "0912000222"}).json()["matched"],
+            1,
+        )
 
     def test_lookup_job_exports_without_resending(self) -> None:
         now = "2026-01-01T00:00:00+00:00"

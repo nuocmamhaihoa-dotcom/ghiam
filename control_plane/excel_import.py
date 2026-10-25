@@ -50,7 +50,7 @@ from control_plane.vietnam_places import address_content_rank, address_header_ra
 from control_plane.xlsx_fast import LazySharedStrings, count_value_rows, finish_cell, iter_sheet_rows
 
 TableSource = bytes | bytearray | os.PathLike[str] | str
-IMPORT_BATCH = 10000
+IMPORT_BATCH = 2000
 SHARED_SPILL = 150_000
 SAMPLE_ROWS = 8
 DETECT_ROWS = 200
@@ -1008,6 +1008,7 @@ def preview_table(
     filename: str,
     data: TableSource,
     progress: Callable[[int], None] | None = None,
+    count_rows: bool = True,
 ) -> dict[str, Any]:
     stored, truncated = _read_head(filename, data, PREVIEW_STORE)
     rows = _trim_table(stored)
@@ -1016,7 +1017,10 @@ def preview_table(
     headers, body, _headerless = _split_header_row(rows)
     samples = body[:SAMPLE_ROWS]
     detect_rows = body[:DETECT_ROWS]
-    row_count = count_data_rows(filename, data, progress) if truncated else len(body)
+    if count_rows and truncated:
+        row_count = count_data_rows(filename, data, progress)
+    else:
+        row_count = len(body)
     return {
         "name": filename,
         "columns": describe_columns(headers),

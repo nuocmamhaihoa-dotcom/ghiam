@@ -289,7 +289,7 @@
     <h2>Thêm file Excel</h2>
     <div class="drop" id="drop">
       <p>Kéo bao nhiêu file Excel cũng được, không giới hạn số file và dung lượng</p>
-      <p class="note">File chỉ gửi lên một lần, chia mảnh 8 MB: rớt mạng thì tự gửi tiếp từ chỗ dừng. Nếu trang dừng hẳn, bấm Tiếp tục gửi. Nạp chạy trên máy chủ, tắt trang vẫn nạp tiếp; bấm lại không nạp trùng.</p>
+      <p class="note">File chỉ gửi lên một lần, chia mảnh 8 MB: rớt mạng thì tự gửi tiếp từ chỗ dừng. Nếu trang dừng hẳn, bấm Tiếp tục gửi. Nạp chạy trên máy chủ, tắt trang vẫn nạp tiếp; bấm lại không nạp trùng. Nếu máy chủ khởi động lại, lần nạp dở tự chạy tiếp từ file chưa xong.</p>
       <p class="note">hoặc</p>
       <button class="file" type="button" id="pick">Chọn file Excel</button>
       <input id="file" type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" multiple />
@@ -2091,6 +2091,24 @@
     }
   }
 
+  async function followLiveImport(job) {
+    var current = job;
+    for (var hop = 0; hop < 6; hop += 1) {
+      var info = current && current.info;
+      var childId = info && info.resumedBy;
+      if (!childId) return current;
+      var response = await api("/v1/customers/jobs/" + childId, { tries: 2, waitMs: 30000 });
+      if (!response.ok) return current;
+      var body = await response.json().catch(function () { return {}; });
+      if (!body.job) return current;
+      current = body.job;
+      if (current.status === "queued" || current.status === "waiting" || current.status === "running" || current.status === "done") {
+        return current;
+      }
+    }
+    return current;
+  }
+
   async function resumeJob() {
     var saved = null;
     try { saved = JSON.parse(localStorage.getItem("khach.job") || "null"); } catch (error) { saved = null; }
@@ -2112,12 +2130,14 @@
         forgetJob(saved.id);
         return;
       }
-      if (saved.kind === "import" && job.status === "interrupted") {
-        setNote("importNote", job.error || "Lần nạp dừng vì mất kết nối. Khách đã ghi vẫn còn. Bấm Tiếp tục.", "warn");
-        await loadPaused();
-        return;
-      }
       if (saved.kind === "import") {
+        job = await followLiveImport(job);
+        if (job.status === "interrupted") {
+          setNote("importNote", job.error || "Lần nạp dừng vì mất kết nối. Khách đã ghi vẫn còn. Bấm Tiếp tục.", "warn");
+          await loadPaused();
+          return;
+        }
+        rememberJob(job, "import", saved.rows || 0);
         setNote("importNote", "Lần nạp trước vẫn chạy trên máy chủ, đang theo dõi tiếp…");
         var done = await pollJob(job, function (current) { setNote("importNote", importProgress(current, saved.rows || 0)); });
         forgetJob(done.id);

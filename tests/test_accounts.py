@@ -18,6 +18,7 @@ os.environ["CONTROL_PAGE_TOKEN"] = "page-token"
 os.environ["CONTROL_PROXIES_FILE"] = str(Path(_TMP) / "proxies.txt")
 os.environ["CONTROL_PACKAGES_DIR"] = str(Path(_TMP) / "packages")
 os.environ["CONTROL_PROXY_CHECK_SEC"] = "86400"
+os.environ["KHACH_AUTO_RESUME"] = "0"
 Path(_TMP, "proxies.txt").write_text("", encoding="utf-8")
 
 from fastapi.testclient import TestClient  # noqa: E402
@@ -108,7 +109,7 @@ class AccountApiTests(unittest.TestCase):
         self.assertIn("Hạn mức tra cứu", home.text)
         self.assertIn("boot()", home.text)
         self.assertIn('var serverToken = "";', home.text)
-        self.assertIn("20261025h", home.text)
+        self.assertIn("20261025i", home.text)
         self.assertIn("min-width: 1100px", home.text)
         self.assertIn("Cách nạp kho và tra cứu", home.text)
         self.assertNotIn("page-token", home.text)

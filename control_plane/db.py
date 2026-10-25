@@ -52,11 +52,11 @@ def connect(db_path: Path) -> sqlite3.Connection:
 
 
 def apply_heavy_pragmas(conn: sqlite3.Connection) -> None:
-    """Tăng cache/mmap khi nạp hoặc tra cứu hàng loạt. VPS ~2GB nên giữ dưới 64+256MB."""
-    conn.execute("PRAGMA temp_store=MEMORY;")
-    conn.execute("PRAGMA cache_size=-65536;")
-    conn.execute("PRAGMA mmap_size=268435456;")
-    conn.execute("PRAGMA wal_autocheckpoint=10000;")
+    """Nạp hàng loạt trên VPS ~2GB. Cache và mmap lớn làm tiến trình bị giết giữa chừng."""
+    conn.execute("PRAGMA temp_store=FILE;")
+    conn.execute("PRAGMA cache_size=-16384;")
+    conn.execute("PRAGMA mmap_size=0;")
+    conn.execute("PRAGMA wal_autocheckpoint=1000;")
     conn.execute("PRAGMA busy_timeout=60000;")
     conn.execute("PRAGMA journal_size_limit=67108864;")
 
