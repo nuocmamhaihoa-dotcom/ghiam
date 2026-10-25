@@ -81,8 +81,52 @@ def get_job(job_id: str) -> dict[str, Any] | None:
         pid = int(job.get("pid") or 0)
         if pid == os.getpid() or not _pid_alive(pid):
             job["status"] = "interrupted"
-            job["error"] = "Máy chủ khởi động lại giữa chừng. Bấm lại để chạy tiếp — kho không mất khách đã ghi."
+            if job.get("kind") == "import":
+                job["error"] = "Lần nạp dừng vì mất kết nối. Khách đã ghi vẫn còn. Bấm Tiếp tục để chạy phần còn lại."
+            else:
+                job["error"] = "Việc này dừng vì mất kết nối. Hãy chạy lại."
+            job["updatedAt"] = time.time()
+            try:
+                _save(job)
+            except (OSError, JobError):
+                pass
     return job
+
+
+def remember_resume(job_id: str, child_id: str) -> None:
+    """Ghi việc nối tiếp để bấm Tiếp tục lần nữa không nạp trùng."""
+    with _lock:
+        live = _live.get(job_id)
+        if live is not None:
+            info = live.get("info")
+            if not isinstance(info, dict):
+                info = {}
+                live["info"] = info
+            info["resumedBy"] = child_id
+            _save(live)
+            return
+    try:
+        job = json.loads(job_file(job_id).read_text(encoding="utf-8"))
+    except (OSError, ValueError, JobError):
+        return
+    info = job.get("info")
+    if not isinstance(info, dict):
+        info = {}
+        job["info"] = info
+    info["resumedBy"] = child_id
+    _save(job)
+
+
+def request_job_id(request_id: str) -> str | None:
+    """Việc đã gắn với mã yêu cầu, để bấm Tiếp tục lần nữa không tạo thêm lần nạp."""
+    if not _REQUEST_ID.fullmatch(request_id or ""):
+        return None
+    try:
+        known = json.loads(_request_file(request_id).read_text(encoding="utf-8")).get("job")
+    except (OSError, ValueError, AttributeError):
+        return None
+    text = str(known or "")
+    return text if _JOB_ID.fullmatch(text) else None
 
 
 def _request_file(request_id: str) -> Path:

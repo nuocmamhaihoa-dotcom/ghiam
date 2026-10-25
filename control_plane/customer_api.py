@@ -567,17 +567,18 @@ def _column_values_from_previews(
     return buckets
 
 
-def _parse_mapping(mapping_text: str) -> dict[str, Any]:
+def _parse_mapping(mapping_text: str, *, allow_empty: bool = False) -> dict[str, Any]:
     try:
-        parsed = mapping_from_form(json.loads(mapping_text or ""))
+        parsed = mapping_from_form(json.loads(mapping_text or "{}"))
     except (json.JSONDecodeError, TypeError, AttributeError) as exc:
         raise HTTPException(status_code=400, detail="Bảng chọn cột không đọc được.") from exc
-    if not any(_mapped(parsed.get(field) or {}) for field in FIELDS) and not any(
+    has_field = any(_mapped(parsed.get(field) or {}) for field in FIELDS) or any(
         _mapped((spec or {}).get(field) or {})
         for spec in (parsed.get("fileMaps") or {}).values()
         if isinstance(spec, dict)
         for field in FIELDS
-    ):
+    )
+    if not has_field and not allow_empty:
         raise HTTPException(status_code=400, detail="Hãy chọn ít nhất một cột dữ liệu.")
     return parsed
 
@@ -596,8 +597,9 @@ def _import_files(
     problems: list[str],
     progress: Any = None,
     link: bool = False,
+    start_index: int = 0,
 ) -> dict[str, Any]:
-    parsed = _parse_mapping(mapping_text)
+    parsed = _parse_mapping(mapping_text, allow_empty=True)
     if not uploaded:
         raise HTTPException(
             status_code=400,
@@ -609,7 +611,22 @@ def _import_files(
     first_width: int | None = None
     now = utcnow()
     incoming_total = 0
+    start_index = max(0, int(start_index or 0))
+    if start_index >= len(uploaded):
+        stats["total"] = db.customer_count(settings.db_path)
+        return {
+            "stats": stats,
+            "files": [],
+            "fileErrors": [],
+            "emptyFiles": [],
+            "keptFiles": [],
+            "items": [],
+            "total": stats["total"],
+            "alreadyDone": True,
+        }
     for file_index, (name, payload) in enumerate(uploaded):
+        if file_index < start_index:
+            continue
         mapped: Any = None
         file_counts = {"fileRows": 0, "unmapped": 0, "phonesOnFile": 0}
         before = dict(stats)
@@ -671,6 +688,16 @@ def _import_files(
                     closer()
                 except Exception:
                     pass
+        if progress is not None:
+            progress(
+                {
+                    "phase": "import",
+                    "file": name,
+                    "fileIndex": file_index,
+                    "fileCount": len(uploaded),
+                    "completedFiles": file_index + 1,
+                }
+            )
     problems.extend(str(item.get("error") or "") for item in file_reports if item.get("error"))
     problems = [item for item in problems if item]
     if incoming_total == 0:
@@ -742,14 +769,23 @@ def _resolve_uploads(raw: Any) -> list[tuple[str, Path]]:
         raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
 
 
-def _import_job(context: khach_jobs.JobContext, uploaded: list[tuple[str, Path]], mapping_text: str) -> dict[str, Any]:
+def _import_job(
+    context: khach_jobs.JobContext,
+    uploaded: list[tuple[str, Path]],
+    mapping_text: str,
+    start_index: int = 0,
+) -> dict[str, Any]:
+    def report(progress: dict[str, Any]) -> None:
+        context.report(progress, force="completedFiles" in progress)
+
     with khach_jobs.import_lock(context):
         return _import_files(
             uploaded,
             mapping_text,
             [],
-            progress=lambda progress: context.report(progress),
+            progress=report,
             link=True,
+            start_index=start_index,
         )
 
 
@@ -819,7 +855,12 @@ async def customers_import(
         uploaded = _resolve_uploads(payload.get("uploads"))
         if not uploaded:
             raise HTTPException(status_code=400, detail="Hãy chọn ít nhất một file Excel.")
-        info = {"files": [name for name, _path in uploaded], "rows": int(payload.get("expectedRows") or 0)}
+        info = {
+            "files": [name for name, _path in uploaded],
+            "rows": int(payload.get("expectedRows") or 0),
+            "uploads": [str(item) for item in payload.get("uploads") or [] if str(item or "")],
+            "mapping": mapping_text,
+        }
         job = khach_jobs.start_job(
             "import",
             str(payload.get("requestId") or ""),
@@ -834,6 +875,182 @@ async def customers_import(
             return await run_in_threadpool(_import_locked, uploaded, fields, problems)
     finally:
         _cleanup_uploads(uploaded)
+
+
+def _as_int(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _resume_start(progress: Any) -> int:
+    """File tiếp theo. completedFiles là số file đã xong; không có thì fileIndex là file đang dở."""
+    if not isinstance(progress, dict):
+        return 0
+    if "completedFiles" in progress:
+        return _as_int(progress.get("completedFiles"))
+    return _as_int(progress.get("fileIndex"))
+
+
+def _upload_ids(uploaded: list[tuple[str, Path]]) -> list[str]:
+    root = khach_uploads.uploads_root().resolve()
+    ids: list[str] = []
+    for _name, path in uploaded:
+        try:
+            parent = path.resolve().parent
+        except OSError:
+            continue
+        if parent.parent == root and re.fullmatch(r"[0-9a-f]{32}", parent.name):
+            ids.append(parent.name)
+    return ids
+
+
+def _files_for_job(job: dict[str, Any]) -> list[tuple[str, Path]]:
+    info = job.get("info") if isinstance(job.get("info"), dict) else {}
+    uploads = info.get("uploads")
+    if isinstance(uploads, list) and any(str(item or "") for item in uploads):
+        return _resolve_uploads(uploads)
+    names = info.get("files")
+    if not isinstance(names, list) or not names:
+        raise HTTPException(status_code=400, detail="Lần nạp này không còn danh sách file để nối tiếp.")
+    try:
+        return khach_uploads.resolve_names([str(name or "") for name in names])
+    except khach_uploads.UploadError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+
+
+def _mapping_text_for_job(job: dict[str, Any]) -> str:
+    info = job.get("info") if isinstance(job.get("info"), dict) else {}
+    raw = info.get("mapping")
+    if isinstance(raw, dict):
+        text = json.dumps(raw, ensure_ascii=False)
+    elif isinstance(raw, str) and raw.strip():
+        text = raw
+    else:
+        text = "{}"
+    try:
+        _parse_mapping(text, allow_empty=True)
+    except HTTPException:
+        return "{}"
+    return text
+
+
+def _resume_anchor(job_id: str) -> dict[str, Any]:
+    """Đi theo lần nối tiếp mới nhất. Việc đang chạy hoặc đã xong thì trả về, không nạp thêm."""
+    seen: set[str] = set()
+    current = khach_jobs.get_job(job_id)
+    if current is None or current.get("kind") != "import":
+        raise HTTPException(status_code=404, detail="Không thấy lần nạp để nối tiếp.")
+    while str(current.get("id") or "") not in seen:
+        seen.add(str(current["id"]))
+        info = current.get("info") if isinstance(current.get("info"), dict) else {}
+        child_id = str(info.get("resumedBy") or "")
+        if not child_id:
+            child_id = khach_jobs.request_job_id(f"resume-{current['id']}") or ""
+        if not child_id or child_id in seen:
+            break
+        child = khach_jobs.get_job(child_id)
+        if child is None or child.get("kind") != "import":
+            break
+        if child.get("status") in ("queued", "waiting", "running", "done"):
+            return child
+        if child.get("status") in ("interrupted", "error"):
+            current = child
+            continue
+        break
+    return current
+
+
+def _paused_summary(job: dict[str, Any]) -> dict[str, Any]:
+    progress = job.get("progress") if isinstance(job.get("progress"), dict) else {}
+    info = job.get("info") if isinstance(job.get("info"), dict) else {}
+    files = info.get("files") if isinstance(info.get("files"), list) else []
+    uploads = info.get("uploads") if isinstance(info.get("uploads"), list) else []
+    file_count = _as_int(progress.get("fileCount")) or len(files)
+    return {
+        "id": job.get("id"),
+        "status": job.get("status"),
+        "file": str(progress.get("file") or ""),
+        "fileIndex": _as_int(progress.get("fileIndex")),
+        "fileCount": file_count,
+        "resumeFrom": _resume_start(progress),
+        "incoming": _as_int(progress.get("incoming")),
+        "canResume": bool(files or uploads),
+    }
+
+
+def _child_id(job: dict[str, Any]) -> str:
+    info = job.get("info") if isinstance(job.get("info"), dict) else {}
+    child_id = str(info.get("resumedBy") or "")
+    if child_id:
+        return child_id
+    return khach_jobs.request_job_id(f"resume-{job.get('id')}") or ""
+
+
+@router.get("/v1/customers/imports/paused")
+def customers_imports_paused(
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Các lần nạp dừng giữa chừng. Không kèm danh sách file."""
+    _manager(_actor(request))
+    found: list[dict[str, Any]] = []
+    try:
+        paths = list(khach_jobs.jobs_root().glob("*.json"))
+    except OSError:
+        paths = []
+    for path in paths:
+        if not re.fullmatch(r"[0-9a-f]{32}", path.stem):
+            continue
+        job = khach_jobs.get_job(path.stem)
+        if not job or job.get("kind") != "import":
+            continue
+        status = job.get("status")
+        if status == "interrupted" or (status == "error" and (job.get("info") or {}).get("resumeOf")):
+            found.append(job)
+    known = {str(job.get("id") or "") for job in found}
+    visible: list[dict[str, Any]] = []
+    for job in found:
+        child_id = _child_id(job)
+        if child_id and child_id != str(job.get("id") or "") and (child_id in known or khach_jobs.get_job(child_id) is not None):
+            continue
+        visible.append(_paused_summary(job))
+    visible.sort(key=lambda item: (int(item.get("fileCount") or 0), str(item.get("id") or "")), reverse=True)
+    return {"jobs": visible[:20]}
+
+
+@router.post("/v1/customers/imports/{job_id}/resume")
+async def customers_import_resume(
+    job_id: str,
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Nối tiếp từ file dở. Bấm lần nữa trả về đúng việc đang chạy, không nạp trùng."""
+    _manager(_actor(request))
+    db.init_db(settings.db_path)
+    anchor = await run_in_threadpool(_resume_anchor, job_id)
+    if anchor.get("status") in ("queued", "waiting", "running", "done"):
+        return {"job": anchor}
+    uploaded = await run_in_threadpool(_files_for_job, anchor)
+    mapping_text = _mapping_text_for_job(anchor)
+    start = _resume_start(anchor.get("progress"))
+    info = anchor.get("info") if isinstance(anchor.get("info"), dict) else {}
+    child_info = {
+        "files": [name for name, _path in uploaded],
+        "rows": _as_int(info.get("rows")),
+        "uploads": _upload_ids(uploaded),
+        "mapping": mapping_text,
+        "resumeOf": anchor["id"],
+    }
+
+    def work(context: khach_jobs.JobContext, uploaded: list[tuple[str, Path]] = uploaded, mapping_text: str = mapping_text, start: int = start) -> dict[str, Any]:
+        return _import_job(context, uploaded, mapping_text, start)
+
+    job = khach_jobs.start_job("import", f"resume-{anchor['id']}", work, child_info)
+    khach_jobs.remember_resume(str(anchor["id"]), str(job["id"]))
+    waited = await run_in_threadpool(khach_jobs.wait_job, job["id"], 1.5)
+    return {"job": waited or job}
 
 
 def _import_locked(uploaded: list[tuple[str, Path]], fields: dict[str, str], problems: list[str]) -> dict[str, Any]:

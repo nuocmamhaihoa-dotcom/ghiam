@@ -150,6 +150,44 @@ async def append_chunk(upload_id: str, offset: int, chunks: AsyncIterator[bytes]
     return status(upload_id)
 
 
+def resolve_names(names: list[str]) -> list[tuple[str, Path]]:
+    """Tìm file đã gửi đủ theo đúng tên, để nối lại lần nạp khi không còn mã file."""
+    wanted = [str(name or "") for name in names]
+    if not wanted or any(not name for name in wanted):
+        raise UploadError(404, "Danh sách file không đủ để nối tiếp.")
+    needed = set(wanted)
+    found: dict[str, tuple[str, Path]] = {}
+    for folder in uploads_root().iterdir():
+        if len(found) == len(needed):
+            break
+        if not folder.is_dir() or not _ID.fullmatch(folder.name):
+            continue
+        try:
+            meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(meta, dict):
+            continue
+        name = str(meta.get("name") or "")
+        if name not in needed or name in found:
+            continue
+        size = int(meta.get("size") or 0)
+        try:
+            got = (folder / "data").stat().st_size
+        except OSError:
+            got = 0
+        if size > 0 and got == size:
+            found[name] = (name, data_path(folder.name))
+    missing = [name for name in wanted if name not in found]
+    if missing:
+        sample = missing[0]
+        raise UploadError(
+            404,
+            f"Thiếu {len(missing)} file đã gửi, không nối tiếp được. File đầu còn thiếu: {sample}",
+        )
+    return [found[name] for name in wanted]
+
+
 def resolve(upload_ids: list[Any]) -> list[tuple[str, Path]]:
     """Mã file → (tên gốc, đường dẫn). Chỉ nhận file đã gửi đủ."""
     files: list[tuple[str, Path]] = []

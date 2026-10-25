@@ -129,6 +129,11 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("/v1/customers/uploads", home.text)
         self.assertIn("requestId", home.text)
         self.assertIn("resumeJob", home.text)
+        self.assertIn("Tiếp tục", home.text)
+        self.assertIn("Tiếp tục gửi", home.text)
+        self.assertIn("loadPaused", home.text)
+        self.assertIn("/v1/customers/imports/paused", home.text)
+        self.assertIn("continueImport", home.text)
         self.assertIn("Tải Excel kết quả không phải gửi lại file", home.text)
         self.assertIn("Một ô có hai số", home.text)
         self.assertIn("lookupError", home.text)
@@ -897,6 +902,108 @@ class CustomerApiTests(unittest.TestCase):
             json={"uploads": ["0" * 32], "mapping": body["mapping"], "requestId": "req-nap-loi-0002"},
         )
         self.assertEqual(broken.status_code, 404, broken.text)
+        self.assertEqual(job["progress"].get("completedFiles"), 1)
+
+    def _plant_import_job(self, job_id: str, names: list[str], *, file_index: int, completed: int | None) -> None:
+        progress: dict[str, object] = {
+            "phase": "map",
+            "file": names[min(file_index, len(names) - 1)] if names else "",
+            "fileIndex": file_index,
+            "fileCount": len(names),
+        }
+        if completed is not None:
+            progress["completedFiles"] = completed
+        payload = {
+            "id": job_id,
+            "kind": "import",
+            "status": "running",
+            "progress": progress,
+            "info": {"files": names, "rows": len(names)},
+            "result": None,
+            "error": None,
+            "requestId": "",
+            "pid": 0,
+            "createdAt": time.time(),
+            "updatedAt": time.time(),
+        }
+        root = settings.data_dir / "khach-jobs"
+        root.mkdir(parents=True, exist_ok=True)
+        (root / f"{job_id}.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    def test_resume_continues_from_the_unfinished_file(self) -> None:
+        denied = self.client.get("/v1/customers/imports/paused")
+        self.assertEqual(denied.status_code, 401)
+        lan = write_xlsx(["Tên khách", "SĐT", "Địa chỉ"], [["Lan", "0901222333", "Huế"]])
+        minh = write_xlsx(["Tên khách", "SĐT", "Địa chỉ"], [["Minh", "0901888999", "Đà Nẵng"]])
+        self._upload("resume-lan.xlsx", lan, modified=501)
+        self._upload("resume-minh.xlsx", minh, modified=502)
+        started = self.client.post(
+            "/v1/customers/import",
+            headers=self.headers,
+            json={
+                "uploads": [self._upload("resume-lan.xlsx", lan, modified=501)],
+                "mapping": {
+                    "name": {"index": 0, "header": "Tên khách"},
+                    "phone": {"index": 1, "header": "SĐT"},
+                    "address": {"index": 2, "header": "Địa chỉ", "columns": [{"index": 2, "header": "Địa chỉ"}]},
+                },
+                "requestId": "req-resume-lan-0001",
+                "expectedRows": 1,
+            },
+        )
+        self.assertEqual(self._wait_job(started.json()["job"])["status"], "done")
+        self.assertEqual(db.customer_count(settings.db_path), 1)
+        planted = "ab" * 16
+        self._plant_import_job(planted, ["resume-lan.xlsx", "resume-minh.xlsx"], file_index=1, completed=None)
+        paused = self.client.get("/v1/customers/imports/paused", headers=self.headers)
+        self.assertEqual(paused.status_code, 200, paused.text)
+        listed = [item for item in paused.json()["jobs"] if item["id"] == planted]
+        self.assertEqual(len(listed), 1, paused.text)
+        self.assertEqual(listed[0]["resumeFrom"], 1)
+        self.assertEqual(listed[0]["fileCount"], 2)
+        self.assertNotIn("files", listed[0])
+        resumed = self.client.post(f"/v1/customers/imports/{planted}/resume", headers=self.headers)
+        self.assertEqual(resumed.status_code, 200, resumed.text)
+        child = self._wait_job(resumed.json()["job"])
+        self.assertEqual(child["status"], "done", child)
+        self.assertNotEqual(child["id"], planted)
+        stats = child["result"]["stats"]
+        self.assertEqual((stats["incoming"], stats["created"], stats["unchanged"]), (1, 1, 0))
+        self.assertEqual(db.customer_count(settings.db_path), 2)
+        self.assertEqual(
+            self.client.get("/v1/customers", headers=self.headers, params={"q": "0901222333"}).json()["matched"],
+            1,
+        )
+        self.assertEqual(
+            self.client.get("/v1/customers", headers=self.headers, params={"q": "0901888999"}).json()["matched"],
+            1,
+        )
+        again = self.client.post(f"/v1/customers/imports/{planted}/resume", headers=self.headers)
+        self.assertEqual(again.status_code, 200, again.text)
+        self.assertEqual(again.json()["job"]["id"], child["id"])
+        self.assertEqual(db.customer_count(settings.db_path), 2)
+        self.assertEqual(len(self.client.get("/v1/customers/sessions", headers=self.headers).json()["sessions"]), 2)
+        after = self.client.get("/v1/customers/imports/paused", headers=self.headers).json()["jobs"]
+        self.assertNotIn(planted, [item["id"] for item in after])
+        missing_id = "cd" * 16
+        self._plant_import_job(missing_id, ["khong-co-resume.xlsx"], file_index=0, completed=None)
+        missed = self.client.post(f"/v1/customers/imports/{missing_id}/resume", headers=self.headers)
+        self.assertEqual(missed.status_code, 404, missed.text)
+        self.assertEqual(db.customer_count(settings.db_path), 2)
+        finished = "ef" * 16
+        self._plant_import_job(
+            finished,
+            ["resume-lan.xlsx", "resume-minh.xlsx"],
+            file_index=0,
+            completed=2,
+        )
+        closed = self._wait_job(
+            self.client.post(f"/v1/customers/imports/{finished}/resume", headers=self.headers).json()["job"]
+        )
+        self.assertEqual(closed["status"], "done", closed)
+        self.assertTrue(closed["result"].get("alreadyDone"))
+        self.assertEqual(db.customer_count(settings.db_path), 2)
+        self.assertEqual(len(self.client.get("/v1/customers/sessions", headers=self.headers).json()["sessions"]), 2)
 
     def test_lookup_job_exports_without_resending(self) -> None:
         now = "2026-01-01T00:00:00+00:00"
