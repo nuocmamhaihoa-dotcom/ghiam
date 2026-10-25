@@ -173,7 +173,7 @@ class FastSheetParityTests(unittest.TestCase):
             [sheet('<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="inlineStr"><is><t>Huế_x000D_\nNam</t></is></c></row>')],
             sst("<si><t>12 Lê Lợi_x000D_\nQuận 1 _x005F_x0041_</t></si>"),
         )
-        self.assertEqual(new_rows(payload), [["12 Lê Lợi Quận 1 _x0041_", "Huế Nam"]])
+        self.assertEqual(new_rows(payload), [["12 Lê Lợi\nQuận 1 _x0041_", "Huế\nNam"]])
 
     def test_shared_strings_load_only_what_is_needed(self) -> None:
         strings = "".join(f"<si><t>Chuỗi {index}</t></si>" for index in range(5000))

@@ -206,6 +206,47 @@ class CustomerMergeTests(unittest.TestCase):
         self.assertEqual(same[0]["address"], "Huế")
         self.assertEqual(same[0]["tiktokId"], "ban.gach")
 
+    def test_one_cell_keeps_two_addresses_and_composes_one_address(self) -> None:
+        folded, stats, _removed = fold_customers(
+            [],
+            [
+                {
+                    "name": "Lan\nHoa",
+                    "phone": "0901222333",
+                    "address": "Hà Nội\nSài Gòn",
+                    "codAmount": "230k\n120000",
+                }
+            ],
+            "2026-01-01T00:00:00+00:00",
+        )
+        self.assertEqual(stats["created"], 1)
+        self.assertEqual(folded[0]["name"], "Lan\nHoa")
+        self.assertEqual(folded[0]["address"], "Hà Nội\nSài Gòn")
+        self.assertEqual(folded[0]["codAmount"], "230000\n120000")
+        parts, part_stats, _removed = fold_customers(
+            [],
+            [{"name": "Lan", "phone": "0901555666", "address": "12 Lê Lợi\nQuận 1\nTP.HCM"}],
+            "2026-01-01T00:00:00+00:00",
+        )
+        self.assertEqual(part_stats["created"], 1)
+        self.assertEqual(parts[0]["address"], "12 Lê Lợi, Quận 1, TP.HCM")
+        again, again_stats, _removed = fold_customers(
+            folded,
+            [{"name": "hoa", "phone": "84901222333", "address": "Sài Gòn\nHà Nội", "codAmount": "120000\n230000"}],
+            "2026-01-02T00:00:00+00:00",
+        )
+        self.assertEqual(again_stats["unchanged"], 1)
+        self.assertEqual(again[0]["name"], "Lan\nHoa")
+        self.assertEqual(again[0]["address"], "Hà Nội\nSài Gòn")
+        self.assertEqual(again[0]["codAmount"], "230000\n120000")
+        added, added_stats, _removed = fold_customers(
+            again,
+            [{"phone": "0901222333", "address": "12 Lê Lợi\nQuận 1\nTP.HCM"}],
+            "2026-01-03T00:00:00+00:00",
+        )
+        self.assertEqual(added_stats["updated"], 1)
+        self.assertEqual(added[0]["address"], "Hà Nội\nSài Gòn\n12 Lê Lợi, Quận 1, TP.HCM")
+
     def test_blank_address_keeps_stored_and_admin_still_appends(self) -> None:
         stored = [
             {
@@ -427,6 +468,23 @@ class ExcelMappingTests(unittest.TestCase):
         self.assertEqual(preview["suggested"]["address"], 2)
         self.assertEqual(preview["suggested"]["facebookUid"], 3)
         self.assertEqual(preview["suggested"]["tiktokId"], 4)
+
+    def test_export_keeps_each_line_in_the_same_cell(self) -> None:
+        payload = write_xlsx(
+            ["Tên khách", "SĐT", "Địa chỉ", "Giá tiền COD"],
+            [["Lan\nHoa", "0901222333", "Hà Nội\nSài Gòn", "230000\n120000"]],
+        )
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            sheet = archive.read("xl/worksheets/sheet1.xml").decode("utf-8")
+            styles = archive.read("xl/styles.xml").decode("utf-8")
+        self.assertIn("&#10;", sheet)
+        self.assertIn('s="1"', sheet)
+        self.assertIn('wrapText="1"', styles)
+        self.assertIn('customHeight="1"', sheet)
+        rows = list(iter_xlsx_rows(payload))
+        self.assertEqual(rows[1][0], "Lan\nHoa")
+        self.assertEqual(rows[1][2], "Hà Nội\nSài Gòn")
+        self.assertEqual(rows[1][3], "230000\n120000")
 
     def test_shared_strings_stream_skips_phonetic_runs(self) -> None:
         payload = (

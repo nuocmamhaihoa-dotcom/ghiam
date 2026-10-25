@@ -637,11 +637,49 @@ class _UnionFind:
         self.rank[root_left] += 1
 
 
+def _line_ranks(line: str) -> set[int]:
+    ranks: set[int] = set()
+    for piece in iter_address_pieces(line):
+        rank = address_content_rank(piece)
+        if address_piece_key(piece, rank):
+            ranks.add(rank)
+    if not ranks:
+        ranks.add(address_content_rank(line))
+    return ranks
+
+
 def _incoming_address_line(value: str) -> str:
-    text = str(value or "").strip()
-    if not text:
+    """Xếp từng địa chỉ. Mảnh của một địa chỉ gộp lại. Hai địa chỉ khác thì giữ hai dòng."""
+    text = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
+    raw_lines = [" ".join(raw.split()) for raw in text.split("\n")]
+    raw_lines = [line for line in raw_lines if line]
+    if not raw_lines:
         return ""
-    return arranged_address(text) or text
+    if len(raw_lines) == 1:
+        return arranged_address(raw_lines[0]) or raw_lines[0]
+    groups: list[list[str]] = []
+    current: list[str] = []
+    seen: set[int] = set()
+    for line in raw_lines:
+        ranks = _line_ranks(line)
+        if current and (ranks & seen):
+            groups.append(current)
+            current = []
+            seen = set()
+        current.append(line)
+        seen.update(ranks)
+    if current:
+        groups.append(current)
+    lines: list[str] = []
+    used: set[str] = set()
+    for group in groups:
+        arranged = arranged_address("\n".join(group)) or ", ".join(group)
+        key = _line_key(arranged)
+        if key in used:
+            continue
+        used.add(key)
+        lines.append(arranged)
+    return "\n".join(lines)
 
 
 def _pick(members: list[dict[str, Any]], field: str) -> str:
@@ -818,7 +856,7 @@ def merge_existing_with_incoming(
         created = {"id": _new_id(), "createdAt": now, "updatedAt": now}
         for field in FIELDS:
             created[field] = cleaned.get(field) or ""
-        arranged = arranged_address(created["address"])
+        arranged = _incoming_address_line(created["address"])
         if arranged:
             created["address"] = arranged
         created["write"] = True

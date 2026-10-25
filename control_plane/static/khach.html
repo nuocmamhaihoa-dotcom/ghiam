@@ -498,7 +498,8 @@
         if (parent.closest && parent.closest(".words, [data-words]")) return NodeFilter.FILTER_REJECT;
         if (/^(SCRIPT|STYLE|TEXTAREA|INPUT|SELECT|OPTION|COL|COLGROUP)$/.test(parent.tagName)) return NodeFilter.FILTER_REJECT;
         if (parent.closest && parent.closest("#people tbody, #lookupPeople tbody, td.addr, .addr")) return NodeFilter.FILTER_REJECT;
-        if (!node.nodeValue || node.nodeValue.indexOf(" ") < 0) return NodeFilter.FILTER_REJECT;
+        if (!node.nodeValue || node.nodeValue.indexOf("\n") >= 0 || node.nodeValue.indexOf("\r") >= 0) return NodeFilter.FILTER_REJECT;
+        if (node.nodeValue.indexOf(" ") < 0) return NodeFilter.FILTER_REJECT;
         if (!/\S/.test(node.nodeValue)) return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_ACCEPT;
       }
