@@ -35,6 +35,12 @@
     }
     main { max-width: 960px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
     h1 { font-size: 1.7rem; margin: 0 0 0.25rem; font-weight: 700; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; }
+    .topbar h1 { margin: 0; }
+    #whoBar { margin: 0; }
+    .guide { margin: 0 0 0.8rem; }
+    .guide summary { cursor: pointer; font-weight: 700; color: var(--blue); }
+    .guide .lead { margin: 0.55rem 0 0; }
     h2 { font-size: 1.15rem; margin: 0 0 0.7rem; font-weight: 700; }
     p { margin: 0; }
     .lead { color: var(--muted); margin-bottom: 1rem; }
@@ -136,28 +142,112 @@
     }
     [hidden] { display: none !important; }
     body.staff .manager-only { display: none !important; }
+    #appBody > .words,
+    .work > .words,
+    .pass-grid > .words,
+    .staff-create > .words,
+    .stats > .words,
+    .row > .words,
+    .topbar > .words { display: none !important; }
     input.short { width: 11rem; margin: 0 0.35rem 0 0; }
     #file, #lookupFile { display: none; }
     .words { display: inline; }
-    .w { display: inline; }
+    .w { display: inline-block; max-width: 100%; overflow-wrap: anywhere; vertical-align: baseline; }
     .w + .w { margin-left: 0.28em; }
     .sp {
-      display: inline;
+      display: inline-block;
+      width: 0.32em;
+      overflow: hidden;
+      vertical-align: baseline;
       font-weight: 400;
-      padding: 0 0.02em;
+      padding: 0;
     }
     table.sess { width: 100%; table-layout: auto; }
     table.sess th, table.sess td { white-space: normal; overflow: visible; }
     table.sess tr.miss td { background: #fdecec; }
     #sessionList table.sheet { width: 100%; }
     #translateWarn { margin: 0 0 0.8rem; padding: 0.65rem 0.75rem; background: #fdecec; border-radius: 10px; }
+    #appBody { display: flex; flex-direction: column; }
+    #uploadBox { order: 1; }
+    #importBox { order: 2; }
+    #mapBox { order: 3; }
+    #lookupBox { order: 4; }
+    #sessionBox { order: 5; }
+    #storeBox { order: 6; }
+    #accountBox { order: 7; }
+    #passwordBox { order: 8; }
+    @media (min-width: 1100px) {
+      main {
+        max-width: none;
+        width: auto;
+        margin: 0;
+        padding: 0.45rem 0.7rem 1rem;
+      }
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        background: var(--bg);
+        padding: 0.35rem 0 0.45rem;
+      }
+      #gate { max-width: 28rem; margin: 1.2rem auto; }
+      #appBody {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 0.7rem;
+        align-items: start;
+      }
+      #appBody > section { margin: 0; min-width: 0; }
+      #uploadBox { order: 1; grid-column: 1; grid-row: 1; }
+      #importBox { order: 1; grid-column: 2; grid-row: 1; }
+      #mapBox { order: 2; grid-column: 1 / -1; }
+      #lookupBox { order: 3; grid-column: 1 / -1; }
+      #sessionBox { order: 4; grid-column: 1 / -1; }
+      #storeBox { order: 5; grid-column: 1 / -1; }
+      #accountBox { order: 6; grid-column: 1 / -1; }
+      #passwordBox { order: 7; grid-column: 1 / -1; }
+      .work {
+        display: grid;
+        grid-template-columns: minmax(280px, 0.85fr) minmax(0, 1.15fr);
+        gap: 0.75rem 1rem;
+        align-items: start;
+      }
+      .work > div { min-width: 0; }
+      .pass-grid, .staff-create {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.7rem;
+        align-items: flex-end;
+      }
+      .pass-grid > div, .staff-create > div { flex: 1 1 14rem; min-width: 12rem; }
+      .pass-grid input, .staff-create input, .staff-create input.limit { width: 100%; margin-bottom: 0; }
+      .pass-grid .row, .staff-create .row { margin: 0; }
+      #storeBox .row input[type="search"] { flex: 1; width: auto; min-width: 16rem; }
+      #people, #lookupPeople, #sessionList {
+        max-height: calc(100vh - 14rem);
+        overflow: auto;
+      }
+      #people table.sheet, #lookupPeople table.sheet { width: 100%; }
+      table.sheet td.addr { max-width: none; }
+      #mapFields { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+      .drop { margin-top: 0; }
+    }
   </style>
 </head>
 <body translate="no" class="notranslate">
 <main translate="no">
   <p id="translateWarn" class="note warn" hidden>Google Dịch đang bật nên chữ bị dính. Tắt dịch trang này trên Chrome, rồi tải lại.</p>
-  <h1>Kho khách Excel</h1>
+  <header class="topbar">
+    <h1>Kho khách Excel</h1>
+    <p class="row" id="whoBar" hidden>
+      <span id="whoText"></span>
+      <button class="ghost" type="button" id="logout">Đăng xuất</button>
+    </p>
+  </header>
+  <details class="guide">
+    <summary>Cách nạp kho và tra cứu</summary>
     <p class="lead">Nhập khách bằng file Excel, không dùng video. Không giới hạn số file và dung lượng: chọn thêm là cộng vào lần nạp này. Khớp tên cột kho trước (tên, SĐT, địa chỉ, địa chỉ hành chính, hàng mua, giá COD, UID Facebook, ID TikTok). Nếu file không có tên cột, hoặc thiếu cột tên / SĐT, thì lấy cột có tên người, số điện thoại và địa chỉ. Cột lạ như giới tính, ngày sinh, link thì bỏ qua. Mỗi file tự khớp cột theo tiêu đề của file đó; lần nạp mới cộng vào kho, không xóa khách cũ. Mỗi dòng có số điện thoại là một khách. Số trên dòng là chuẩn lọc trùng: trùng SĐT thì cùng một hàng. Mọi dòng có số trong file mới đều được ghi — khách mới thì thêm, khách cũ thì bổ sung hoặc giữ nguyên. Không có số điện thoại thì bỏ qua, không lưu. Lần nạp sau: ô trống được bổ sung, địa chỉ mới thay địa chỉ cũ, hàng mua và địa chỉ hành chính thêm dòng, ô đã có mà không đổi thì giữ nguyên. Có list số thì tra cứu hàng loạt ngay trong kho.</p>
+  </details>
 
   <section id="gate" hidden>
     <h2 id="gateTitle">Đăng nhập</h2>
@@ -177,23 +267,25 @@
   </section>
 
   <div id="appBody" hidden>
-  <p class="row" id="whoBar">
-    <span id="whoText"></span>
-    <button class="ghost" type="button" id="logout">Đăng xuất</button>
-  </p>
   <section id="passwordBox">
     <h2>Đổi mật khẩu</h2>
-    <label for="oldPass">Mật khẩu hiện tại</label>
-    <input id="oldPass" type="password" autocomplete="current-password" />
-    <label for="newPass">Mật khẩu mới</label>
-    <input id="newPass" type="password" autocomplete="new-password" />
-    <p class="row">
-      <button class="ghost" type="button" id="changePass">Đổi mật khẩu</button>
-    </p>
+    <div class="pass-grid">
+      <div>
+        <label for="oldPass">Mật khẩu hiện tại</label>
+        <input id="oldPass" type="password" autocomplete="current-password" />
+      </div>
+      <div>
+        <label for="newPass">Mật khẩu mới</label>
+        <input id="newPass" type="password" autocomplete="new-password" />
+      </div>
+      <p class="row">
+        <button class="ghost" type="button" id="changePass">Đổi mật khẩu</button>
+      </p>
+    </div>
     <p id="passNote" class="note"></p>
   </section>
 
-  <section class="manager-only">
+  <section id="uploadBox" class="manager-only">
     <h2>Thêm file Excel</h2>
     <div class="drop" id="drop">
       <p>Kéo bao nhiêu file Excel cũng được, không giới hạn số file và dung lượng</p>
@@ -219,38 +311,47 @@
     <p id="mapNote" class="note"></p>
   </section>
 
-  <section class="manager-only">
+  <section id="importBox" class="manager-only">
     <h2>Kết quả lần nạp</h2>
     <div class="stats" id="importStats"></div>
     <p id="importNote" class="note">Chưa nạp file nào trong phiên này.</p>
   </section>
 
-  <section class="manager-only">
+  <section id="sessionBox" class="manager-only">
     <h2>Các lần nạp</h2>
     <div class="stats" id="sessionStats"></div>
     <div id="sessionList"></div>
     <p id="sessionNote" class="note">Đang đối chiếu các lần nạp với kho.</p>
   </section>
 
-  <section>
+  <section id="lookupBox">
     <h2>Tra cứu hàng loạt</h2>
-    <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. Một ô có hai số (0901… - 0912…) thì tra cả hai. File lấy số điện thoại Việt Nam ở mọi cột, cột SĐT lấy cả số lạ; không lấy UID Facebook. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách. Nhân viên bị trừ hạn mức theo số mới trong ngày; số đã tra hôm nay không tính lại.</p>
+    <details class="guide">
+      <summary>Cách tra cứu</summary>
+      <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. Một ô có hai số (0901… - 0912…) thì tra cả hai. File lấy số điện thoại Việt Nam ở mọi cột, cột SĐT lấy cả số lạ; không lấy UID Facebook. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách. Nhân viên bị trừ hạn mức theo số mới trong ngày; số đã tra hôm nay không tính lại.</p>
+    </details>
     <p id="quotaNote" class="note"></p>
-    <label for="lookupPaste">Danh sách số điện thoại</label>
-    <textarea id="lookupPaste" placeholder="0901222333"></textarea>
-    <p class="row" style="margin-top:0.7rem">
-      <button class="file" type="button" id="lookupPick">Chọn file danh sách</button>
-      <input id="lookupFile" type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt,text/plain,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple />
-      <button class="primary" type="button" id="lookupGo">Tra cứu</button>
-      <button class="ghost" type="button" id="lookupExport" hidden>Tải kết quả Excel</button>
-    </p>
-    <p id="lookupFiles" class="note"></p>
-    <div class="stats" id="lookupStats"></div>
-    <div class="scroll" id="lookupPeople"></div>
-    <p id="lookupNote" class="note">Chưa tra cứu trong phiên này.</p>
+    <div class="work">
+      <div>
+        <label for="lookupPaste">Danh sách số điện thoại</label>
+        <textarea id="lookupPaste" placeholder="0901222333"></textarea>
+        <p class="row" style="margin-top:0.7rem">
+          <button class="file" type="button" id="lookupPick">Chọn file danh sách</button>
+          <input id="lookupFile" type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt,text/plain,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple />
+          <button class="primary" type="button" id="lookupGo">Tra cứu</button>
+          <button class="ghost" type="button" id="lookupExport" hidden>Tải kết quả Excel</button>
+        </p>
+        <p id="lookupFiles" class="note"></p>
+      </div>
+      <div>
+        <div class="stats" id="lookupStats"></div>
+        <div class="scroll" id="lookupPeople"></div>
+        <p id="lookupNote" class="note">Chưa tra cứu trong phiên này.</p>
+      </div>
+    </div>
   </section>
 
-  <section class="manager-only">
+  <section id="storeBox" class="manager-only">
     <h2>Khách đã lưu</h2>
     <div class="stats" id="storeStats"></div>
     <p class="row" style="margin:0.8rem 0">
@@ -267,17 +368,27 @@
     <div id="accountList"></div>
     <p id="accountNote" class="note"></p>
     <h2>Thêm nhân viên</h2>
-    <label for="staffUser">Tên đăng nhập</label>
-    <input id="staffUser" type="text" autocomplete="off" />
-    <label for="staffName">Tên hiển thị</label>
-    <input id="staffName" type="text" autocomplete="off" />
-    <label for="staffPass">Mật khẩu</label>
-    <input id="staffPass" type="password" autocomplete="new-password" />
-    <label for="staffLimit">Hạn mức tra cứu mỗi ngày</label>
-    <input id="staffLimit" class="limit" type="number" min="0" max="1000000" value="200" />
-    <p class="row">
-      <button class="primary" type="button" id="staffCreate">Tạo tài khoản</button>
-    </p>
+    <div class="staff-create">
+      <div>
+        <label for="staffUser">Tên đăng nhập</label>
+        <input id="staffUser" type="text" autocomplete="off" />
+      </div>
+      <div>
+        <label for="staffName">Tên hiển thị</label>
+        <input id="staffName" type="text" autocomplete="off" />
+      </div>
+      <div>
+        <label for="staffPass">Mật khẩu</label>
+        <input id="staffPass" type="password" autocomplete="new-password" />
+      </div>
+      <div>
+        <label for="staffLimit">Hạn mức tra cứu mỗi ngày</label>
+        <input id="staffLimit" class="limit" type="number" min="0" max="1000000" value="200" />
+      </div>
+      <p class="row">
+        <button class="primary" type="button" id="staffCreate">Tạo tài khoản</button>
+      </p>
+    </div>
   </section>
   </div>
 </main>
@@ -388,6 +499,7 @@
         if (/^(SCRIPT|STYLE|TEXTAREA|INPUT|SELECT|OPTION|COL|COLGROUP)$/.test(parent.tagName)) return NodeFilter.FILTER_REJECT;
         if (parent.closest && parent.closest("#people tbody, #lookupPeople tbody, td.addr, .addr")) return NodeFilter.FILTER_REJECT;
         if (!node.nodeValue || node.nodeValue.indexOf(" ") < 0) return NodeFilter.FILTER_REJECT;
+        if (!/\S/.test(node.nodeValue)) return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_ACCEPT;
       }
     });
@@ -2037,6 +2149,7 @@
     currentAccount = null;
     document.body.classList.remove("staff");
     document.getElementById("appBody").hidden = true;
+    document.getElementById("whoBar").hidden = true;
     document.getElementById("gate").hidden = false;
     document.getElementById("gateTitle").textContent = setup ? "Tạo tài khoản quản lý" : "Đăng nhập";
     document.getElementById("gateLead").textContent = setup
@@ -2066,6 +2179,7 @@
     currentAccount = account;
     document.getElementById("gate").hidden = true;
     document.getElementById("appBody").hidden = false;
+    document.getElementById("whoBar").hidden = false;
     document.body.classList.toggle("staff", !isManager());
     renderWho();
     if (isManager()) {
