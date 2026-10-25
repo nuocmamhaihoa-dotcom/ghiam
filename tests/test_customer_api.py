@@ -95,6 +95,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("display: table-cell", home.text)
         self.assertIn("overflow-wrap: anywhere", home.text)
         self.assertIn("parent.closest(\"#people tbody, #lookupPeople tbody, td.addr, .addr\")", home.text)
+        self.assertIn("indexOf(\"\\n\")", home.text)
         self.assertIn("data-words", home.text)
         self.assertIn("watchSpaces", home.text)
         self.assertIn("Google Dịch đang bật", home.text)
