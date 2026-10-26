@@ -27,7 +27,10 @@ from control_plane.customers import (
     phones_from_text,
     repair_customer_row,
     repair_stored_customers,
+    clean_address,
     clear_province_only_addresses,
+    dedupe_exact_address,
+    dedupe_exact_addresses,
     rewrite_stored_addresses,
     strip_province_only_address,
 )
@@ -1391,6 +1394,89 @@ class ProvinceOnlyAddressTests(unittest.TestCase):
             self.assertEqual(rows["tinh"]["name"], "Lan")
             self.assertEqual(rows["duong"]["address"], "12 Lê Lợi")
             self.assertEqual(rows["duong"]["admin_address"], "Đà Nẵng")
+
+
+class ExactRepeatAddressTests(unittest.TestCase):
+    def test_exact_copies_collapse_to_one(self) -> None:
+        self.assertEqual(dedupe_exact_address("Tỉnh, Sóc TrăngTỉnh, Sóc Trăng"), "Tỉnh, Sóc Trăng")
+        self.assertEqual(dedupe_exact_address("Nước ngoàiNước ngoài"), "Nước ngoài")
+        self.assertEqual(dedupe_exact_address("Nước ngoài Nước ngoài"), "Nước ngoài")
+        self.assertEqual(dedupe_exact_address("Nước ngoài, Nước ngoài"), "Nước ngoài")
+        self.assertEqual(dedupe_exact_address("Nước ngoàiNước ngoàiNước ngoài"), "Nước ngoài")
+        self.assertEqual(dedupe_exact_address("Nước ngoài, Nước ngoài, Nước ngoài"), "Nước ngoài")
+        self.assertEqual(dedupe_exact_address("12 Lê Lợi\n12 Lê Lợi"), "12 Lê Lợi")
+        self.assertEqual(dedupe_exact_address("12 Lê Lợi\n12 Lê Lợi\n12 Lê Lợi"), "12 Lê Lợi")
+        doubled = "Đặc khu Thổ Châu, An Giang"
+        self.assertEqual(dedupe_exact_address(doubled + doubled), doubled)
+        self.assertEqual(dedupe_exact_address("ForeignerForeigner"), "Foreigner")
+        self.assertEqual(dedupe_exact_address("Tỉnh Lạng SơnTỉnh Lạng Sơn"), "Tỉnh Lạng Sơn")
+        self.assertEqual(clean_address("Nước ngoàiNước ngoài"), "Nước ngoài")
+
+    def test_partial_repeats_and_different_case_stay(self) -> None:
+        kept = [
+            "12 Lê Lợi, Phường 1",
+            "Phường 1, Phường 2",
+            "12 Lê Lợi\n34 Trần Phú",
+            "Số 10",
+            "11",
+            "Số 11, ngõ 11",
+            "Tân An, Long An",
+            "xã An Bình, huyện An Bình",
+            "VALUE",
+            ".",
+            "Nước ngoàiNước Ngoài",
+            "1111111111111111",
+            "AAAAAAA AAAAAAA",
+        ]
+        for text in kept:
+            self.assertEqual(dedupe_exact_address(text), text)
+            self.assertEqual(clean_address(text), text)
+
+    def test_dedupe_updates_only_the_address_column(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="khach-lap-") as folder:
+            path = Path(folder) / "server.db"
+            db.init_db(path)
+            now = "2026-01-01T00:00:00+00:00"
+            db.replace_customers(
+                path,
+                [
+                    {
+                        "id": "lap",
+                        "name": "Lan",
+                        "phone": "0901222333",
+                        "address": "Nước ngoàiNước ngoài",
+                        "adminAddress": "Thừa Thiên Huế",
+                        "createdAt": now,
+                        "updatedAt": now,
+                    },
+                    {
+                        "id": "thuong",
+                        "name": "Minh",
+                        "phone": "0901444555",
+                        "address": "Phường 1, Phường 2",
+                        "adminAddress": "Đà Nẵng",
+                        "createdAt": now,
+                        "updatedAt": now,
+                    },
+                ],
+                [],
+            )
+            stats = dedupe_exact_addresses(path, batch=10)
+            self.assertEqual(stats["changed"], 1)
+            with db.session(path) as conn:
+                rows = {
+                    row["id"]: row
+                    for row in conn.execute(
+                        "SELECT id, address, admin_address, name, updated_at FROM customers"
+                    )
+                }
+            self.assertEqual(rows["lap"]["address"], "Nước ngoài")
+            self.assertEqual(rows["lap"]["admin_address"], "Thừa Thiên Huế")
+            self.assertEqual(rows["lap"]["name"], "Lan")
+            self.assertEqual(rows["lap"]["updated_at"], now)
+            self.assertEqual(rows["thuong"]["address"], "Phường 1, Phường 2")
+            self.assertEqual(rows["thuong"]["admin_address"], "Đà Nẵng")
+            self.assertEqual(rows["thuong"]["updated_at"], now)
 
 
 if __name__ == "__main__":
