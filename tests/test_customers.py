@@ -421,18 +421,15 @@ class CustomerMergeTests(unittest.TestCase):
         stored, _stats, _removed = fold_customers(
             [],
             [
-                {"name": "Lan", "phone": "0901222333", "address": "Huế"},
-                {"name": "Minh", "phone": "0901444555"},
+                {"name": "Lan", "phone": "0901222333", "address": "Huế", "adminAddress": "Thừa Thiên Huế"},
+                {"name": "Minh", "phone": "0901444555", "address": "Đà Nẵng"},
             ],
             "2026-01-01T00:00:00+00:00",
         )
         items, stats = lookup_by_phones(stored, phones)
-        self.assertEqual(stats["found"], 2)
-        self.assertEqual(stats["missing"], 1)
-        self.assertEqual(items[0]["customer"]["name"], "Lan")
-        self.assertEqual(items[1]["customer"]["name"], "Minh")
-        self.assertFalse(items[2]["found"])
-        self.assertEqual(items[2]["query"], "0901999888")
+        self.assertEqual(stats["found"], 1)
+        self.assertEqual(stats["missing"], 2)
+        self.assertEqual([item["customer"]["name"] for item in items], ["Lan"])
         items84, stats84 = lookup_by_phones(stored, ["84901222333"])
         self.assertEqual(stats84["found"], 1)
         self.assertEqual(items84[0]["customer"]["name"], "Lan")
@@ -444,8 +441,9 @@ class CustomerMergeTests(unittest.TestCase):
             },
             phones,
         )
-        self.assertEqual(mapped_stats["found"], 2)
+        self.assertEqual(mapped_stats["found"], 1)
         self.assertEqual(mapped_items[0]["customer"]["name"], "Lan")
+        self.assertEqual(mapped_stats["missing"], 2)
 
     def test_search_matches_any_field(self) -> None:
         row = {"name": "Nguyễn A", "phone": "0901234567", "address": "Hà Nội", "facebookUid": "1", "tiktokId": "ban"}

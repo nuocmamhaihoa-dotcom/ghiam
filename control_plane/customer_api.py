@@ -1552,7 +1552,7 @@ def _write_lookup_copy(phones: list[str]) -> Path:
 
 def _write_lookup_xlsx(phones: list[str]) -> Path:
     """Ghi kết quả tra cứu ra Excel theo từng lô số, không giữ cả triệu dòng trong RAM."""
-    headers = ["Số tra cứu", "Có trong kho", *FIELD_LABELS.values()]
+    headers = ["Số tra cứu", "Có đủ địa chỉ", *FIELD_LABELS.values()]
 
     def rows() -> Any:
         for item in iter_lookup_items(settings.db_path, phones):

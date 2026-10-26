@@ -343,7 +343,7 @@
     <h2>Tra cứu hàng loạt</h2>
     <details class="guide">
       <summary>Cách tra cứu</summary>
-      <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. Một ô có hai số (0901… - 0912…) thì tra cả hai. File lấy số điện thoại Việt Nam ở mọi cột, cột SĐT lấy cả số lạ; không lấy UID Facebook. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Copy số điện thoại và địa chỉ chỉ lấy khách tra được: số điện thoại đứng bên trái, địa chỉ đứng bên phải. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách. Nhân viên bị trừ hạn mức theo số mới trong ngày; số đã tra hôm nay không tính lại.</p>
+      <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. Một ô có hai số (0901… - 0912…) thì tra cả hai. File lấy số điện thoại Việt Nam ở mọi cột, cột SĐT lấy cả số lạ; không lấy UID Facebook. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Chỉ hiện khách có đủ địa chỉ và địa chỉ hành chính. Copy số điện thoại và địa chỉ chỉ lấy những khách đó: số điện thoại đứng bên trái, địa chỉ đứng bên phải. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách. Nhân viên bị trừ hạn mức theo số mới trong ngày; số đã tra hôm nay không tính lại.</p>
     </details>
     <p id="quotaNote" class="note"></p>
     <div class="work">
@@ -2045,20 +2045,29 @@
     var stats = body.stats || {};
     document.getElementById("lookupStats").innerHTML =
       stat(stats.queried || 0, "Số đã tra") +
-      stat(stats.found || 0, "Có trong kho") +
+      stat(stats.found || 0, "Có đủ địa chỉ") +
       stat(stats.missing || 0, "Không có") +
       stat(stats.invalid || 0, "Dòng không phải số");
     padSpaces(document.getElementById("lookupStats"));
     var items = body.items || [];
     if (!items.length) {
       document.getElementById("lookupPeople").innerHTML = "";
-      setNote("lookupNote", "Không có kết quả." + quotaExtra(body), "warn");
+      setNote("lookupNote", "Không có khách nào có đủ cả địa chỉ và địa chỉ hành chính." + quotaExtra(body), "warn");
       document.getElementById("lookupActions").hidden = true;
       return;
     }
-    var shown = items.slice(0, 2000);
+    var shown = items.slice(0, 2000).filter(function (item) {
+      var customer = item.customer || {};
+      return String(customer.address || "").trim() && String(customer.adminAddress || "").trim();
+    });
+    if (!shown.length) {
+      document.getElementById("lookupPeople").innerHTML = "";
+      setNote("lookupNote", "Không có khách nào có đủ cả địa chỉ và địa chỉ hành chính." + quotaExtra(body), "warn");
+      document.getElementById("lookupActions").hidden = true;
+      return;
+    }
     var queried = stats.queried || items.length;
-    var html = "<table class='sheet'><colgroup><col class='col-query'><col class='col-flag'><col class='col-name'><col class='col-phone'><col class='col-addr'><col class='col-addr'><col class='col-addr'><col class='col-cod'><col class='col-id'><col class='col-id'></colgroup><thead><tr><th>Số tra cứu</th><th>Kho</th><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
+    var html = "<table class='sheet'><colgroup><col class='col-query'><col class='col-flag'><col class='col-name'><col class='col-phone'><col class='col-addr'><col class='col-addr'><col class='col-addr'><col class='col-cod'><col class='col-id'><col class='col-id'></colgroup><thead><tr><th>Số tra cứu</th><th>Đủ địa chỉ</th><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
     shown.forEach(function (item) {
       var customer = item.customer || {};
       html += "<tr><td>" + escapeHtml(item.query) + "</td><td>" + (item.found ? "Có" : "Không") + "</td><td>" + escapeHtml(customer.name) + "</td><td>" + escapeHtml(customer.phone) + "</td><td class='addr'>" + escapeHtml(customer.address) + "</td><td class='addr'>" + escapeHtml(customer.adminAddress) + "</td><td class='addr'>" + escapeHtml(customer.orderContent) + "</td><td>" + escapeHtml(customer.codAmount) + "</td><td>" + escapeHtml(customer.facebookUid) + "</td><td>" + escapeHtml(customer.tiktokId) + "</td></tr>";
@@ -2067,7 +2076,7 @@
     document.getElementById("lookupPeople").innerHTML = html;
     padSpaces(document.getElementById("lookupPeople"));
     document.getElementById("lookupActions").hidden = false;
-    var note = "Đã đối chiếu " + vnNum(queried) + " số với kho.";
+    var note = "Đã đối chiếu " + vnNum(queried) + " số. Chỉ hiện khách có đủ địa chỉ và địa chỉ hành chính.";
     var totalRows = Math.max(items.length, shown.length + (stats.hidden || 0));
     if (totalRows > shown.length) {
       note += " Đang hiện " + vnNum(shown.length) + "/" + vnNum(totalRows) + " dòng. Tải Excel để xem hết — không phải gửi lại file.";
@@ -2178,6 +2187,7 @@
     (items || []).forEach(function (item) {
       if (!item.found) return;
       var customer = item.customer || {};
+      if (!String(customer.address || "").trim() || !String(customer.adminAddress || "").trim()) return;
       var phone = String(customer.phone || item.query || "").replace(/[\t\r\n]+/g, " ").trim();
       lines.push(phone + "\t" + contactAddress(customer));
     });

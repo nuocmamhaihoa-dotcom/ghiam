@@ -518,6 +518,7 @@ class CustomerApiTests(unittest.TestCase):
                     "name": "Lan",
                     "phone": "0901222333",
                     "address": "Huế",
+                    "adminAddress": "Thừa Thiên Huế",
                     "facebookUid": "10001",
                     "tiktokId": "lan.hue",
                     "createdAt": "2026-01-01T00:00:00+00:00",
@@ -536,8 +537,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(body["stats"]["found"], 1)
         self.assertEqual(body["stats"]["missing"], 1)
         self.assertEqual(body["stats"]["invalid"], 1)
-        self.assertEqual(body["items"][0]["customer"]["name"], "Lan")
-        self.assertFalse(body["items"][1]["found"])
+        self.assertEqual([item["customer"]["name"] for item in body["items"]], ["Lan"])
         by_country = self.client.post(
             "/v1/customers/lookup",
             headers=self.headers,
@@ -555,6 +555,7 @@ class CustomerApiTests(unittest.TestCase):
                     "name": "Lan",
                     "phone": "0901222333",
                     "address": "Huế",
+                    "adminAddress": "Thừa Thiên Huế",
                     "facebookUid": "10001",
                     "tiktokId": "lan.hue",
                     "createdAt": "2026-01-01T00:00:00+00:00",
@@ -565,6 +566,7 @@ class CustomerApiTests(unittest.TestCase):
                     "name": "Minh",
                     "phone": "0375866792",
                     "address": "Đà Nẵng",
+                    "adminAddress": "Đà Nẵng",
                     "facebookUid": "",
                     "tiktokId": "",
                     "createdAt": "2026-01-01T00:00:00+00:00",
@@ -635,7 +637,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(capped_body["stats"]["found"], 2)
         self.assertEqual(len(capped_body["items"]), 1)
         self.assertEqual(capped_body["stats"]["shown"], 1)
-        self.assertEqual(capped_body["stats"]["hidden"], 2)
+        self.assertEqual(capped_body["stats"]["hidden"], 1)
 
     def test_preview_and_import_many_files(self) -> None:
         files = [
@@ -763,6 +765,7 @@ class CustomerApiTests(unittest.TestCase):
                     "name": "Lan",
                     "phone": "0901222333",
                     "address": "Huế",
+                    "adminAddress": "Thừa Thiên Huế",
                     "facebookUid": "",
                     "tiktokId": "",
                     "createdAt": "2026-01-01T00:00:00+00:00",
@@ -1091,7 +1094,15 @@ class CustomerApiTests(unittest.TestCase):
         db.replace_customers(
             settings.db_path,
             [
-                {"id": f"c{index}", "name": f"Lan {index}", "phone": f"0909{index:06d}", "createdAt": now, "updatedAt": now}
+                {
+                    "id": f"c{index}",
+                    "name": f"Lan {index}",
+                    "phone": f"0909{index:06d}",
+                    "address": "Huế",
+                    "adminAddress": "Thừa Thiên Huế",
+                    "createdAt": now,
+                    "updatedAt": now,
+                }
                 for index in range(300)
             ],
             [],
@@ -1119,13 +1130,14 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(result["stats"]["found"], 251)
         self.assertEqual(result["stats"]["missing"], 2)
         self.assertEqual(len(result["items"]), 100)
-        self.assertEqual(result["stats"]["hidden"], 153)
+        self.assertEqual(result["stats"]["hidden"], 151)
         exported = self.client.get(f"/v1/customers/lookup/jobs/{job['id']}/export", headers=self.headers)
         self.assertEqual(exported.status_code, 200)
         rows = list(iter_xlsx_rows(exported.content))
-        self.assertEqual(len(rows), 254)
+        self.assertEqual(len(rows), 252)
+        self.assertEqual(rows[0][1], "Có đủ địa chỉ")
         self.assertEqual(rows[1][:2], ["0909000299", "Có"])
-        self.assertEqual(sum(1 for row in rows[1:] if row[1] == "Không"), 2)
+        self.assertEqual(sum(1 for row in rows[1:] if row[1] == "Không"), 0)
 
     def test_lookup_copy_keeps_found_address_and_phone(self) -> None:
         now = "2026-01-01T00:00:00+00:00"
@@ -1168,11 +1180,9 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(lines[0], "Số điện thoại\tĐịa chỉ")
         self.assertEqual(
             lines[1:],
-            [
-                "0901222333\t12 Lê Lợi | Phường Phú Hội | Thừa Thiên Huế",
-                "0375866792\tĐà Nẵng",
-            ],
+            ["0901222333\t12 Lê Lợi | Phường Phú Hội | Thừa Thiên Huế"],
         )
+        self.assertNotIn("0375866792", copied.text)
         self.assertNotIn("0985000000", copied.text)
 
     def test_list_caps_visible_items_without_hiding_total(self) -> None:
@@ -1729,6 +1739,7 @@ class CustomerApiTests(unittest.TestCase):
                     "name": "Lan",
                     "phone": "0901222333",
                     "address": "Huế",
+                    "adminAddress": "Thừa Thiên Huế",
                     "facebookUid": "1000123456789",
                     "tiktokId": "",
                     "createdAt": "2026-01-01T00:00:00+00:00",

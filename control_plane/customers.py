@@ -1091,6 +1091,13 @@ def phones_from_text(text: str, limit: int = MAX_LOOKUP) -> tuple[list[str], dic
     }
 
 
+def has_both_addresses(customer: dict[str, Any] | None) -> bool:
+    """Khách chỉ được hiện khi tra cứu nếu có cả địa chỉ và địa chỉ hành chính."""
+    if not customer:
+        return False
+    return bool(str(customer.get("address") or "").strip()) and bool(str(customer.get("adminAddress") or "").strip())
+
+
 def lookup_by_phones(
     stored: list[dict[str, Any]],
     phones: list[str],
@@ -1120,12 +1127,12 @@ def lookup_by_phones(
                     continue
                 seen_ids.add(customer_id)
                 matches.append(customer)
-        if not matches:
+        ready = [customer for customer in matches if has_both_addresses(customer)]
+        if not ready:
             missing += 1
-            items.append({"query": phone, "found": False, "customer": None})
             continue
         found += 1
-        for customer in matches:
+        for customer in ready:
             items.append({"query": phone, "found": True, "customer": customer})
     return items, {
         "queried": len(phones),
@@ -1189,12 +1196,8 @@ def lookup_by_phone_map(
     missing = 0
     for phone in phones:
         matches = by_phone.get(phone) or []
-        if not matches:
-            missing += 1
-            items.append({"query": phone, "found": False, "customer": None})
-            continue
-        found += 1
         seen_ids: set[str] = set()
+        ready: list[dict[str, str]] = []
         for row in matches:
             public = public_customer(row)
             customer_id = str(public.get("id") or "")
@@ -1202,6 +1205,13 @@ def lookup_by_phone_map(
                 continue
             if customer_id:
                 seen_ids.add(customer_id)
+            if has_both_addresses(public):
+                ready.append(public)
+        if not ready:
+            missing += 1
+            continue
+        found += 1
+        for public in ready:
             items.append({"query": phone, "found": True, "customer": public})
     return items, {
         "queried": len(phones),
