@@ -450,6 +450,7 @@
   var lookupKeys = {};
   var lastLookup = null;
   var storeCursor = 0;
+  var storeAfter = 0;
   var storeBack = [];
   var STORE_PAGE = 100;
 
@@ -1918,6 +1919,7 @@
 
   function resetStorePage() {
     storeCursor = 0;
+    storeAfter = 0;
     storeBack = [];
   }
 
@@ -1958,7 +1960,8 @@
       var params = ["limit=" + STORE_PAGE];
       if (query) params.push("q=" + encodeURIComponent(query));
       if (fields.length) params.push("has=" + encodeURIComponent(fields.join(",")));
-      if (storeCursor) params.push("before=" + encodeURIComponent(String(storeCursor)));
+      if (storeAfter) params.push("after=" + encodeURIComponent(String(storeAfter)));
+      else if (storeCursor) params.push("before=" + encodeURIComponent(String(storeCursor)));
       var response = await api("/v1/customers?" + params.join("&"));
       if (response.status === 401) {
         showGate(false);
@@ -1984,11 +1987,14 @@
         next.hidden = !body.hasMore;
         next.disabled = false;
         next.setAttribute("data-before", body.nextBefore || "");
+        next.setAttribute("data-after", body.nextAfter || "");
       }
       if (prev) prev.hidden = !storeBack.length;
       var filled = fields.map(fieldLabel).filter(Boolean).join(", ");
       var lead = filled ? "Khách đã có đủ " + filled + ". " : "";
-      if (!shown) {
+      if (!shown && body.hasMore) {
+        setNote("listNote", lead + "Phần vừa xem chưa có khách khớp. Bấm Trang sau để tìm tiếp.");
+      } else if (!shown) {
         setNote("listNote", lead + (query || filled ? "Không có khách khớp." : "Kho còn trống."));
       } else if (matched != null && matched > shown && !body.hasMore) {
         setNote("listNote", lead + "Tìm thấy " + vnNum(matched) + " khách, trang này hiện " + vnNum(shown) + ".");
@@ -2454,15 +2460,20 @@
     loadCustomers();
   });
   document.getElementById("storeNext").addEventListener("click", function () {
-    var next = document.getElementById("storeNext").getAttribute("data-before");
-    if (!next) return;
-    storeBack.push(storeCursor);
-    storeCursor = Number(next);
+    var button = document.getElementById("storeNext");
+    var nextBefore = button.getAttribute("data-before") || "";
+    var nextAfter = button.getAttribute("data-after") || "";
+    if (!nextBefore && !nextAfter) return;
+    storeBack.push({ cursor: storeCursor, after: storeAfter });
+    storeCursor = nextBefore ? Number(nextBefore) : 0;
+    storeAfter = nextAfter ? Number(nextAfter) : 0;
     loadCustomers();
     window.scrollTo(0, 0);
   });
   document.getElementById("storePrev").addEventListener("click", function () {
-    storeCursor = storeBack.length ? storeBack.pop() : 0;
+    var prev = storeBack.length ? storeBack.pop() : { cursor: 0, after: 0 };
+    storeCursor = prev.cursor || 0;
+    storeAfter = prev.after || 0;
     loadCustomers();
     window.scrollTo(0, 0);
   });

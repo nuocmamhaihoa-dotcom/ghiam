@@ -950,61 +950,158 @@ _FILLED_COLUMNS = {
 }
 
 
+_BROWSE_SELECT = (
+    "SELECT rowid AS _rowid, id, name, phone, address, admin_address, order_content, "
+    "cod_amount, facebook_uid, tiktok_id, created_at, updated_at FROM customers"
+)
+_BROWSE_BUDGET = 30_000
+_BROWSE_BATCH = 4_000
+
+
+def _browse_page(
+    found: list[sqlite3.Row],
+    *,
+    limit: int,
+    direction: str,
+    cursor: int | None,
+    reached_end: bool,
+) -> tuple[list[dict[str, str]], int | None, int | None, bool]:
+    page = found[:limit]
+    has_more = len(found) > limit or not reached_end
+    if not has_more:
+        return [customer_from_sql_row(row) for row in page], None, None, False
+    if len(found) > limit:
+        mark = int(page[-1]["_rowid"])
+    else:
+        mark = int(cursor or (page[-1]["_rowid"] if page else 0))
+    if not mark:
+        return [customer_from_sql_row(row) for row in page], None, None, False
+    if direction == "asc":
+        return [customer_from_sql_row(row) for row in page], None, mark, True
+    return [customer_from_sql_row(row) for row in page], mark, None, True
+
+
+def _row_has_fields(row: sqlite3.Row, filled: list[str]) -> bool:
+    for field in filled:
+        column = _FILLED_COLUMNS.get(field)
+        if column and not str(row[column] or ""):
+            return False
+    return True
+
+
+def _row_matches_query(row: sqlite3.Row, query: str) -> bool:
+    needle = " ".join(str(query or "").split())
+    if not needle:
+        return True
+    number = _phone_query(needle)
+    if number:
+        variants = set(_phone_variants(number) or [number])
+        return str(row["phone"] or "") in variants
+    folded = needle.casefold()
+    return any(folded in str(row[column] or "").casefold() for column in _FILLED_COLUMNS.values())
+
+
+def _scan_customers(
+    conn: sqlite3.Connection,
+    *,
+    direction: str,
+    cursor: int | None,
+    limit: int,
+    filled: list[str],
+    query: str,
+    budget: int,
+) -> tuple[list[sqlite3.Row], int | None, bool]:
+    """Đọc từng cụm theo rowid rồi lọc trong bộ nhớ. Không bắt SQLite quét cả kho để tìm ô có dữ liệu."""
+    matches: list[sqlite3.Row] = []
+    examined = 0
+    last = cursor
+    reached_end = False
+    compare = "rowid > ?" if direction == "asc" else "rowid < ?"
+    order = "ASC" if direction == "asc" else "DESC"
+    while examined < budget and len(matches) <= limit:
+        batch = min(_BROWSE_BATCH, budget - examined)
+        params: list[Any] = []
+        where = ""
+        if last:
+            where = f" WHERE {compare}"
+            params.append(int(last))
+        params.append(batch)
+        rows = conn.execute(
+            f"{_BROWSE_SELECT}{where} ORDER BY rowid {order} LIMIT ?",
+            params,
+        ).fetchall()
+        if not rows:
+            reached_end = True
+            break
+        examined += len(rows)
+        last = int(rows[-1]["_rowid"])
+        for row in rows:
+            if not _row_has_fields(row, filled) or not _row_matches_query(row, query):
+                continue
+            matches.append(row)
+            if len(matches) > limit:
+                last = int(row["_rowid"])
+                break
+        if len(matches) > limit or len(rows) < batch:
+            reached_end = len(rows) < batch and len(matches) <= limit
+            break
+    return matches, last, reached_end
+
+
 def browse_customers(
     db_path: Path,
     *,
     limit: int,
     before: int | None = None,
+    after: int | None = None,
     filled: list[str] | None = None,
     query: str = "",
-) -> tuple[list[dict[str, str]], int | None, bool]:
-    """Lật kho theo rowid. Mỗi trang dừng sớm, không sắp và không đếm cả bảng."""
-    clauses: list[str] = []
-    params: list[Any] = []
-    if before:
-        clauses.append("rowid < ?")
-        params.append(int(before))
-    for field in filled or []:
-        column = _FILLED_COLUMNS.get(field)
-        if column:
-            clauses.append(f"{column} != ''")
-    needle = " ".join(str(query or "").split())
-    if needle:
-        number = _phone_query(needle)
-        if number:
-            variants = _phone_variants(number) or [number]
-            clauses.append("phone IN (" + ",".join("?" * len(variants)) + ")")
-            params.extend(variants)
-        else:
-            escaped = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            like = f"%{escaped}%"
-            text_fields = (
-                "name",
-                "phone",
-                "address",
-                "admin_address",
-                "order_content",
-                "cod_amount",
-                "facebook_uid",
-                "tiktok_id",
-            )
-            clauses.append("(" + " OR ".join(f"{field} LIKE ? ESCAPE '\\'" for field in text_fields) + ")")
-            params.extend([like] * len(text_fields))
-    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    budget: int = _BROWSE_BUDGET,
+) -> tuple[list[dict[str, str]], int | None, int | None, bool]:
+    """Lật kho theo rowid. Có lọc thì mỗi lần chỉ đọc một đoạn, không sắp cả bảng."""
     size = max(1, min(int(limit), 2000))
-    sql = (
-        "SELECT rowid AS _rowid, id, name, phone, address, admin_address, order_content, "
-        "cod_amount, facebook_uid, tiktok_id, created_at, updated_at FROM customers"
-        + where
-        + " ORDER BY rowid DESC LIMIT ?"
-    )
-    params.append(size + 1)
+    wanted = [field for field in (filled or []) if field in _FILLED_COLUMNS]
+    needle = " ".join(str(query or "").split())
+    direction = "asc" if after else "desc"
+    cursor = int(after or before or 0) or None
+    if not wanted and not needle:
+        compare = "rowid > ?" if direction == "asc" else "rowid < ?"
+        order = "ASC" if direction == "asc" else "DESC"
+        params: list[Any] = []
+        where = ""
+        if cursor:
+            where = f" WHERE {compare}"
+            params.append(cursor)
+        params.append(size + 1)
+        with session(db_path) as conn:
+            found = conn.execute(
+                f"{_BROWSE_SELECT}{where} ORDER BY rowid {order} LIMIT ?",
+                params,
+            ).fetchall()
+        reached_end = len(found) <= size
+        return _browse_page(found, limit=size, direction=direction, cursor=cursor, reached_end=reached_end)
     with session(db_path) as conn:
-        found = conn.execute(sql, params).fetchall()
-    has_more = len(found) > size
-    page = found[:size]
-    next_before = int(page[-1]["_rowid"]) if has_more and page else None
-    return [customer_from_sql_row(row) for row in page], next_before, has_more
+        found, last, reached_end = _scan_customers(
+            conn,
+            direction=direction,
+            cursor=cursor,
+            limit=size,
+            filled=wanted,
+            query=needle,
+            budget=max(size + 1, int(budget)),
+        )
+        if direction == "desc" and not before and not found and not reached_end:
+            found, last, reached_end = _scan_customers(
+                conn,
+                direction="asc",
+                cursor=None,
+                limit=size,
+                filled=wanted,
+                query=needle,
+                budget=max(size + 1, int(budget)),
+            )
+            direction = "asc"
+    return _browse_page(found, limit=size, direction=direction, cursor=last, reached_end=reached_end)
 
 
 def list_customers(db_path: Path, limit: int | None = None) -> list[dict[str, str]]:

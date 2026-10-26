@@ -1601,6 +1601,50 @@ class CustomerApiTests(unittest.TestCase):
         unknown = self.client.get("/v1/customers", headers=self.headers, params={"has": "matKhau"})
         self.assertEqual(unknown.status_code, 400, unknown.text)
 
+    def test_store_filter_finds_old_rows_without_scanning_the_whole_warehouse(self) -> None:
+        now = "2026-10-26T00:00:00+00:00"
+        rows = [
+            {
+                "id": "old",
+                "name": "Cũ",
+                "phone": "0901000001",
+                "address": "Huế",
+                "createdAt": now,
+                "updatedAt": now,
+            }
+        ]
+        rows.extend(
+            {
+                "id": f"new{index}",
+                "name": f"Mới {index}",
+                "phone": f"0902{index:06d}",
+                "address": "",
+                "createdAt": now,
+                "updatedAt": now,
+            }
+            for index in range(8)
+        )
+        db.replace_customers(settings.db_path, rows, [])
+        shown, before, after, has_more = db.browse_customers(
+            settings.db_path,
+            limit=2,
+            filled=["address"],
+            budget=3,
+        )
+        self.assertEqual([item["phone"] for item in shown], ["0901000001"])
+        self.assertIsNone(before)
+        self.assertTrue(has_more)
+        self.assertTrue(after)
+        empty, _before, next_after, more = db.browse_customers(
+            settings.db_path,
+            limit=2,
+            filled=["tiktokId"],
+            budget=3,
+        )
+        self.assertEqual(empty, [])
+        self.assertTrue(more)
+        self.assertTrue(next_after)
+
     def test_store_page_walks_every_saved_customer(self) -> None:
         now = "2026-10-26T00:00:00+00:00"
         db.replace_customers(

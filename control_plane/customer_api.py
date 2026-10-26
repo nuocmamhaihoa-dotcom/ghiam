@@ -483,6 +483,7 @@ def customers_list(
     q: str = Query(default=""),
     has: str = Query(default=""),
     before: int = Query(default=0, ge=0),
+    after: int = Query(default=0, ge=0),
     limit: int = Query(default=LIST_LIMIT, ge=1, le=LIST_LIMIT),
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
@@ -491,7 +492,7 @@ def customers_list(
     total = _listed_customer_total()
     filled = _filled_fields(has)
     fields = [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS]
-    if collapse(q) and not filled and before <= 0:
+    if collapse(q) and not filled and before <= 0 and after <= 0:
         rows, matched = db.search_customers(settings.db_path, q, limit=limit)
         shown = [public_customer(row) for row in rows]
         return {
@@ -501,23 +502,26 @@ def customers_list(
             "items": shown,
             "hasMore": matched > len(shown),
             "nextBefore": None,
+            "nextAfter": None,
             "fields": fields,
         }
-    rows, next_before, has_more = db.browse_customers(
+    rows, next_before, next_after, has_more = db.browse_customers(
         settings.db_path,
         limit=limit,
         before=before or None,
+        after=after or None,
         filled=filled,
         query=q,
     )
     shown = [public_customer(row) for row in rows]
     return {
         "count": len(shown),
-        "matched": None if filled or before else total,
+        "matched": None if filled or before or after else total,
         "total": total,
         "items": shown,
         "hasMore": has_more,
         "nextBefore": next_before,
+        "nextAfter": next_after,
         "fields": fields,
     }
 
