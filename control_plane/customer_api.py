@@ -1518,6 +1518,38 @@ def _new_xlsx_path(prefix: str) -> Path:
     return dest
 
 
+def _lookup_contact_cell(customer: dict[str, Any]) -> str:
+    """Một ô địa chỉ: địa chỉ khách rồi địa chỉ hành chính, mỗi dòng cách nhau bởi dấu gạch."""
+    chunks: list[str] = []
+    for field in ("address", "adminAddress"):
+        raw = str(customer.get(field) or "").replace("\r\n", "\n").replace("\r", "\n")
+        for part in raw.split("\n"):
+            piece = " ".join(part.split()).replace("\t", " ")
+            if piece and piece not in chunks:
+                chunks.append(piece)
+    return " | ".join(chunks)
+
+
+def _write_lookup_copy(phones: list[str]) -> Path:
+    """Hai cột của khách tra được: địa chỉ và số điện thoại. Số không có trong kho không đưa vào."""
+    handle = tempfile.NamedTemporaryFile(prefix="tra-cuu-copy-", suffix=".txt", delete=False)
+    dest = Path(handle.name)
+    handle.close()
+    try:
+        with dest.open("w", encoding="utf-8", newline="\n") as handle:
+            handle.write("Địa chỉ\tSố điện thoại\n")
+            for item in iter_lookup_items(settings.db_path, phones):
+                if not item.get("found"):
+                    continue
+                customer = item.get("customer") or {}
+                phone = " ".join(str(customer.get("phone") or item.get("query") or "").split()).replace("\t", " ")
+                handle.write(f"{_lookup_contact_cell(customer)}\t{phone}\n")
+    except Exception:
+        dest.unlink(missing_ok=True)
+        raise
+    return dest
+
+
 def _write_lookup_xlsx(phones: list[str]) -> Path:
     """Ghi kết quả tra cứu ra Excel theo từng lô số, không giữ cả triệu dòng trong RAM."""
     headers = ["Số tra cứu", "Có trong kho", *FIELD_LABELS.values()]
@@ -1583,6 +1615,12 @@ def customers_lookup_job_export(
     """Tải Excel đúng danh sách số của lần tra cứu đã chạy, không gửi lại file."""
     actor = _actor(request)
     db.init_db(settings.db_path)
+    phones = _lookup_job_phones(actor, job_id)
+    _charge(actor, phones)
+    return _xlsx_file_response(_write_lookup_xlsx(phones), "tra-cuu-khach.xlsx")
+
+
+def _lookup_job_phones(actor: accounts.Actor, job_id: str) -> list[str]:
     job = _visible_job(actor, khach_jobs.get_job(job_id))
     if job.get("kind") != "lookup":
         raise HTTPException(status_code=404, detail="Không thấy lần tra cứu này, hãy tra cứu lại.")
@@ -1592,9 +1630,27 @@ def customers_lookup_job_export(
         text = khach_jobs.job_file(job_id, ".phones").read_text(encoding="utf-8")
     except (OSError, khach_jobs.JobError) as exc:
         raise HTTPException(status_code=404, detail="Kết quả tra cứu đã quá hạn, hãy tra cứu lại.") from exc
-    phones = [line for line in text.split("\n") if line]
+    return [line for line in text.split("\n") if line]
+
+
+@router.get("/v1/customers/lookup/jobs/{job_id}/copy")
+def customers_lookup_job_copy(
+    job_id: str,
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> FileResponse:
+    """Hai cột địa chỉ và số điện thoại của khách tra được, để dán vào Excel."""
+    actor = _actor(request)
+    db.init_db(settings.db_path)
+    phones = _lookup_job_phones(actor, job_id)
     _charge(actor, phones)
-    return _xlsx_file_response(_write_lookup_xlsx(phones), "tra-cuu-khach.xlsx")
+    dest = _write_lookup_copy(phones)
+    return FileResponse(
+        path=dest,
+        media_type="text/plain; charset=utf-8",
+        filename="dia-chi-so-dien-thoai.txt",
+        background=BackgroundTask(_unlink_temp, str(dest)),
+    )
 
 
 @router.get("/v1/customers/export")

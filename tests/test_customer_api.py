@@ -1127,6 +1127,54 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(rows[1][:2], ["0909000299", "Có"])
         self.assertEqual(sum(1 for row in rows[1:] if row[1] == "Không"), 2)
 
+    def test_lookup_copy_keeps_found_address_and_phone(self) -> None:
+        now = "2026-01-01T00:00:00+00:00"
+        db.replace_customers(
+            settings.db_path,
+            [
+                {
+                    "id": "lan",
+                    "name": "Lan",
+                    "phone": "0901222333",
+                    "address": "12 Lê Lợi\nPhường Phú Hội",
+                    "adminAddress": "Thừa Thiên Huế",
+                    "createdAt": now,
+                    "updatedAt": now,
+                },
+                {
+                    "id": "minh",
+                    "name": "Minh",
+                    "phone": "0375866792",
+                    "address": "",
+                    "adminAddress": "Đà Nẵng",
+                    "createdAt": now,
+                    "updatedAt": now,
+                },
+            ],
+            [],
+        )
+        started = self.client.post(
+            "/v1/customers/lookup",
+            headers=self.headers,
+            json={"text": "0901222333\n0375866792\n0985000000", "requestId": "req-copy-0001"},
+        )
+        self.assertEqual(started.status_code, 200, started.text)
+        job = self._wait_job(started.json()["job"])
+        self.assertEqual(job["status"], "done", job)
+        copied = self.client.get(f"/v1/customers/lookup/jobs/{job['id']}/copy", headers=self.headers)
+        self.assertEqual(copied.status_code, 200, copied.text)
+        self.assertIn("text/plain", copied.headers["content-type"])
+        lines = [line for line in copied.text.splitlines() if line]
+        self.assertEqual(lines[0], "Địa chỉ\tSố điện thoại")
+        self.assertEqual(
+            lines[1:],
+            [
+                "12 Lê Lợi | Phường Phú Hội | Thừa Thiên Huế\t0901222333",
+                "Đà Nẵng\t0375866792",
+            ],
+        )
+        self.assertNotIn("0985000000", copied.text)
+
     def test_list_caps_visible_items_without_hiding_total(self) -> None:
         now = "2026-01-01T00:00:00+00:00"
         db.replace_customers(

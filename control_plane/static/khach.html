@@ -343,7 +343,7 @@
     <h2>Tra cứu hàng loạt</h2>
     <details class="guide">
       <summary>Cách tra cứu</summary>
-      <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. Một ô có hai số (0901… - 0912…) thì tra cả hai. File lấy số điện thoại Việt Nam ở mọi cột, cột SĐT lấy cả số lạ; không lấy UID Facebook. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách. Nhân viên bị trừ hạn mức theo số mới trong ngày; số đã tra hôm nay không tính lại.</p>
+      <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. Một ô có hai số (0901… - 0912…) thì tra cả hai. File lấy số điện thoại Việt Nam ở mọi cột, cột SĐT lấy cả số lạ; không lấy UID Facebook. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Copy địa chỉ và số điện thoại chỉ lấy khách tra được, dán vào Excel thành hai cột. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách. Nhân viên bị trừ hạn mức theo số mới trong ngày; số đã tra hôm nay không tính lại.</p>
     </details>
     <p id="quotaNote" class="note"></p>
     <div class="work">
@@ -354,12 +354,15 @@
           <button class="file" type="button" id="lookupPick">Chọn file danh sách</button>
           <input id="lookupFile" type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt,text/plain,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple />
           <button class="primary" type="button" id="lookupGo">Tra cứu</button>
-          <button class="ghost" type="button" id="lookupExport" hidden>Tải kết quả Excel</button>
         </p>
         <p id="lookupFiles" class="note"></p>
       </div>
       <div>
         <div class="stats" id="lookupStats"></div>
+        <p class="row" id="lookupActions" hidden>
+          <button class="primary" type="button" id="lookupExport">Tải file kết quả Excel</button>
+          <button class="ghost" type="button" id="lookupCopy">Copy địa chỉ và số điện thoại</button>
+        </p>
         <div class="scroll" id="lookupPeople"></div>
         <p id="lookupNote" class="note">Chưa tra cứu trong phiên này.</p>
       </div>
@@ -2050,7 +2053,7 @@
     if (!items.length) {
       document.getElementById("lookupPeople").innerHTML = "";
       setNote("lookupNote", "Không có kết quả." + quotaExtra(body), "warn");
-      document.getElementById("lookupExport").hidden = true;
+      document.getElementById("lookupActions").hidden = true;
       return;
     }
     var shown = items.slice(0, 2000);
@@ -2063,7 +2066,7 @@
     html += "</tbody></table>";
     document.getElementById("lookupPeople").innerHTML = html;
     padSpaces(document.getElementById("lookupPeople"));
-    document.getElementById("lookupExport").hidden = false;
+    document.getElementById("lookupActions").hidden = false;
     var note = "Đã đối chiếu " + vnNum(queried) + " số với kho.";
     var totalRows = Math.max(items.length, shown.length + (stats.hidden || 0));
     if (totalRows > shown.length) {
@@ -2156,6 +2159,79 @@
       setNote("lookupNote", error && error.fatal ? error.message : lookupError(error), "warn");
     } finally {
       document.getElementById("lookupGo").disabled = false;
+    }
+  }
+
+  function contactAddress(customer) {
+    var parts = [];
+    [customer.address, customer.adminAddress].forEach(function (value) {
+      String(value || "").split(/\r?\n/).forEach(function (line) {
+        var text = line.replace(/[\t]+/g, " ").replace(/ +/g, " ").trim();
+        if (text && parts.indexOf(text) < 0) parts.push(text);
+      });
+    });
+    return parts.join(" | ");
+  }
+
+  function foundContactText(items) {
+    var lines = ["Địa chỉ\tSố điện thoại"];
+    (items || []).forEach(function (item) {
+      if (!item.found) return;
+      var customer = item.customer || {};
+      var phone = String(customer.phone || item.query || "").replace(/[\t\r\n]+/g, " ").trim();
+      lines.push(contactAddress(customer) + "\t" + phone);
+    });
+    return lines.length > 1 ? lines.join("\n") : "";
+  }
+
+  async function writeClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+    var area = document.createElement("textarea");
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+  }
+
+  async function copyLookup() {
+    if (!lastLookup) {
+      setNote("lookupNote", "Hãy tra cứu trước khi copy.", "warn");
+      return;
+    }
+    var button = document.getElementById("lookupCopy");
+    button.disabled = true;
+    setNote("lookupNote", "Đang lấy địa chỉ và số điện thoại của khách tra được…");
+    try {
+      var text = "";
+      if (lastLookup.jobId) {
+        var response = await api("/v1/customers/lookup/jobs/" + lastLookup.jobId + "/copy", {
+          tries: 2,
+          waitMs: 3 * 60 * 60 * 1000
+        });
+        if (!response.ok) {
+          setNote("lookupNote", "Không copy được. Hãy tra cứu lại rồi copy.", "warn");
+          return;
+        }
+        text = await response.text();
+        if (text && text.charAt(text.length - 1) === "\n") text = text.slice(0, -1);
+      } else {
+        text = foundContactText(lastLookup.items);
+      }
+      var rows = text ? text.split("\n").filter(function (line) { return line && line !== "Địa chỉ\tSố điện thoại"; }) : [];
+      if (!rows.length) {
+        setNote("lookupNote", "Không có khách nào tra được để copy.", "warn");
+        return;
+      }
+      await writeClipboard(rows.length ? ("Địa chỉ\tSố điện thoại\n" + rows.join("\n")) : "");
+      setNote("lookupNote", "Đã copy " + vnNum(rows.length) + " dòng. Dán vào Excel thành hai cột: Địa chỉ và Số điện thoại.", "ok");
+    } catch (error) {
+      setNote("lookupNote", "Không copy được. Hãy thử lại.", "warn");
+    } finally {
+      button.disabled = false;
     }
   }
 
@@ -2488,6 +2564,7 @@
   });
   document.getElementById("lookupGo").addEventListener("click", runLookup);
   document.getElementById("lookupExport").addEventListener("click", exportLookup);
+  document.getElementById("lookupCopy").addEventListener("click", copyLookup);
 
   function isManager() {
     return !!(currentAccount && currentAccount.role === "manager");
