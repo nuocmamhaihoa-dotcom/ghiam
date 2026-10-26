@@ -18,6 +18,7 @@ os.environ["CONTROL_TOKEN"] = "test-token"
 os.environ["CONTROL_PROXIES_FILE"] = str(Path(_TMP) / "proxies.txt")
 os.environ["CONTROL_PACKAGES_DIR"] = str(Path(_TMP) / "packages")
 os.environ["CONTROL_PROXY_CHECK_SEC"] = "86400"
+os.environ["KHACH_AUTO_RESUME"] = "0"
 Path(_TMP, "proxies.txt").write_text("", encoding="utf-8")
 
 from fastapi.testclient import TestClient  # noqa: E402
@@ -95,6 +96,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("display: table-cell", home.text)
         self.assertIn("overflow-wrap: anywhere", home.text)
         self.assertIn("parent.closest(\"#people tbody, #lookupPeople tbody, td.addr, .addr\")", home.text)
+        self.assertIn("indexOf(\"\\n\")", home.text)
         self.assertIn("data-words", home.text)
         self.assertIn("watchSpaces", home.text)
         self.assertIn("Google Dịch đang bật", home.text)
@@ -128,6 +130,13 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("/v1/customers/uploads", home.text)
         self.assertIn("requestId", home.text)
         self.assertIn("resumeJob", home.text)
+        self.assertIn("Tiếp tục", home.text)
+        self.assertIn("Tiếp tục gửi", home.text)
+        self.assertIn("loadPaused", home.text)
+        self.assertIn("/v1/customers/imports/paused", home.text)
+        self.assertIn("continueImport", home.text)
+        self.assertIn("tự chạy tiếp từ file chưa xong", home.text)
+        self.assertIn("resumedBy", home.text)
         self.assertIn("Tải Excel kết quả không phải gửi lại file", home.text)
         self.assertIn("Một ô có hai số", home.text)
         self.assertIn("lookupError", home.text)
@@ -509,6 +518,7 @@ class CustomerApiTests(unittest.TestCase):
                     "name": "Lan",
                     "phone": "0901222333",
                     "address": "Huế",
+                    "adminAddress": "Thừa Thiên Huế",
                     "facebookUid": "10001",
                     "tiktokId": "lan.hue",
                     "createdAt": "2026-01-01T00:00:00+00:00",
@@ -527,8 +537,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(body["stats"]["found"], 1)
         self.assertEqual(body["stats"]["missing"], 1)
         self.assertEqual(body["stats"]["invalid"], 1)
-        self.assertEqual(body["items"][0]["customer"]["name"], "Lan")
-        self.assertFalse(body["items"][1]["found"])
+        self.assertEqual([item["customer"]["name"] for item in body["items"]], ["Lan"])
         by_country = self.client.post(
             "/v1/customers/lookup",
             headers=self.headers,
@@ -546,6 +555,7 @@ class CustomerApiTests(unittest.TestCase):
                     "name": "Lan",
                     "phone": "0901222333",
                     "address": "Huế",
+                    "adminAddress": "Thừa Thiên Huế",
                     "facebookUid": "10001",
                     "tiktokId": "lan.hue",
                     "createdAt": "2026-01-01T00:00:00+00:00",
@@ -556,6 +566,7 @@ class CustomerApiTests(unittest.TestCase):
                     "name": "Minh",
                     "phone": "0375866792",
                     "address": "Đà Nẵng",
+                    "adminAddress": "Đà Nẵng",
                     "facebookUid": "",
                     "tiktokId": "",
                     "createdAt": "2026-01-01T00:00:00+00:00",
@@ -626,7 +637,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(capped_body["stats"]["found"], 2)
         self.assertEqual(len(capped_body["items"]), 1)
         self.assertEqual(capped_body["stats"]["shown"], 1)
-        self.assertEqual(capped_body["stats"]["hidden"], 2)
+        self.assertEqual(capped_body["stats"]["hidden"], 1)
 
     def test_preview_and_import_many_files(self) -> None:
         files = [
@@ -754,6 +765,7 @@ class CustomerApiTests(unittest.TestCase):
                     "name": "Lan",
                     "phone": "0901222333",
                     "address": "Huế",
+                    "adminAddress": "Thừa Thiên Huế",
                     "facebookUid": "",
                     "tiktokId": "",
                     "createdAt": "2026-01-01T00:00:00+00:00",
@@ -896,13 +908,201 @@ class CustomerApiTests(unittest.TestCase):
             json={"uploads": ["0" * 32], "mapping": body["mapping"], "requestId": "req-nap-loi-0002"},
         )
         self.assertEqual(broken.status_code, 404, broken.text)
+        self.assertEqual(job["progress"].get("completedFiles"), 1)
+
+    def _plant_import_job(self, job_id: str, names: list[str], *, file_index: int, completed: int | None) -> None:
+        progress: dict[str, object] = {
+            "phase": "map",
+            "file": names[min(file_index, len(names) - 1)] if names else "",
+            "fileIndex": file_index,
+            "fileCount": len(names),
+        }
+        if completed is not None:
+            progress["completedFiles"] = completed
+        payload = {
+            "id": job_id,
+            "kind": "import",
+            "status": "running",
+            "progress": progress,
+            "info": {"files": names, "rows": len(names)},
+            "result": None,
+            "error": None,
+            "requestId": "",
+            "pid": 0,
+            "createdAt": time.time(),
+            "updatedAt": time.time(),
+        }
+        root = settings.data_dir / "khach-jobs"
+        root.mkdir(parents=True, exist_ok=True)
+        (root / f"{job_id}.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    def test_resume_continues_from_the_unfinished_file(self) -> None:
+        denied = self.client.get("/v1/customers/imports/paused")
+        self.assertEqual(denied.status_code, 401)
+        lan = write_xlsx(["Tên khách", "SĐT", "Địa chỉ"], [["Lan", "0901222333", "Huế"]])
+        minh = write_xlsx(["Tên khách", "SĐT", "Địa chỉ"], [["Minh", "0901888999", "Đà Nẵng"]])
+        self._upload("resume-lan.xlsx", lan, modified=501)
+        self._upload("resume-minh.xlsx", minh, modified=502)
+        started = self.client.post(
+            "/v1/customers/import",
+            headers=self.headers,
+            json={
+                "uploads": [self._upload("resume-lan.xlsx", lan, modified=501)],
+                "mapping": {
+                    "name": {"index": 0, "header": "Tên khách"},
+                    "phone": {"index": 1, "header": "SĐT"},
+                    "address": {"index": 2, "header": "Địa chỉ", "columns": [{"index": 2, "header": "Địa chỉ"}]},
+                },
+                "requestId": "req-resume-lan-0001",
+                "expectedRows": 1,
+            },
+        )
+        self.assertEqual(self._wait_job(started.json()["job"])["status"], "done")
+        self.assertEqual(db.customer_count(settings.db_path), 1)
+        planted = "ab" * 16
+        self._plant_import_job(planted, ["resume-lan.xlsx", "resume-minh.xlsx"], file_index=1, completed=None)
+        paused = self.client.get("/v1/customers/imports/paused", headers=self.headers)
+        self.assertEqual(paused.status_code, 200, paused.text)
+        listed = [item for item in paused.json()["jobs"] if item["id"] == planted]
+        self.assertEqual(len(listed), 1, paused.text)
+        self.assertEqual(listed[0]["resumeFrom"], 1)
+        self.assertEqual(listed[0]["fileCount"], 2)
+        self.assertNotIn("files", listed[0])
+        resumed = self.client.post(f"/v1/customers/imports/{planted}/resume", headers=self.headers)
+        self.assertEqual(resumed.status_code, 200, resumed.text)
+        child = self._wait_job(resumed.json()["job"])
+        self.assertEqual(child["status"], "done", child)
+        self.assertNotEqual(child["id"], planted)
+        stats = child["result"]["stats"]
+        self.assertEqual((stats["incoming"], stats["created"], stats["unchanged"]), (1, 1, 0))
+        self.assertEqual(db.customer_count(settings.db_path), 2)
+        self.assertEqual(
+            self.client.get("/v1/customers", headers=self.headers, params={"q": "0901222333"}).json()["matched"],
+            1,
+        )
+        self.assertEqual(
+            self.client.get("/v1/customers", headers=self.headers, params={"q": "0901888999"}).json()["matched"],
+            1,
+        )
+        again = self.client.post(f"/v1/customers/imports/{planted}/resume", headers=self.headers)
+        self.assertEqual(again.status_code, 200, again.text)
+        self.assertEqual(again.json()["job"]["id"], child["id"])
+        self.assertEqual(db.customer_count(settings.db_path), 2)
+        self.assertEqual(len(self.client.get("/v1/customers/sessions", headers=self.headers).json()["sessions"]), 2)
+        after = self.client.get("/v1/customers/imports/paused", headers=self.headers).json()["jobs"]
+        self.assertNotIn(planted, [item["id"] for item in after])
+        missing_id = "cd" * 16
+        self._plant_import_job(missing_id, ["khong-co-resume.xlsx"], file_index=0, completed=None)
+        missed = self.client.post(f"/v1/customers/imports/{missing_id}/resume", headers=self.headers)
+        self.assertEqual(missed.status_code, 404, missed.text)
+        self.assertEqual(db.customer_count(settings.db_path), 2)
+        finished = "ef" * 16
+        self._plant_import_job(
+            finished,
+            ["resume-lan.xlsx", "resume-minh.xlsx"],
+            file_index=0,
+            completed=2,
+        )
+        closed = self._wait_job(
+            self.client.post(f"/v1/customers/imports/{finished}/resume", headers=self.headers).json()["job"]
+        )
+        self.assertEqual(closed["status"], "done", closed)
+        self.assertTrue(closed["result"].get("alreadyDone"))
+        self.assertEqual(db.customer_count(settings.db_path), 2)
+        self.assertEqual(len(self.client.get("/v1/customers/sessions", headers=self.headers).json()["sessions"]), 2)
+
+    def test_list_and_sessions_read_the_saved_total(self) -> None:
+        db.set_customer_total(settings.db_path, 42)
+        listed = self.client.get("/v1/customers", headers=self.headers)
+        self.assertEqual(listed.status_code, 200, listed.text)
+        self.assertEqual(listed.json()["total"], 42)
+        history = self.client.get("/v1/customers/sessions", headers=self.headers)
+        self.assertEqual(history.status_code, 200, history.text)
+        self.assertEqual(history.json()["total"], 42)
+        self.assertEqual(history.json()["uniquePhones"], 42)
+        self.assertEqual(history.json()["emptyPhone"], 0)
+
+    def test_resume_keeps_the_later_checkpoint_when_the_child_has_no_progress(self) -> None:
+        first = write_xlsx(["Tên khách", "SĐT", "Địa chỉ"], [["An", "0912000111", "Huế"]])
+        second = write_xlsx(["Tên khách", "SĐT", "Địa chỉ"], [["Bình", "0912000222", "Đà Nẵng"]])
+        self._upload("checkpoint-mot.xlsx", first, modified=601)
+        self._upload("checkpoint-hai.xlsx", second, modified=602)
+        parent_id = "a1" * 16
+        child_id = "b2" * 16
+        mapping = {
+            "name": {"index": 0, "header": "Tên khách"},
+            "phone": {"index": 1, "header": "SĐT"},
+            "address": {"index": 2, "header": "Địa chỉ", "columns": [{"index": 2, "header": "Địa chỉ"}]},
+        }
+        names = ["checkpoint-mot.xlsx", "checkpoint-hai.xlsx"]
+        root = settings.data_dir / "khach-jobs"
+        root.mkdir(parents=True, exist_ok=True)
+        now = time.time()
+        parent = {
+            "id": parent_id,
+            "kind": "import",
+            "status": "running",
+            "progress": {"phase": "map", "file": names[1], "fileIndex": 1, "fileCount": 2},
+            "info": {"files": names, "rows": 2, "mapping": mapping, "resumedBy": child_id},
+            "result": None,
+            "error": None,
+            "requestId": "",
+            "pid": 0,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        child = {
+            "id": child_id,
+            "kind": "import",
+            "status": "running",
+            "progress": {"phase": "waiting", "fileCount": 2},
+            "info": {"files": names, "rows": 2, "mapping": mapping, "resumeOf": parent_id},
+            "result": None,
+            "error": None,
+            "requestId": "",
+            "pid": 0,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        (root / f"{parent_id}.json").write_text(json.dumps(parent), encoding="utf-8")
+        (root / f"{child_id}.json").write_text(json.dumps(child), encoding="utf-8")
+        paused = self.client.get("/v1/customers/imports/paused", headers=self.headers)
+        self.assertEqual(paused.status_code, 200, paused.text)
+        listed = [item for item in paused.json()["jobs"] if item["id"] == child_id]
+        self.assertEqual(len(listed), 1, paused.text)
+        self.assertEqual(listed[0]["resumeFrom"], 1)
+        self.assertEqual(listed[0]["fileCount"], 2)
+        self.assertNotIn(parent_id, [item["id"] for item in paused.json()["jobs"]])
+        resumed = self.client.post(f"/v1/customers/imports/{child_id}/resume", headers=self.headers)
+        self.assertEqual(resumed.status_code, 200, resumed.text)
+        done = self._wait_job(resumed.json()["job"])
+        self.assertEqual(done["status"], "done", done)
+        stats = done["result"]["stats"]
+        self.assertEqual((stats["incoming"], stats["created"], stats["unchanged"]), (1, 1, 0))
+        self.assertEqual(db.customer_count(settings.db_path), 1)
+        self.assertEqual(
+            self.client.get("/v1/customers", headers=self.headers, params={"q": "0912000111"}).json()["matched"],
+            0,
+        )
+        self.assertEqual(
+            self.client.get("/v1/customers", headers=self.headers, params={"q": "0912000222"}).json()["matched"],
+            1,
+        )
 
     def test_lookup_job_exports_without_resending(self) -> None:
         now = "2026-01-01T00:00:00+00:00"
         db.replace_customers(
             settings.db_path,
             [
-                {"id": f"c{index}", "name": f"Lan {index}", "phone": f"0909{index:06d}", "createdAt": now, "updatedAt": now}
+                {
+                    "id": f"c{index}",
+                    "name": f"Lan {index}",
+                    "phone": f"0909{index:06d}",
+                    "address": "Huế",
+                    "adminAddress": "Thừa Thiên Huế",
+                    "createdAt": now,
+                    "updatedAt": now,
+                }
                 for index in range(300)
             ],
             [],
@@ -930,13 +1130,60 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(result["stats"]["found"], 251)
         self.assertEqual(result["stats"]["missing"], 2)
         self.assertEqual(len(result["items"]), 100)
-        self.assertEqual(result["stats"]["hidden"], 153)
+        self.assertEqual(result["stats"]["hidden"], 151)
         exported = self.client.get(f"/v1/customers/lookup/jobs/{job['id']}/export", headers=self.headers)
         self.assertEqual(exported.status_code, 200)
         rows = list(iter_xlsx_rows(exported.content))
-        self.assertEqual(len(rows), 254)
+        self.assertEqual(len(rows), 252)
+        self.assertEqual(rows[0][1], "Có đủ địa chỉ")
         self.assertEqual(rows[1][:2], ["0909000299", "Có"])
-        self.assertEqual(sum(1 for row in rows[1:] if row[1] == "Không"), 2)
+        self.assertEqual(sum(1 for row in rows[1:] if row[1] == "Không"), 0)
+
+    def test_lookup_copy_keeps_found_address_and_phone(self) -> None:
+        now = "2026-01-01T00:00:00+00:00"
+        db.replace_customers(
+            settings.db_path,
+            [
+                {
+                    "id": "lan",
+                    "name": "Lan",
+                    "phone": "0901222333",
+                    "address": "12 Lê Lợi\nPhường Phú Hội",
+                    "adminAddress": "Thừa Thiên Huế",
+                    "createdAt": now,
+                    "updatedAt": now,
+                },
+                {
+                    "id": "minh",
+                    "name": "Minh",
+                    "phone": "0375866792",
+                    "address": "",
+                    "adminAddress": "Đà Nẵng",
+                    "createdAt": now,
+                    "updatedAt": now,
+                },
+            ],
+            [],
+        )
+        started = self.client.post(
+            "/v1/customers/lookup",
+            headers=self.headers,
+            json={"text": "0901222333\n0375866792\n0985000000", "requestId": "req-copy-0001"},
+        )
+        self.assertEqual(started.status_code, 200, started.text)
+        job = self._wait_job(started.json()["job"])
+        self.assertEqual(job["status"], "done", job)
+        copied = self.client.get(f"/v1/customers/lookup/jobs/{job['id']}/copy", headers=self.headers)
+        self.assertEqual(copied.status_code, 200, copied.text)
+        self.assertIn("text/plain", copied.headers["content-type"])
+        lines = [line for line in copied.text.splitlines() if line]
+        self.assertEqual(lines[0], "Số điện thoại\tĐịa chỉ")
+        self.assertEqual(
+            lines[1:],
+            ["0901222333\t12 Lê Lợi | Phường Phú Hội | Thừa Thiên Huế"],
+        )
+        self.assertNotIn("0375866792", copied.text)
+        self.assertNotIn("0985000000", copied.text)
 
     def test_list_caps_visible_items_without_hiding_total(self) -> None:
         now = "2026-01-01T00:00:00+00:00"
@@ -1302,6 +1549,187 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(history.json()["emptyPhone"], 0)
         self.assertEqual(history.json()["duplicatePhones"], 0)
 
+    def test_large_warehouse_does_not_call_a_finished_batch_missing(self) -> None:
+        db.set_customer_total(settings.db_path, 200_000)
+        db.record_action(
+            settings.db_path,
+            at="2026-10-25T10:54:15+00:00",
+            actor="me",
+            source="hub",
+            kind="note",
+            summary="Nạp Excel: thêm 5000, bổ sung 1, giữ 1, gộp 0.",
+            detail=json.dumps(
+                {
+                    "stats": {"created": 5000, "updated": 1, "unchanged": 1, "incoming": 5002},
+                    "importedAt": "2026-10-25T10:54:15+00:00",
+                    "files": [{"name": "data-a.xlsx", "rows": 5002}],
+                    "fileCount": 1,
+                    "okFiles": 1,
+                },
+                ensure_ascii=False,
+            ),
+        )
+        history = self.client.get("/v1/customers/sessions", headers=self.headers)
+        self.assertEqual(history.status_code, 200, history.text)
+        body = history.json()
+        self.assertTrue(body["complete"])
+        self.assertEqual(body["needReupload"], [])
+        self.assertEqual(body["needCount"], 0)
+        self.assertFalse(body["sessions"][0]["missing"])
+
+    def test_reread_reads_the_kept_copy_of_an_unread_file(self) -> None:
+        db.record_action(
+            settings.db_path,
+            at="2026-10-24T04:33:56+00:00",
+            actor="me",
+            source="hub",
+            kind="note",
+            summary="Nạp Excel: thêm 0, bổ sung 0, giữ 0, gộp 0.",
+            detail=json.dumps(
+                {
+                    "stats": {"created": 0, "updated": 0, "unchanged": 0, "incoming": 0},
+                    "files": [{"name": "delivery_export_1.xlsx", "rows": 0}],
+                    "emptyFiles": ["delivery_export_1.xlsx"],
+                    "fileCount": 1,
+                    "okFiles": 0,
+                },
+                ensure_ascii=False,
+            ),
+        )
+        folder = settings.imports_dir() / "20261024T010101"
+        folder.mkdir(parents=True)
+        (folder / "delivery_export_1.xlsx").write_bytes(
+            write_xlsx(
+                ["Tên khách", "SĐT", "Địa chỉ"],
+                [["Nguyễn Lan", "0901222333", "Huế"]],
+            )
+        )
+        started = self.client.post("/v1/customers/imports/reread", headers=self.headers, json={})
+        self.assertEqual(started.status_code, 200, started.text)
+        self.assertEqual(started.json()["found"], 1)
+        self.assertEqual(started.json()["missing"], [])
+        job = self._wait_job(started.json()["job"])
+        self.assertEqual(job["status"], "done", job.get("error"))
+        self.assertEqual(job["result"]["stats"]["created"], 1)
+        history = self.client.get("/v1/customers/sessions", headers=self.headers)
+        self.assertEqual(history.json()["needReupload"], [])
+        again = self.client.post("/v1/customers/imports/reread", headers=self.headers, json={})
+        self.assertEqual(again.status_code, 200, again.text)
+        self.assertIsNone(again.json()["job"])
+        self.assertIn("Không còn file", again.json()["detail"])
+
+    def test_store_page_filters_customers_who_have_the_chosen_fields(self) -> None:
+        now = "2026-10-26T00:00:00+00:00"
+        db.replace_customers(
+            settings.db_path,
+            [
+                {
+                    "id": "full",
+                    "name": "Nguyễn Lan",
+                    "phone": "0901111111",
+                    "address": "Huế",
+                    "adminAddress": "Thừa Thiên Huế",
+                    "orderContent": "Nước mắm",
+                    "codAmount": "120000",
+                    "facebookUid": "1001",
+                    "tiktokId": "tt1",
+                    "createdAt": now,
+                    "updatedAt": now,
+                },
+                {
+                    "id": "thin",
+                    "name": "Trần Minh",
+                    "phone": "0902222222",
+                    "address": "",
+                    "createdAt": now,
+                    "updatedAt": now,
+                },
+            ],
+            [],
+        )
+        listed = self.client.get(
+            "/v1/customers",
+            headers=self.headers,
+            params={"has": "name,address,codAmount", "limit": 50},
+        )
+        self.assertEqual(listed.status_code, 200, listed.text)
+        phones = [item["phone"] for item in listed.json()["items"]]
+        self.assertEqual(phones, ["0901111111"])
+        self.assertFalse(listed.json()["hasMore"])
+        unknown = self.client.get("/v1/customers", headers=self.headers, params={"has": "matKhau"})
+        self.assertEqual(unknown.status_code, 400, unknown.text)
+
+    def test_store_filter_finds_old_rows_without_scanning_the_whole_warehouse(self) -> None:
+        now = "2026-10-26T00:00:00+00:00"
+        rows = [
+            {
+                "id": "old",
+                "name": "Cũ",
+                "phone": "0901000001",
+                "address": "Huế",
+                "createdAt": now,
+                "updatedAt": now,
+            }
+        ]
+        rows.extend(
+            {
+                "id": f"new{index}",
+                "name": f"Mới {index}",
+                "phone": f"0902{index:06d}",
+                "address": "",
+                "createdAt": now,
+                "updatedAt": now,
+            }
+            for index in range(8)
+        )
+        db.replace_customers(settings.db_path, rows, [])
+        shown, before, after, has_more = db.browse_customers(
+            settings.db_path,
+            limit=2,
+            filled=["address"],
+            budget=3,
+        )
+        self.assertEqual([item["phone"] for item in shown], ["0901000001"])
+        self.assertIsNone(before)
+        self.assertTrue(has_more)
+        self.assertTrue(after)
+        empty, _before, next_after, more = db.browse_customers(
+            settings.db_path,
+            limit=2,
+            filled=["tiktokId"],
+            budget=3,
+        )
+        self.assertEqual(empty, [])
+        self.assertTrue(more)
+        self.assertTrue(next_after)
+
+    def test_store_page_walks_every_saved_customer(self) -> None:
+        now = "2026-10-26T00:00:00+00:00"
+        db.replace_customers(
+            settings.db_path,
+            [
+                {"id": "a", "name": "An", "phone": "0901000001", "address": "Huế", "createdAt": now, "updatedAt": now},
+                {"id": "b", "name": "Bình", "phone": "0901000002", "address": "Đà Nẵng", "createdAt": now, "updatedAt": now},
+                {"id": "c", "name": "Chi", "phone": "0901000003", "address": "Hà Nội", "createdAt": now, "updatedAt": now},
+            ],
+            [],
+        )
+        seen: list[str] = []
+        before = 0
+        for _ in range(5):
+            params = {"limit": 1}
+            if before:
+                params["before"] = before
+            page = self.client.get("/v1/customers", headers=self.headers, params=params)
+            self.assertEqual(page.status_code, 200, page.text)
+            body = page.json()
+            self.assertEqual(len(body["items"]), 1)
+            seen.append(body["items"][0]["phone"])
+            if not body["hasMore"]:
+                break
+            before = int(body["nextBefore"])
+        self.assertEqual(seen, ["0901000003", "0901000002", "0901000001"])
+
     def test_lookup_file_skips_facebook_uid(self) -> None:
         db.replace_customers(
             settings.db_path,
@@ -1311,6 +1739,7 @@ class CustomerApiTests(unittest.TestCase):
                     "name": "Lan",
                     "phone": "0901222333",
                     "address": "Huế",
+                    "adminAddress": "Thừa Thiên Huế",
                     "facebookUid": "1000123456789",
                     "tiktokId": "",
                     "createdAt": "2026-01-01T00:00:00+00:00",
@@ -1407,7 +1836,7 @@ class CustomerApiTests(unittest.TestCase):
         items = {item["phone"]: item for item in listed.json()["items"]}
         self.assertEqual(set(items), {"0901111111", "0902222222", "0903333333"})
         self.assertEqual(items["0901111111"]["name"], "Lan")
-        self.assertEqual(items["0901111111"]["address"], "Đà Nẵng")
+        self.assertEqual(items["0901111111"]["address"], "Huế\nĐà Nẵng")
         self.assertEqual(items["0902222222"]["name"], "Minh")
         self.assertEqual(items["0903333333"]["name"], "Hoa")
         again = self.client.post(
@@ -1486,7 +1915,8 @@ class CustomerApiTests(unittest.TestCase):
             set(items),
             {"0901111111", "0902222222", "0903333333", "0901444444", "0901555555"},
         )
-        self.assertEqual(items["0901111111"]["address"], "Huế 2")
+        self.assertEqual(items["0901111111"]["address"], "Huế\nHuế 2")
+        self.assertEqual(items["0901111111"]["name"], "Lan\nLan lại")
         again = self.client.post(
             "/v1/customers/import",
             headers=self.headers,

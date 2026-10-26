@@ -40,16 +40,17 @@ from control_plane.customers import (
     has_phone,
     is_facebook_id_digits,
     is_vn_phone,
+    _incoming_address_line,
     compose_address,
     join_address_lines,
     phones_in_text,
 )
 from control_plane.settings import settings
 from control_plane.vietnam_places import address_content_rank, address_header_rank, fold_vietnamese
-from control_plane.xlsx_fast import LazySharedStrings, count_value_rows, iter_sheet_rows
+from control_plane.xlsx_fast import LazySharedStrings, count_value_rows, finish_cell, iter_sheet_rows
 
 TableSource = bytes | bytearray | os.PathLike[str] | str
-IMPORT_BATCH = 10000
+IMPORT_BATCH = 2000
 SHARED_SPILL = 150_000
 SAMPLE_ROWS = 8
 DETECT_ROWS = 200
@@ -245,7 +246,7 @@ def _cell_text(cell: ET.Element, shared: Any) -> str:
         for node in cell.iter():
             if _local(node.tag) == "t" and node.text:
                 parts.append(node.text)
-        return expand_scientific(collapse("".join(parts)))
+        return finish_cell("".join(parts))
     value = ""
     for node in cell:
         if _local(node.tag) == "v" and node.text is not None:
@@ -253,12 +254,10 @@ def _cell_text(cell: ET.Element, shared: Any) -> str:
             break
     if kind == "s":
         try:
-            return expand_scientific(collapse(shared[int(value)]))
+            return finish_cell(str(shared[int(value)]))
         except (ValueError, IndexError):
             return ""
-    if kind in ("b", "str", "e"):
-        return collapse(value)
-    return expand_scientific(collapse(value))
+    return finish_cell(value)
 
 
 def _parse_row(row: ET.Element, shared: Any) -> list[str]:
@@ -615,7 +614,7 @@ def _iter_csv_cells(data: TableSource) -> Iterator[list[str]]:
 
 def iter_csv_rows(data: TableSource) -> Iterator[list[str]]:
     for row in _iter_csv_cells(data):
-        yield [expand_scientific(collapse(cell)) for cell in row]
+        yield [finish_cell(cell) for cell in row]
 
 
 def read_csv(data: TableSource, max_store: int | None = None) -> list[list[str]]:
@@ -1009,6 +1008,7 @@ def preview_table(
     filename: str,
     data: TableSource,
     progress: Callable[[int], None] | None = None,
+    count_rows: bool = True,
 ) -> dict[str, Any]:
     stored, truncated = _read_head(filename, data, PREVIEW_STORE)
     rows = _trim_table(stored)
@@ -1017,7 +1017,10 @@ def preview_table(
     headers, body, _headerless = _split_header_row(rows)
     samples = body[:SAMPLE_ROWS]
     detect_rows = body[:DETECT_ROWS]
-    row_count = count_data_rows(filename, data, progress) if truncated else len(body)
+    if count_rows and truncated:
+        row_count = count_data_rows(filename, data, progress)
+    else:
+        row_count = len(body)
     return {
         "name": filename,
         "columns": describe_columns(headers),
@@ -1176,7 +1179,10 @@ def _mapped_row(
                 for index in lines[field]
                 if index < size and row[index]
             ]
-            raw[field] = compose_address(pieces)
+            if len(pieces) <= 1:
+                raw[field] = _incoming_address_line(pieces[0][2] if pieces else "")
+            else:
+                raw[field] = compose_address(pieces)
             continue
         if field in LINE_FIELDS:
             parts = [row[index] for index in lines[field] if index < size and row[index]]
@@ -1522,19 +1528,45 @@ def _xlsx_escape(value: str) -> str:
         .replace("<", "&lt;")
         .replace(">", "&gt;")
         .replace('"', "&quot;")
+        .replace("\r\n", "&#10;")
+        .replace("\r", "&#10;")
+        .replace("\n", "&#10;")
     )
 
 
+_XLSX_STYLES = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
+  <fills count="1"><fill><patternFill patternType="none"/></fill></fills>
+  <borders count="1"><border/></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="2">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>
+  </cellXfs>
+</styleSheet>
+"""
+
+
 def _xlsx_cell(column: int, row_number: int, value: str) -> str:
+    style = ' s="1"' if "\n" in value or "\r" in value else ""
     return (
-        f'<c r="{column_letter(column)}{row_number}" t="inlineStr">'
+        f'<c r="{column_letter(column)}{row_number}"{style} t="inlineStr">'
         f'<is><t xml:space="preserve">{_xlsx_escape(value)}</t></is></c>'
     )
 
 
 def _xlsx_row_xml(row_number: int, row: Iterable[str]) -> str:
-    cells = "".join(_xlsx_cell(index, row_number, cell) for index, cell in enumerate(row))
-    return f'<row r="{row_number}">{cells}</row>\n'
+    cells_list = [str(cell or "") for cell in row]
+    line_count = 1
+    for cell in cells_list:
+        line_count = max(line_count, cell.count("\n") + cell.count("\r") + 1)
+    height = ""
+    if line_count > 1:
+        points = min(line_count * 15, 240)
+        height = f' ht="{points}" customHeight="1"'
+    cells = "".join(_xlsx_cell(index, row_number, cell) for index, cell in enumerate(cells_list))
+    return f'<row r="{row_number}"{height}>{cells}</row>\n'
 
 
 def _xlsx_sheet_header() -> str:
@@ -1564,6 +1596,8 @@ def _xlsx_pack(dest: Path | io.BytesIO, sheets: list[tuple[str, Path | str]]) ->
         '  <Default Extension="xml" ContentType="application/xml"/>\n'
         '  <Override PartName="/xl/workbook.xml" '
         'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>\n'
+        '  <Override PartName="/xl/styles.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>\n'
         + "\n".join(f"  {item}" for item in overrides)
         + "\n</Types>\n"
     )
@@ -1592,6 +1626,9 @@ def _xlsx_pack(dest: Path | io.BytesIO, sheets: list[tuple[str, Path | str]]) ->
             f'Target="worksheets/sheet{index}.xml"/>\n'
             for index in range(1, len(sheets) + 1)
         )
+        + '  <Relationship Id="rIdStyles" '
+        'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" '
+        'Target="styles.xml"/>\n'
         + "</Relationships>\n"
     )
     with zipfile.ZipFile(dest, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -1599,6 +1636,7 @@ def _xlsx_pack(dest: Path | io.BytesIO, sheets: list[tuple[str, Path | str]]) ->
         archive.writestr("_rels/.rels", rels)
         archive.writestr("xl/workbook.xml", workbook)
         archive.writestr("xl/_rels/workbook.xml.rels", workbook_rels)
+        archive.writestr("xl/styles.xml", _XLSX_STYLES)
         for index, (_name, body) in enumerate(sheets, start=1):
             part = f"xl/worksheets/sheet{index}.xml"
             if isinstance(body, Path):

@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import ctypes
 import gc
+import hashlib
 import json
+import logging
+import os
 import re
 import shutil
 import sys
 import tempfile
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -55,6 +60,7 @@ from control_plane.settings import settings
 
 router = APIRouter()
 _heavy_lock = asyncio.Lock()
+_LOG = logging.getLogger(__name__)
 
 
 def _charge(actor: accounts.Actor, phones: list[str]) -> dict[str, Any]:
@@ -179,6 +185,31 @@ def _parse_iso(value: str) -> datetime | None:
         return None
 
 
+def _warehouse_is_huge() -> bool:
+    """Kho hàng chục triệu dòng thì không đếm lại từng lần nạp khi mở trang."""
+    saved = db.cached_customer_total(settings.db_path)
+    if saved is not None:
+        return saved >= 100_000
+    try:
+        return settings.db_path.stat().st_size >= 500_000_000
+    except OSError:
+        return False
+
+
+def _listed_customer_total() -> int:
+    stats = db.page_warehouse_stats(settings.db_path)
+    return int(stats["total"] or 0)
+
+
+def _remembered_total() -> int:
+    saved = db.cached_customer_total(settings.db_path)
+    if saved is not None:
+        return saved
+    total = db.customer_count(settings.db_path)
+    db.set_customer_total(settings.db_path, total)
+    return total
+
+
 def _import_sessions() -> dict[str, Any]:
     actions = db.list_actions(settings.db_path, limit=200, q="Nạp Excel")
     parsed: list[dict[str, Any]] = []
@@ -225,8 +256,9 @@ def _import_sessions() -> dict[str, Any]:
         at = str(action.get("at") or "")
         stamp = str(payload.get("importedAt") or "") or at
         moment = _parse_iso(stamp)
+        recount = created >= 1000 and moment is not None and not _warehouse_is_huge()
         kept = 0
-        if created >= 1000 and moment is not None:
+        if recount:
             if payload.get("importedAt"):
                 kept = db.customers_created_between(settings.db_path, stamp, stamp)
             else:
@@ -250,7 +282,7 @@ def _import_sessions() -> dict[str, Any]:
                 "okNames": ok_names,
                 "names": names,
                 "keptInWarehouse": kept,
-                "missingRaw": created >= 1000 and kept < max(1, int(created * 0.1)),
+                "missingRaw": recount and kept < max(1, int(created * 0.1)),
                 "filesKept": payload.get("keptFiles") or [],
             }
         )
@@ -301,7 +333,7 @@ def _import_sessions() -> dict[str, Any]:
             continue
         seen.add(name)
         unique_reupload.append(name)
-    warehouse = db.warehouse_stats(settings.db_path)
+    warehouse = db.page_warehouse_stats(settings.db_path)
     row_sum = sum(int(item.get("incoming") or 0) for item in sessions)
     unique_phones = int(warehouse["uniquePhones"] or 0)
     return {
@@ -310,7 +342,8 @@ def _import_sessions() -> dict[str, Any]:
         "emptyPhone": warehouse["emptyPhone"],
         "duplicatePhones": warehouse["duplicatePhones"],
         "sessions": sessions,
-        "needReupload": unique_reupload[:80],
+        "needReupload": unique_reupload,
+        "needCount": len(unique_reupload),
         "complete": not unique_reupload,
         "rowSum": row_sum,
         "repeatRows": max(0, row_sum - unique_phones),
@@ -430,32 +463,66 @@ def _collect_changed(changed: list[dict[str, str]], folded: list[dict[str, Any]]
             return
 
 
+def _filled_fields(raw: str) -> list[str]:
+    wanted: list[str] = []
+    seen: set[str] = set()
+    for part in str(raw or "").split(","):
+        field = part.strip()
+        if not field or field in seen:
+            continue
+        if field not in FIELDS:
+            raise HTTPException(status_code=400, detail="Mục lọc không có trong kho.")
+        seen.add(field)
+        wanted.append(field)
+    return wanted
+
+
 @router.get("/v1/customers")
 def customers_list(
     request: Request,
     q: str = Query(default=""),
+    has: str = Query(default=""),
+    before: int = Query(default=0, ge=0),
+    after: int = Query(default=0, ge=0),
+    limit: int = Query(default=LIST_LIMIT, ge=1, le=LIST_LIMIT),
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
     _manager(_actor(request))
     db.init_db(settings.db_path)
-    total = db.customer_count(settings.db_path)
-    if collapse(q):
-        rows, matched = db.search_customers(settings.db_path, q, limit=LIST_LIMIT)
+    total = _listed_customer_total()
+    filled = _filled_fields(has)
+    fields = [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS]
+    if collapse(q) and not filled and before <= 0 and after <= 0:
+        rows, matched = db.search_customers(settings.db_path, q, limit=limit)
         shown = [public_customer(row) for row in rows]
         return {
             "count": len(shown),
             "matched": matched,
             "total": total,
             "items": shown,
-            "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
+            "hasMore": matched > len(shown),
+            "nextBefore": None,
+            "nextAfter": None,
+            "fields": fields,
         }
-    rows = [public_customer(row) for row in db.list_customers(settings.db_path, limit=LIST_LIMIT)]
+    rows, next_before, next_after, has_more = db.browse_customers(
+        settings.db_path,
+        limit=limit,
+        before=before or None,
+        after=after or None,
+        filled=filled,
+        query=q,
+    )
+    shown = [public_customer(row) for row in rows]
     return {
-        "count": len(rows),
-        "matched": total,
+        "count": len(shown),
+        "matched": None if filled or before or after else total,
         "total": total,
-        "items": rows,
-        "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
+        "items": shown,
+        "hasMore": has_more,
+        "nextBefore": next_before,
+        "nextAfter": next_after,
+        "fields": fields,
     }
 
 
@@ -468,10 +535,11 @@ def _preview_uploaded(
             status_code=400,
             detail="Hãy chọn ít nhất một file Excel." + ((" " + " ".join(problems)) if problems else ""),
         )
+    count_rows = len(uploaded) <= 40
     previews: list[dict[str, Any]] = []
     for name, payload in uploaded:
         try:
-            previews.append(preview_table(name, payload))
+            previews.append(preview_table(name, payload, count_rows=count_rows))
         except ValueError as exc:
             problems.append(f"{name}: {exc}")
     if not previews:
@@ -524,7 +592,17 @@ def _preview_uploaded(
         "suggested": payload,
         "detectNote": detect_note,
         "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
-        "applyNote": "Mỗi file tự khớp cột theo tiêu đề của file đó. Không giới hạn số file và dung lượng. File nạp thành công được giữ lại trên đĩa. Nạp từng dòng, ghi từng lô vào SQLite, cộng vào kho, không xóa khách cũ. Khớp tên cột trước; nếu thiếu tên hoặc SĐT thì lấy cột có tên người / số điện thoại / địa chỉ. Cột giới tính, ngày sinh, link thì bỏ qua.",
+        "applyNote": (
+            "Mỗi file tự khớp cột theo tiêu đề của file đó. Không giới hạn số file và dung lượng. "
+            "File nạp thành công được giữ lại trên đĩa. Nạp từng dòng, ghi từng lô vào SQLite, cộng vào kho, không xóa khách cũ. "
+            "Khớp tên cột trước; nếu thiếu tên hoặc SĐT thì lấy cột có tên người / số điện thoại / địa chỉ. "
+            "Cột giới tính, ngày sinh, link thì bỏ qua."
+            + (
+                " Nhiều file nên chưa đếm hết số dòng trước khi nạp. Bấm nạp vẫn đọc từng file."
+                if not count_rows
+                else ""
+            )
+        ),
         "headerMismatch": different,
     }
 
@@ -567,17 +645,18 @@ def _column_values_from_previews(
     return buckets
 
 
-def _parse_mapping(mapping_text: str) -> dict[str, Any]:
+def _parse_mapping(mapping_text: str, *, allow_empty: bool = False) -> dict[str, Any]:
     try:
-        parsed = mapping_from_form(json.loads(mapping_text or ""))
+        parsed = mapping_from_form(json.loads(mapping_text or "{}"))
     except (json.JSONDecodeError, TypeError, AttributeError) as exc:
         raise HTTPException(status_code=400, detail="Bảng chọn cột không đọc được.") from exc
-    if not any(_mapped(parsed.get(field) or {}) for field in FIELDS) and not any(
+    has_field = any(_mapped(parsed.get(field) or {}) for field in FIELDS) or any(
         _mapped((spec or {}).get(field) or {})
         for spec in (parsed.get("fileMaps") or {}).values()
         if isinstance(spec, dict)
         for field in FIELDS
-    ):
+    )
+    if not has_field and not allow_empty:
         raise HTTPException(status_code=400, detail="Hãy chọn ít nhất một cột dữ liệu.")
     return parsed
 
@@ -596,8 +675,9 @@ def _import_files(
     problems: list[str],
     progress: Any = None,
     link: bool = False,
+    start_index: int = 0,
 ) -> dict[str, Any]:
-    parsed = _parse_mapping(mapping_text)
+    parsed = _parse_mapping(mapping_text, allow_empty=True)
     if not uploaded:
         raise HTTPException(
             status_code=400,
@@ -609,7 +689,22 @@ def _import_files(
     first_width: int | None = None
     now = utcnow()
     incoming_total = 0
+    start_index = max(0, int(start_index or 0))
+    if start_index >= len(uploaded):
+        stats["total"] = _remembered_total()
+        return {
+            "stats": stats,
+            "files": [],
+            "fileErrors": [],
+            "emptyFiles": [],
+            "keptFiles": [],
+            "items": [],
+            "total": stats["total"],
+            "alreadyDone": True,
+        }
     for file_index, (name, payload) in enumerate(uploaded):
+        if file_index < start_index:
+            continue
         mapped: Any = None
         file_counts = {"fileRows": 0, "unmapped": 0, "phonesOnFile": 0}
         before = dict(stats)
@@ -671,6 +766,17 @@ def _import_files(
                     closer()
                 except Exception:
                     pass
+        if progress is not None:
+            progress(
+                {
+                    "phase": "import",
+                    "file": name,
+                    "fileIndex": file_index,
+                    "fileCount": len(uploaded),
+                    "completedFiles": file_index + 1,
+                }
+            )
+        _release_memory()
     problems.extend(str(item.get("error") or "") for item in file_reports if item.get("error"))
     problems = [item for item in problems if item]
     if incoming_total == 0:
@@ -678,7 +784,7 @@ def _import_files(
             status_code=400,
             detail="Không đọc được dòng khách nào. " + " ".join(problems),
         )
-    stats["total"] = db.customer_count(settings.db_path)
+    stats["total"] = _remembered_total()
     empty_files = [item["name"] for item in file_reports if not item.get("rows") and not item.get("error")]
     kept_files = _keep_imported_files(uploaded, now, link=link)
     summary = (
@@ -701,7 +807,7 @@ def _import_files(
         ),
         at=now,
     )
-    gc.collect()
+    _release_memory()
     return {
         "stats": stats,
         "files": file_reports,
@@ -742,14 +848,44 @@ def _resolve_uploads(raw: Any) -> list[tuple[str, Path]]:
         raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
 
 
-def _import_job(context: khach_jobs.JobContext, uploaded: list[tuple[str, Path]], mapping_text: str) -> dict[str, Any]:
+def _release_memory() -> None:
+    """Trả bộ nhớ về hệ thống sau mỗi file, để lần nạp dài không bị giết vì RSS chỉ tăng."""
+    gc.collect()
+    try:
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except Exception:
+        return
+
+
+def _import_job(
+    context: khach_jobs.JobContext,
+    uploaded: list[tuple[str, Path]],
+    mapping_text: str,
+    start_index: int = 0,
+) -> dict[str, Any]:
+    start = max(0, int(start_index or 0))
+    context.report(
+        {
+            "phase": "waiting",
+            "fileIndex": start,
+            "completedFiles": start,
+            "fileCount": len(uploaded),
+            "file": uploaded[start][0] if uploaded and start < len(uploaded) else "",
+        },
+        force=True,
+    )
+
+    def report(progress: dict[str, Any]) -> None:
+        context.report(progress, force="completedFiles" in progress)
+
     with khach_jobs.import_lock(context):
         return _import_files(
             uploaded,
             mapping_text,
             [],
-            progress=lambda progress: context.report(progress),
+            progress=report,
             link=True,
+            start_index=start,
         )
 
 
@@ -819,7 +955,12 @@ async def customers_import(
         uploaded = _resolve_uploads(payload.get("uploads"))
         if not uploaded:
             raise HTTPException(status_code=400, detail="Hãy chọn ít nhất một file Excel.")
-        info = {"files": [name for name, _path in uploaded], "rows": int(payload.get("expectedRows") or 0)}
+        info = {
+            "files": [name for name, _path in uploaded],
+            "rows": int(payload.get("expectedRows") or 0),
+            "uploads": [str(item) for item in payload.get("uploads") or [] if str(item or "")],
+            "mapping": mapping_text,
+        }
         job = khach_jobs.start_job(
             "import",
             str(payload.get("requestId") or ""),
@@ -834,6 +975,370 @@ async def customers_import(
             return await run_in_threadpool(_import_locked, uploaded, fields, problems)
     finally:
         _cleanup_uploads(uploaded)
+
+
+def _as_int(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _checkpoint(job: dict[str, Any]) -> int | None:
+    """Mốc file tiếp theo của một việc. Thiếu khóa thì không coi là 0."""
+    progress = job.get("progress") if isinstance(job.get("progress"), dict) else {}
+    info = job.get("info") if isinstance(job.get("info"), dict) else {}
+    points: list[int] = []
+    if "completedFiles" in progress:
+        points.append(_as_int(progress.get("completedFiles")))
+    if "fileIndex" in progress and progress.get("fileIndex") is not None:
+        points.append(_as_int(progress.get("fileIndex")))
+    if "resumeFrom" in info and info.get("resumeFrom") is not None:
+        points.append(_as_int(info.get("resumeFrom")))
+    if not points:
+        return None
+    return max(points)
+
+
+def _best_start(job: dict[str, Any]) -> int:
+    """Mốc cao nhất trên cả chuỗi nối tiếp. Việc con đang chờ, chưa có tiến độ, không kéo về file 1."""
+    seen: set[str] = set()
+    best: int | None = None
+    current: dict[str, Any] | None = job
+    while current is not None:
+        job_id = str(current.get("id") or "")
+        if job_id and job_id in seen:
+            break
+        if job_id:
+            seen.add(job_id)
+        point = _checkpoint(current)
+        if point is not None:
+            best = point if best is None else max(best, point)
+        info = current.get("info") if isinstance(current.get("info"), dict) else {}
+        parent_id = str(info.get("resumeOf") or "")
+        if not parent_id or parent_id in seen:
+            break
+        current = khach_jobs.get_job(parent_id)
+    return 0 if best is None else best
+
+
+def _upload_ids(uploaded: list[tuple[str, Path]]) -> list[str]:
+    root = khach_uploads.uploads_root().resolve()
+    ids: list[str] = []
+    for _name, path in uploaded:
+        try:
+            parent = path.resolve().parent
+        except OSError:
+            continue
+        if parent.parent == root and re.fullmatch(r"[0-9a-f]{32}", parent.name):
+            ids.append(parent.name)
+    return ids
+
+
+def _files_for_job(job: dict[str, Any]) -> list[tuple[str, Path]]:
+    info = job.get("info") if isinstance(job.get("info"), dict) else {}
+    uploads = info.get("uploads")
+    if isinstance(uploads, list) and any(str(item or "") for item in uploads):
+        return _resolve_uploads(uploads)
+    names = info.get("files")
+    if not isinstance(names, list) or not names:
+        raise HTTPException(status_code=400, detail="Lần nạp này không còn danh sách file để nối tiếp.")
+    try:
+        return khach_uploads.resolve_names([str(name or "") for name in names])
+    except khach_uploads.UploadError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+
+
+def _mapping_text_for_job(job: dict[str, Any]) -> str:
+    info = job.get("info") if isinstance(job.get("info"), dict) else {}
+    raw = info.get("mapping")
+    if isinstance(raw, dict):
+        text = json.dumps(raw, ensure_ascii=False)
+    elif isinstance(raw, str) and raw.strip():
+        text = raw
+    else:
+        text = "{}"
+    try:
+        _parse_mapping(text, allow_empty=True)
+    except HTTPException:
+        return "{}"
+    return text
+
+
+def _resume_anchor(job_id: str) -> dict[str, Any]:
+    """Đi theo lần nối tiếp mới nhất. Việc đang chạy hoặc đã xong thì trả về, không nạp thêm."""
+    seen: set[str] = set()
+    current = khach_jobs.get_job(job_id)
+    if current is None or current.get("kind") != "import":
+        raise HTTPException(status_code=404, detail="Không thấy lần nạp để nối tiếp.")
+    while str(current.get("id") or "") not in seen:
+        seen.add(str(current["id"]))
+        info = current.get("info") if isinstance(current.get("info"), dict) else {}
+        child_id = str(info.get("resumedBy") or "")
+        if not child_id:
+            child_id = khach_jobs.request_job_id(f"resume-{current['id']}") or ""
+        if not child_id or child_id in seen:
+            break
+        child = khach_jobs.get_job(child_id)
+        if child is None or child.get("kind") != "import":
+            break
+        if child.get("status") in ("queued", "waiting", "running", "done"):
+            return child
+        if child.get("status") in ("interrupted", "error"):
+            current = child
+            continue
+        break
+    return current
+
+
+def _file_at_best(job: dict[str, Any]) -> str:
+    """Tên file ở mốc cao nhất. Việc con đang chờ thường không có tên file."""
+    seen: set[str] = set()
+    best: int | None = None
+    label = ""
+    current: dict[str, Any] | None = job
+    while current is not None:
+        job_id = str(current.get("id") or "")
+        if job_id and job_id in seen:
+            break
+        if job_id:
+            seen.add(job_id)
+        point = _checkpoint(current)
+        progress = current.get("progress") if isinstance(current.get("progress"), dict) else {}
+        name = str(progress.get("file") or "")
+        if point is not None and (best is None or point >= best):
+            best = point
+            if name:
+                label = name
+        info = current.get("info") if isinstance(current.get("info"), dict) else {}
+        parent_id = str(info.get("resumeOf") or "")
+        if not parent_id or parent_id in seen:
+            break
+        current = khach_jobs.get_job(parent_id)
+    if label:
+        return label
+    progress = job.get("progress") if isinstance(job.get("progress"), dict) else {}
+    return str(progress.get("file") or "")
+
+
+def _paused_summary(job: dict[str, Any]) -> dict[str, Any]:
+    progress = job.get("progress") if isinstance(job.get("progress"), dict) else {}
+    info = job.get("info") if isinstance(job.get("info"), dict) else {}
+    files = info.get("files") if isinstance(info.get("files"), list) else []
+    uploads = info.get("uploads") if isinstance(info.get("uploads"), list) else []
+    file_count = _as_int(progress.get("fileCount")) or len(files)
+    start = _best_start(job)
+    return {
+        "id": job.get("id"),
+        "status": job.get("status"),
+        "file": _file_at_best(job),
+        "fileIndex": _as_int(progress.get("fileIndex")) if progress.get("fileIndex") is not None else start,
+        "fileCount": file_count,
+        "resumeFrom": start,
+        "incoming": _as_int(progress.get("incoming")),
+        "canResume": bool(files or uploads),
+    }
+
+
+def _child_id(job: dict[str, Any]) -> str:
+    info = job.get("info") if isinstance(job.get("info"), dict) else {}
+    child_id = str(info.get("resumedBy") or "")
+    if child_id:
+        return child_id
+    return khach_jobs.request_job_id(f"resume-{job.get('id')}") or ""
+
+
+def _paused_import_jobs() -> list[dict[str, Any]]:
+    """Lần nạp dừng mà chưa có lần nối tiếp mới hơn. Không kèm danh sách file."""
+    found: list[dict[str, Any]] = []
+    try:
+        paths = list(khach_jobs.jobs_root().glob("*.json"))
+    except OSError:
+        paths = []
+    for path in paths:
+        if not re.fullmatch(r"[0-9a-f]{32}", path.stem):
+            continue
+        job = khach_jobs.get_job(path.stem)
+        if not job or job.get("kind") != "import":
+            continue
+        status = job.get("status")
+        info = job.get("info") if isinstance(job.get("info"), dict) else {}
+        if status == "interrupted" or (status == "error" and info.get("resumeOf")):
+            found.append(job)
+    known = {str(job.get("id") or "") for job in found}
+    visible: list[dict[str, Any]] = []
+    for job in found:
+        child_id = _child_id(job)
+        if child_id and child_id != str(job.get("id") or "") and (child_id in known or khach_jobs.get_job(child_id) is not None):
+            continue
+        visible.append(job)
+    return visible
+
+
+def _archived_imports() -> dict[str, Path]:
+    """Tên file → bản lưu mới nhất trong thư mục các lần nạp."""
+    root = settings.imports_dir()
+    found: dict[str, Path] = {}
+    if not root.is_dir():
+        return found
+    try:
+        folders = [path for path in root.iterdir() if path.is_dir()]
+    except OSError:
+        return found
+    folders.sort(key=lambda path: path.name, reverse=True)
+    for folder in folders:
+        try:
+            children = list(folder.iterdir())
+        except OSError:
+            continue
+        for path in children:
+            if not path.is_file() or path.name in found:
+                continue
+            try:
+                if path.stat().st_size <= 0:
+                    continue
+            except OSError:
+                continue
+            found[path.name] = path
+    return found
+
+
+@router.post("/v1/customers/imports/reread")
+def customers_reread(
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Đọc lại các file chưa nạp mà máy chủ còn giữ. Bấm lần nữa không tạo thêm việc đang chạy."""
+    _manager(_actor(request))
+    db.init_db(settings.db_path)
+    wanted = [str(name) for name in _import_sessions().get("needReupload") or [] if str(name or "")]
+    if not wanted:
+        return {
+            "job": None,
+            "found": 0,
+            "missing": [],
+            "detail": "Không còn file nào chưa nạp. Các lần nạp đã nằm trong kho.",
+        }
+    archive = _archived_imports()
+    uploaded = [(name, archive[name]) for name in wanted if name in archive]
+    missing = [name for name in wanted if name not in archive]
+    if not uploaded:
+        raise HTTPException(
+            status_code=400,
+            detail="File chưa nạp không còn bản lưu trên máy chủ. Hãy chọn lại các file đó rồi nạp.",
+        )
+    mapping_text = "{}"
+    digest = hashlib.sha1("\n".join(name for name, _path in uploaded).encode("utf-8")).hexdigest()[:20]
+    info = {
+        "files": [name for name, _path in uploaded],
+        "mapping": mapping_text,
+        "reread": True,
+        "absent": missing[:80],
+    }
+
+    def work(
+        context: khach_jobs.JobContext,
+        uploaded: list[tuple[str, Path]] = uploaded,
+        mapping_text: str = mapping_text,
+    ) -> dict[str, Any]:
+        return _import_job(context, uploaded, mapping_text)
+
+    job = khach_jobs.start_job("import", f"reread-{digest}", work, info)
+    return {"job": job, "found": len(uploaded), "missing": missing[:80]}
+
+
+@router.get("/v1/customers/imports/paused")
+def customers_imports_paused(
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Các lần nạp dừng giữa chừng. Không kèm danh sách file."""
+    _manager(_actor(request))
+    visible = [_paused_summary(job) for job in _paused_import_jobs()]
+    visible.sort(key=lambda item: (int(item.get("fileCount") or 0), str(item.get("id") or "")), reverse=True)
+    return {"jobs": visible[:20]}
+
+
+def _begin_resume(job_id: str) -> dict[str, Any]:
+    """Tạo lần nối tiếp từ mốc cao nhất. Việc đang chạy thì trả về việc đó."""
+    anchor = _resume_anchor(job_id)
+    if anchor.get("status") in ("queued", "waiting", "running", "done"):
+        return anchor
+    uploaded = _files_for_job(anchor)
+    mapping_text = _mapping_text_for_job(anchor)
+    start = _best_start(anchor)
+    info = anchor.get("info") if isinstance(anchor.get("info"), dict) else {}
+    child_info = {
+        "files": [name for name, _path in uploaded],
+        "rows": _as_int(info.get("rows")),
+        "uploads": _upload_ids(uploaded),
+        "mapping": mapping_text,
+        "resumeOf": anchor["id"],
+        "resumeFrom": start,
+    }
+
+    def work(
+        context: khach_jobs.JobContext,
+        uploaded: list[tuple[str, Path]] = uploaded,
+        mapping_text: str = mapping_text,
+        start: int = start,
+    ) -> dict[str, Any]:
+        return _import_job(context, uploaded, mapping_text, start)
+
+    job = khach_jobs.start_job("import", f"resume-{anchor['id']}", work, child_info)
+    khach_jobs.remember_resume(str(anchor["id"]), str(job["id"]))
+    return job
+
+
+def _resume_sort_key(job: dict[str, Any]) -> tuple[int, float]:
+    progress = job.get("progress") if isinstance(job.get("progress"), dict) else {}
+    info = job.get("info") if isinstance(job.get("info"), dict) else {}
+    files = info.get("files") if isinstance(info.get("files"), list) else []
+    file_count = _as_int(progress.get("fileCount")) or len(files)
+    start = _best_start(job)
+    remaining = max(0, file_count - start) if file_count else 10**9
+    return (remaining, -float(job.get("updatedAt") or 0))
+
+
+def continue_paused_imports() -> None:
+    """Sau khi máy chủ sống lại, nối tiếp từng lần nạp dở. Phần còn ít chạy trước."""
+    if os.environ.get("KHACH_AUTO_RESUME", "1") == "0":
+        return
+    time.sleep(2)
+    try:
+        db.init_db(settings.db_path)
+        leaves = _paused_import_jobs()
+    except Exception:
+        _LOG.exception("Không liệt kê được lần nạp dở để nối tiếp")
+        return
+    leaves.sort(key=_resume_sort_key)
+    for job in leaves:
+        job_id = str(job.get("id") or "")
+        if not job_id:
+            continue
+        try:
+            child = _begin_resume(job_id)
+        except HTTPException:
+            continue
+        except Exception:
+            _LOG.exception("Không nối tiếp được lần nạp %s", job_id)
+            continue
+        if child.get("status") in ("queued", "waiting", "running"):
+            khach_jobs.wait_job(str(child.get("id") or ""), 7 * 24 * 3600)
+
+
+@router.post("/v1/customers/imports/{job_id}/resume")
+async def customers_import_resume(
+    job_id: str,
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Nối tiếp từ file dở. Bấm lần nữa trả về đúng việc đang chạy, không nạp trùng."""
+    _manager(_actor(request))
+    db.init_db(settings.db_path)
+    job = await run_in_threadpool(_begin_resume, job_id)
+    waited = await run_in_threadpool(khach_jobs.wait_job, job["id"], 1.5)
+    return {"job": waited or job}
 
 
 def _import_locked(uploaded: list[tuple[str, Path]], fields: dict[str, str], problems: list[str]) -> dict[str, Any]:
@@ -1013,9 +1518,41 @@ def _new_xlsx_path(prefix: str) -> Path:
     return dest
 
 
+def _lookup_contact_cell(customer: dict[str, Any]) -> str:
+    """Một ô địa chỉ: địa chỉ khách rồi địa chỉ hành chính, mỗi dòng cách nhau bởi dấu gạch."""
+    chunks: list[str] = []
+    for field in ("address", "adminAddress"):
+        raw = str(customer.get(field) or "").replace("\r\n", "\n").replace("\r", "\n")
+        for part in raw.split("\n"):
+            piece = " ".join(part.split()).replace("\t", " ")
+            if piece and piece not in chunks:
+                chunks.append(piece)
+    return " | ".join(chunks)
+
+
+def _write_lookup_copy(phones: list[str]) -> Path:
+    """Hai cột của khách tra được: số điện thoại rồi địa chỉ. Số không có trong kho không đưa vào."""
+    handle = tempfile.NamedTemporaryFile(prefix="tra-cuu-copy-", suffix=".txt", delete=False)
+    dest = Path(handle.name)
+    handle.close()
+    try:
+        with dest.open("w", encoding="utf-8", newline="\n") as handle:
+            handle.write("Số điện thoại\tĐịa chỉ\n")
+            for item in iter_lookup_items(settings.db_path, phones):
+                if not item.get("found"):
+                    continue
+                customer = item.get("customer") or {}
+                phone = " ".join(str(customer.get("phone") or item.get("query") or "").split()).replace("\t", " ")
+                handle.write(f"{phone}\t{_lookup_contact_cell(customer)}\n")
+    except Exception:
+        dest.unlink(missing_ok=True)
+        raise
+    return dest
+
+
 def _write_lookup_xlsx(phones: list[str]) -> Path:
     """Ghi kết quả tra cứu ra Excel theo từng lô số, không giữ cả triệu dòng trong RAM."""
-    headers = ["Số tra cứu", "Có trong kho", *FIELD_LABELS.values()]
+    headers = ["Số tra cứu", "Có đủ địa chỉ", *FIELD_LABELS.values()]
 
     def rows() -> Any:
         for item in iter_lookup_items(settings.db_path, phones):
@@ -1078,6 +1615,12 @@ def customers_lookup_job_export(
     """Tải Excel đúng danh sách số của lần tra cứu đã chạy, không gửi lại file."""
     actor = _actor(request)
     db.init_db(settings.db_path)
+    phones = _lookup_job_phones(actor, job_id)
+    _charge(actor, phones)
+    return _xlsx_file_response(_write_lookup_xlsx(phones), "tra-cuu-khach.xlsx")
+
+
+def _lookup_job_phones(actor: accounts.Actor, job_id: str) -> list[str]:
     job = _visible_job(actor, khach_jobs.get_job(job_id))
     if job.get("kind") != "lookup":
         raise HTTPException(status_code=404, detail="Không thấy lần tra cứu này, hãy tra cứu lại.")
@@ -1087,9 +1630,27 @@ def customers_lookup_job_export(
         text = khach_jobs.job_file(job_id, ".phones").read_text(encoding="utf-8")
     except (OSError, khach_jobs.JobError) as exc:
         raise HTTPException(status_code=404, detail="Kết quả tra cứu đã quá hạn, hãy tra cứu lại.") from exc
-    phones = [line for line in text.split("\n") if line]
+    return [line for line in text.split("\n") if line]
+
+
+@router.get("/v1/customers/lookup/jobs/{job_id}/copy")
+def customers_lookup_job_copy(
+    job_id: str,
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> FileResponse:
+    """Hai cột của khách tra được, số điện thoại bên trái và địa chỉ bên phải, để dán vào Excel."""
+    actor = _actor(request)
+    db.init_db(settings.db_path)
+    phones = _lookup_job_phones(actor, job_id)
     _charge(actor, phones)
-    return _xlsx_file_response(_write_lookup_xlsx(phones), "tra-cuu-khach.xlsx")
+    dest = _write_lookup_copy(phones)
+    return FileResponse(
+        path=dest,
+        media_type="text/plain; charset=utf-8",
+        filename="dia-chi-so-dien-thoai.txt",
+        background=BackgroundTask(_unlink_temp, str(dest)),
+    )
 
 
 @router.get("/v1/customers/export")

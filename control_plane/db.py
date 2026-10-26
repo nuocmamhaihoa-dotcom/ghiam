@@ -52,11 +52,11 @@ def connect(db_path: Path) -> sqlite3.Connection:
 
 
 def apply_heavy_pragmas(conn: sqlite3.Connection) -> None:
-    """Tăng cache/mmap khi nạp hoặc tra cứu hàng loạt. VPS ~2GB nên giữ dưới 64+256MB."""
-    conn.execute("PRAGMA temp_store=MEMORY;")
-    conn.execute("PRAGMA cache_size=-65536;")
-    conn.execute("PRAGMA mmap_size=268435456;")
-    conn.execute("PRAGMA wal_autocheckpoint=10000;")
+    """Nạp hàng loạt trên VPS ~2GB. Cache và mmap lớn làm tiến trình bị giết giữa chừng."""
+    conn.execute("PRAGMA temp_store=FILE;")
+    conn.execute("PRAGMA cache_size=-16384;")
+    conn.execute("PRAGMA mmap_size=0;")
+    conn.execute("PRAGMA wal_autocheckpoint=1000;")
     conn.execute("PRAGMA busy_timeout=60000;")
     conn.execute("PRAGMA journal_size_limit=67108864;")
 
@@ -938,13 +938,184 @@ def customer_from_sql_row(row: sqlite3.Row) -> dict[str, str]:
     }
 
 
+_FILLED_COLUMNS = {
+    "name": "name",
+    "phone": "phone",
+    "address": "address",
+    "adminAddress": "admin_address",
+    "orderContent": "order_content",
+    "codAmount": "cod_amount",
+    "facebookUid": "facebook_uid",
+    "tiktokId": "tiktok_id",
+}
+
+
+_BROWSE_SELECT = (
+    "SELECT rowid AS _rowid, id, name, phone, address, admin_address, order_content, "
+    "cod_amount, facebook_uid, tiktok_id, created_at, updated_at FROM customers"
+)
+_BROWSE_BUDGET = 30_000
+_BROWSE_BATCH = 4_000
+
+
+def _browse_page(
+    found: list[sqlite3.Row],
+    *,
+    limit: int,
+    direction: str,
+    cursor: int | None,
+    reached_end: bool,
+) -> tuple[list[dict[str, str]], int | None, int | None, bool]:
+    page = found[:limit]
+    has_more = len(found) > limit or not reached_end
+    if not has_more:
+        return [customer_from_sql_row(row) for row in page], None, None, False
+    if len(found) > limit:
+        mark = int(page[-1]["_rowid"])
+    else:
+        mark = int(cursor or (page[-1]["_rowid"] if page else 0))
+    if not mark:
+        return [customer_from_sql_row(row) for row in page], None, None, False
+    if direction == "asc":
+        return [customer_from_sql_row(row) for row in page], None, mark, True
+    return [customer_from_sql_row(row) for row in page], mark, None, True
+
+
+def _row_has_fields(row: sqlite3.Row, filled: list[str]) -> bool:
+    for field in filled:
+        column = _FILLED_COLUMNS.get(field)
+        if column and not str(row[column] or ""):
+            return False
+    return True
+
+
+def _row_matches_query(row: sqlite3.Row, query: str) -> bool:
+    needle = " ".join(str(query or "").split())
+    if not needle:
+        return True
+    number = _phone_query(needle)
+    if number:
+        variants = set(_phone_variants(number) or [number])
+        return str(row["phone"] or "") in variants
+    folded = needle.casefold()
+    return any(folded in str(row[column] or "").casefold() for column in _FILLED_COLUMNS.values())
+
+
+def _scan_customers(
+    conn: sqlite3.Connection,
+    *,
+    direction: str,
+    cursor: int | None,
+    limit: int,
+    filled: list[str],
+    query: str,
+    budget: int,
+) -> tuple[list[sqlite3.Row], int | None, bool]:
+    """Đọc từng cụm theo rowid rồi lọc trong bộ nhớ. Không bắt SQLite quét cả kho để tìm ô có dữ liệu."""
+    matches: list[sqlite3.Row] = []
+    examined = 0
+    last = cursor
+    reached_end = False
+    compare = "rowid > ?" if direction == "asc" else "rowid < ?"
+    order = "ASC" if direction == "asc" else "DESC"
+    while examined < budget and len(matches) <= limit:
+        batch = min(_BROWSE_BATCH, budget - examined)
+        params: list[Any] = []
+        where = ""
+        if last:
+            where = f" WHERE {compare}"
+            params.append(int(last))
+        params.append(batch)
+        rows = conn.execute(
+            f"{_BROWSE_SELECT}{where} ORDER BY rowid {order} LIMIT ?",
+            params,
+        ).fetchall()
+        if not rows:
+            reached_end = True
+            break
+        examined += len(rows)
+        last = int(rows[-1]["_rowid"])
+        for row in rows:
+            if not _row_has_fields(row, filled) or not _row_matches_query(row, query):
+                continue
+            matches.append(row)
+            if len(matches) > limit:
+                last = int(row["_rowid"])
+                break
+        if len(matches) > limit or len(rows) < batch:
+            reached_end = len(rows) < batch and len(matches) <= limit
+            break
+    return matches, last, reached_end
+
+
+def browse_customers(
+    db_path: Path,
+    *,
+    limit: int,
+    before: int | None = None,
+    after: int | None = None,
+    filled: list[str] | None = None,
+    query: str = "",
+    budget: int = _BROWSE_BUDGET,
+) -> tuple[list[dict[str, str]], int | None, int | None, bool]:
+    """Lật kho theo rowid. Có lọc thì mỗi lần chỉ đọc một đoạn, không sắp cả bảng."""
+    size = max(1, min(int(limit), 2000))
+    wanted = [field for field in (filled or []) if field in _FILLED_COLUMNS]
+    needle = " ".join(str(query or "").split())
+    direction = "asc" if after else "desc"
+    cursor = int(after or before or 0) or None
+    if not wanted and not needle:
+        compare = "rowid > ?" if direction == "asc" else "rowid < ?"
+        order = "ASC" if direction == "asc" else "DESC"
+        params: list[Any] = []
+        where = ""
+        if cursor:
+            where = f" WHERE {compare}"
+            params.append(cursor)
+        params.append(size + 1)
+        with session(db_path) as conn:
+            found = conn.execute(
+                f"{_BROWSE_SELECT}{where} ORDER BY rowid {order} LIMIT ?",
+                params,
+            ).fetchall()
+        reached_end = len(found) <= size
+        return _browse_page(found, limit=size, direction=direction, cursor=cursor, reached_end=reached_end)
+    with session(db_path) as conn:
+        found, last, reached_end = _scan_customers(
+            conn,
+            direction=direction,
+            cursor=cursor,
+            limit=size,
+            filled=wanted,
+            query=needle,
+            budget=max(size + 1, int(budget)),
+        )
+        if direction == "desc" and not before and not found and not reached_end:
+            found, last, reached_end = _scan_customers(
+                conn,
+                direction="asc",
+                cursor=None,
+                limit=size,
+                filled=wanted,
+                query=needle,
+                budget=max(size + 1, int(budget)),
+            )
+            direction = "asc"
+    return _browse_page(found, limit=size, direction=direction, cursor=last, reached_end=reached_end)
+
+
 def list_customers(db_path: Path, limit: int | None = None) -> list[dict[str, str]]:
-    sql = _CUSTOMER_SELECT + " ORDER BY updated_at DESC, created_at DESC"
+    """Có giới hạn thì lấy khách ghi sau cùng theo rowid. Sắp theo updated_at phải đọc cả kho."""
     with session(db_path) as conn:
         if limit is None:
-            rows = conn.execute(sql).fetchall()
+            rows = conn.execute(
+                _CUSTOMER_SELECT + " ORDER BY updated_at DESC, created_at DESC"
+            ).fetchall()
         else:
-            rows = conn.execute(sql + " LIMIT ?", (max(1, int(limit)),)).fetchall()
+            rows = conn.execute(
+                _CUSTOMER_SELECT + " ORDER BY rowid DESC LIMIT ?",
+                (max(1, int(limit)),),
+            ).fetchall()
     return [customer_from_sql_row(row) for row in rows]
 
 
@@ -1204,11 +1375,103 @@ def search_customers(db_path: Path, query: str, limit: int = 2000) -> tuple[list
     return [customer_from_sql_row(row) for row in rows], total
 
 
+_CUSTOMERS_TOTAL_KEY = "customers_total"
+
+
+def _read_customer_total(conn: sqlite3.Connection) -> int | None:
+    row = conn.execute("SELECT value FROM kv_meta WHERE key = ?", (_CUSTOMERS_TOTAL_KEY,)).fetchone()
+    if row is None:
+        return None
+    try:
+        return max(0, int(row["value"]))
+    except (TypeError, ValueError):
+        return None
+
+
+def _write_customer_total(conn: sqlite3.Connection, total: int) -> None:
+    conn.execute(
+        """
+        INSERT INTO kv_meta(key, value) VALUES(?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        """,
+        (_CUSTOMERS_TOTAL_KEY, str(max(0, int(total)))),
+    )
+
+
+def _bump_customer_total(conn: sqlite3.Connection, delta: int) -> None:
+    current = _read_customer_total(conn)
+    if current is None or not delta:
+        return
+    _write_customer_total(conn, current + delta)
+
+
+def _existing_customer_ids(conn: sqlite3.Connection, ids: list[str]) -> set[str]:
+    found: set[str] = set()
+    for start in range(0, len(ids), 400):
+        chunk = ids[start : start + 400]
+        if not chunk:
+            continue
+        marks = ",".join("?" * len(chunk))
+        rows = conn.execute(f"SELECT id FROM customers WHERE id IN ({marks})", chunk).fetchall()
+        found.update(str(row["id"]) for row in rows)
+    return found
+
+
+def _customer_total_delta(conn: sqlite3.Connection, dirty_ids: list[str], removed_ids: list[str]) -> int:
+    dirty = set(dirty_ids)
+    removed = set(removed_ids)
+    existing = _existing_customer_ids(conn, list(dirty | removed))
+    added = sum(1 for item in dirty if item not in existing)
+    gone = sum(1 for item in removed if item in existing and item not in dirty)
+    return added - gone
+
+
+def cached_customer_total(db_path: Path) -> int | None:
+    with session(db_path) as conn:
+        return _read_customer_total(conn)
+
+
+def set_customer_total(db_path: Path, total: int) -> None:
+    with session(db_path) as conn:
+        _write_customer_total(conn, total)
+
+
+def empty_phone_count(db_path: Path) -> int:
+    with session(db_path) as conn:
+        row = conn.execute("SELECT COUNT(*) AS n FROM customers WHERE phone = ''").fetchone()
+    return int(row["n"] if row else 0)
+
+
+def page_warehouse_stats(db_path: Path) -> dict[str, int | bool]:
+    """Số liệu cho trang kho. Kho lớn dùng tổng đã lưu, không quét lại hàng chục triệu dòng."""
+    total = cached_customer_total(db_path)
+    if total is None and db_path.stat().st_size < 500_000_000:
+        total = customer_count(db_path)
+        set_customer_total(db_path, total)
+    if total is None:
+        return {"total": 0, "uniquePhones": 0, "emptyPhone": 0, "duplicatePhones": 0, "known": False}
+    empty = empty_phone_count(db_path)
+    unique = max(0, total - empty)
+    return {
+        "total": total,
+        "uniquePhones": unique,
+        "emptyPhone": empty,
+        "duplicatePhones": max(0, total - unique - empty),
+        "known": True,
+    }
+
+
 def write_customers(conn: sqlite3.Connection, rows: list[dict[str, Any]], removed_ids: list[str]) -> None:
     dirty = [row for row in rows if row.get("write", True)]
-    if removed_ids:
-        conn.executemany("DELETE FROM customers WHERE id=?", [(customer_id,) for customer_id in removed_ids])
+    dirty_ids = [str(row.get("id") or "") for row in dirty if str(row.get("id") or "")]
+    removed = [str(item) for item in removed_ids if str(item or "")]
+    if not dirty_ids and not removed:
+        return
+    delta = _customer_total_delta(conn, dirty_ids, removed)
+    if removed:
+        conn.executemany("DELETE FROM customers WHERE id=?", [(customer_id,) for customer_id in removed])
     if not dirty:
+        _bump_customer_total(conn, delta)
         return
     conn.executemany(
         """
@@ -1248,6 +1511,7 @@ def write_customers(conn: sqlite3.Connection, rows: list[dict[str, Any]], remove
             for row in dirty
         ],
     )
+    _bump_customer_total(conn, delta)
 
 
 def replace_customers(db_path: Path, rows: list[dict[str, Any]], removed_ids: list[str]) -> None:
@@ -1262,6 +1526,7 @@ def delete_customers_without_phone(db_path: Path) -> int:
         count = int(row["n"] or 0)
         if count:
             conn.execute("DELETE FROM customers WHERE phone = ''")
+            _bump_customer_total(conn, -count)
     return count
 
 

@@ -44,12 +44,24 @@ def decode_text(raw: bytes) -> str:
     return text
 
 
-def finish_cell(text: str) -> str:
-    """Giống collapse + expand_scientific cũ, nhưng chỉ gọi regex khi ô bắt đầu bằng số."""
+def _finish_one_line(text: str) -> str:
     value = " ".join(text.split())
     if value and not value.isdigit() and (value[0].isdigit() or value[0] in "+-"):
         return expand_scientific(value)
     return value
+
+
+def finish_cell(text: str) -> str:
+    """Gộp khoảng trắng từng dòng. Xuống dòng trong cùng ô được giữ, không dồn thành một dòng."""
+    if "\n" not in text and "\r" not in text and "\x0b" not in text:
+        return _finish_one_line(text)
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n").replace("\x0b", "\n")
+    lines: list[str] = []
+    for raw in normalized.split("\n"):
+        line = _finish_one_line(raw)
+        if line:
+            lines.append(line)
+    return "\n".join(lines)
 
 
 class _TextPatterns:
@@ -281,10 +293,7 @@ def _parse_row_body(body: bytes | None, shared: Any, patterns: _SheetPatterns) -
         else:
             raw = _cell_value(inner, patterns)
             value = decode_text(raw) if raw else ""
-            if kind in (b"b", b"str", b"e"):
-                text = " ".join(value.split())
-            else:
-                text = finish_cell(value)
+            text = finish_cell(value)
         size = len(out)
         if column == size:
             out.append(text)
