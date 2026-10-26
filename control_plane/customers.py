@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 import unicodedata
 import uuid
+from pathlib import Path
 from typing import Any, Callable, Iterator
 from urllib.parse import parse_qs, urlparse
 
@@ -1547,7 +1548,7 @@ def dedupe_exact_addresses(db_path: Any, batch: int = 50000) -> dict[str, int]:
     Không xóa khách. Không đụng địa chỉ hành chính, tên, số điện thoại,
     và không đổi thời điểm cập nhật.
     """
-    conn = db.connect(db_path)
+    conn = db.connect(Path(db_path))
     seen = 0
     changed = 0
     try:
