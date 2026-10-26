@@ -325,6 +325,9 @@
     <h2>Các lần nạp</h2>
     <div class="stats" id="sessionStats"></div>
     <div id="sessionList"></div>
+    <p class="row">
+      <button class="primary" type="button" id="reread">Đọc lại file chưa nạp</button>
+    </p>
     <p id="sessionNote" class="note">Đang đối chiếu các lần nạp với kho.</p>
   </section>
 
@@ -1846,10 +1849,11 @@
       if (!sessions.length) {
         setNote("sessionNote", "Chưa có lần nạp nào.");
       } else if (!body.complete) {
+        var needCount = body.needCount != null ? body.needCount : (body.needReupload || []).length;
         setNote(
           "sessionNote",
           "Kho hiện " + vnNum(body.total || 0) + " khách. Còn " +
-            (body.needReupload || []).length + " file chưa nạp lại được." +
+            vnNum(needCount) + " file chưa nạp lại được. Bấm Đọc lại file chưa nạp để máy đọc bản đã lưu." +
             (missing ? " Có lô cũ không còn trong kho." : "") +
             (emptyCount ? " Còn file 0 dòng." : ""),
           "warn"
@@ -2203,6 +2207,46 @@
     }
   }
 
+  async function rereadKeptFiles() {
+    var button = document.getElementById("reread");
+    if (button) button.disabled = true;
+    setNote("sessionNote", "Đang tìm bản đã lưu của các file chưa nạp…");
+    try {
+      var response = await api("/v1/customers/imports/reread", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+        tries: 2,
+        waitMs: 120000
+      });
+      var body = await response.json().catch(function () { return {}; });
+      if (!response.ok) {
+        setNote("sessionNote", body.detail || "Chưa đọc lại được. Bấm lại nút.", "warn");
+        if (button) button.disabled = false;
+        return;
+      }
+      if (!body.job) {
+        setNote("sessionNote", body.detail || "Không còn file nào chưa nạp.", "ok");
+        if (button) button.disabled = false;
+        await loadSessions();
+        return;
+      }
+      var absent = (body.missing || []).length;
+      setNote(
+        "importNote",
+        "Đang đọc lại " + vnNum(body.found || 0) + " file chưa nạp." +
+          (absent ? " " + vnNum(absent) + " file không còn bản lưu, hãy chọn lại các file đó." : "")
+      );
+      rememberJob(body.job, "import", 0);
+      await finishImport(body.job, 0);
+    } catch (error) {
+      if (!(error && error.interrupted)) {
+        setNote("sessionNote", "Mất kết nối. Bấm Đọc lại file chưa nạp lần nữa.", "warn");
+      }
+    }
+    if (button) button.disabled = false;
+  }
+
   async function continueImport(jobId, button) {
     if (button) button.disabled = true;
     setNote("importNote", "Đang nối tiếp từ file dở, không gửi lại file…");
@@ -2282,6 +2326,7 @@
     showResumeSend(false);
     previewPending();
   });
+  document.getElementById("reread").addEventListener("click", rereadKeptFiles);
   document.getElementById("confirm").addEventListener("click", importNow);
   document.getElementById("addMore").addEventListener("click", function () {
     document.getElementById("file").click();

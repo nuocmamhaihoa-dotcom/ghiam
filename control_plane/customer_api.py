@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import ctypes
 import gc
+import hashlib
 import json
 import logging
 import os
@@ -255,8 +256,9 @@ def _import_sessions() -> dict[str, Any]:
         at = str(action.get("at") or "")
         stamp = str(payload.get("importedAt") or "") or at
         moment = _parse_iso(stamp)
+        recount = created >= 1000 and moment is not None and not _warehouse_is_huge()
         kept = 0
-        if created >= 1000 and moment is not None and not _warehouse_is_huge():
+        if recount:
             if payload.get("importedAt"):
                 kept = db.customers_created_between(settings.db_path, stamp, stamp)
             else:
@@ -280,7 +282,7 @@ def _import_sessions() -> dict[str, Any]:
                 "okNames": ok_names,
                 "names": names,
                 "keptInWarehouse": kept,
-                "missingRaw": created >= 1000 and kept < max(1, int(created * 0.1)),
+                "missingRaw": recount and kept < max(1, int(created * 0.1)),
                 "filesKept": payload.get("keptFiles") or [],
             }
         )
@@ -340,7 +342,8 @@ def _import_sessions() -> dict[str, Any]:
         "emptyPhone": warehouse["emptyPhone"],
         "duplicatePhones": warehouse["duplicatePhones"],
         "sessions": sessions,
-        "needReupload": unique_reupload[:80],
+        "needReupload": unique_reupload,
+        "needCount": len(unique_reupload),
         "complete": not unique_reupload,
         "rowSum": row_sum,
         "repeatRows": max(0, row_sum - unique_phones),
@@ -1136,6 +1139,78 @@ def _paused_import_jobs() -> list[dict[str, Any]]:
             continue
         visible.append(job)
     return visible
+
+
+def _archived_imports() -> dict[str, Path]:
+    """Tên file → bản lưu mới nhất trong thư mục các lần nạp."""
+    root = settings.imports_dir()
+    found: dict[str, Path] = {}
+    if not root.is_dir():
+        return found
+    try:
+        folders = [path for path in root.iterdir() if path.is_dir()]
+    except OSError:
+        return found
+    folders.sort(key=lambda path: path.name, reverse=True)
+    for folder in folders:
+        try:
+            children = list(folder.iterdir())
+        except OSError:
+            continue
+        for path in children:
+            if not path.is_file() or path.name in found:
+                continue
+            try:
+                if path.stat().st_size <= 0:
+                    continue
+            except OSError:
+                continue
+            found[path.name] = path
+    return found
+
+
+@router.post("/v1/customers/imports/reread")
+def customers_reread(
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Đọc lại các file chưa nạp mà máy chủ còn giữ. Bấm lần nữa không tạo thêm việc đang chạy."""
+    _manager(_actor(request))
+    db.init_db(settings.db_path)
+    wanted = [str(name) for name in _import_sessions().get("needReupload") or [] if str(name or "")]
+    if not wanted:
+        return {
+            "job": None,
+            "found": 0,
+            "missing": [],
+            "detail": "Không còn file nào chưa nạp. Các lần nạp đã nằm trong kho.",
+        }
+    archive = _archived_imports()
+    uploaded = [(name, archive[name]) for name in wanted if name in archive]
+    missing = [name for name in wanted if name not in archive]
+    if not uploaded:
+        raise HTTPException(
+            status_code=400,
+            detail="File chưa nạp không còn bản lưu trên máy chủ. Hãy chọn lại các file đó rồi nạp.",
+        )
+    mapping_text = "{}"
+    digest = hashlib.sha1("\n".join(name for name, _path in uploaded).encode("utf-8")).hexdigest()[:20]
+    info = {
+        "files": [name for name, _path in uploaded],
+        "mapping": mapping_text,
+        "reread": True,
+        "absent": missing[:80],
+    }
+
+    def work(
+        context: khach_jobs.JobContext,
+        uploaded: list[tuple[str, Path]] = uploaded,
+        mapping_text: str = mapping_text,
+    ) -> dict[str, Any]:
+        return _import_job(context, uploaded, mapping_text)
+
+    job = khach_jobs.start_job("import", f"reread-{digest}", work, info)
+    return {"job": job, "found": len(uploaded), "missing": missing[:80]}
 
 
 @router.get("/v1/customers/imports/paused")

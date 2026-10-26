@@ -1491,6 +1491,75 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(history.json()["emptyPhone"], 0)
         self.assertEqual(history.json()["duplicatePhones"], 0)
 
+    def test_large_warehouse_does_not_call_a_finished_batch_missing(self) -> None:
+        db.set_customer_total(settings.db_path, 200_000)
+        db.record_action(
+            settings.db_path,
+            at="2026-10-25T10:54:15+00:00",
+            actor="me",
+            source="hub",
+            kind="note",
+            summary="Nạp Excel: thêm 5000, bổ sung 1, giữ 1, gộp 0.",
+            detail=json.dumps(
+                {
+                    "stats": {"created": 5000, "updated": 1, "unchanged": 1, "incoming": 5002},
+                    "importedAt": "2026-10-25T10:54:15+00:00",
+                    "files": [{"name": "data-a.xlsx", "rows": 5002}],
+                    "fileCount": 1,
+                    "okFiles": 1,
+                },
+                ensure_ascii=False,
+            ),
+        )
+        history = self.client.get("/v1/customers/sessions", headers=self.headers)
+        self.assertEqual(history.status_code, 200, history.text)
+        body = history.json()
+        self.assertTrue(body["complete"])
+        self.assertEqual(body["needReupload"], [])
+        self.assertEqual(body["needCount"], 0)
+        self.assertFalse(body["sessions"][0]["missing"])
+
+    def test_reread_reads_the_kept_copy_of_an_unread_file(self) -> None:
+        db.record_action(
+            settings.db_path,
+            at="2026-10-24T04:33:56+00:00",
+            actor="me",
+            source="hub",
+            kind="note",
+            summary="Nạp Excel: thêm 0, bổ sung 0, giữ 0, gộp 0.",
+            detail=json.dumps(
+                {
+                    "stats": {"created": 0, "updated": 0, "unchanged": 0, "incoming": 0},
+                    "files": [{"name": "delivery_export_1.xlsx", "rows": 0}],
+                    "emptyFiles": ["delivery_export_1.xlsx"],
+                    "fileCount": 1,
+                    "okFiles": 0,
+                },
+                ensure_ascii=False,
+            ),
+        )
+        folder = settings.imports_dir() / "20261024T010101"
+        folder.mkdir(parents=True)
+        (folder / "delivery_export_1.xlsx").write_bytes(
+            write_xlsx(
+                ["Tên khách", "SĐT", "Địa chỉ"],
+                [["Nguyễn Lan", "0901222333", "Huế"]],
+            )
+        )
+        started = self.client.post("/v1/customers/imports/reread", headers=self.headers, json={})
+        self.assertEqual(started.status_code, 200, started.text)
+        self.assertEqual(started.json()["found"], 1)
+        self.assertEqual(started.json()["missing"], [])
+        job = self._wait_job(started.json()["job"])
+        self.assertEqual(job["status"], "done", job.get("error"))
+        self.assertEqual(job["result"]["stats"]["created"], 1)
+        history = self.client.get("/v1/customers/sessions", headers=self.headers)
+        self.assertEqual(history.json()["needReupload"], [])
+        again = self.client.post("/v1/customers/imports/reread", headers=self.headers, json={})
+        self.assertEqual(again.status_code, 200, again.text)
+        self.assertIsNone(again.json()["job"])
+        self.assertIn("Không còn file", again.json()["detail"])
+
     def test_lookup_file_skips_facebook_uid(self) -> None:
         db.replace_customers(
             settings.db_path,
