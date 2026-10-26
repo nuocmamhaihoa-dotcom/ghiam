@@ -27,7 +27,9 @@ from control_plane.customers import (
     phones_from_text,
     repair_customer_row,
     repair_stored_customers,
+    clear_province_only_addresses,
     rewrite_stored_addresses,
+    strip_province_only_address,
 )
 from control_plane.excel_import import (
     SharedStringStore,
@@ -1313,6 +1315,82 @@ class SharedStringSpillTests(unittest.TestCase):
         self.assertEqual(rows[1], ["Lan", "0901222333"])
         self.assertEqual(rows[2], ["Minh", "0901444555"])
         self.assertEqual(list(Path(folder, "tmp").glob("khach-sst-*")), [])
+
+
+class ProvinceOnlyAddressTests(unittest.TestCase):
+    def test_bare_province_and_city_lines_are_removed(self) -> None:
+        self.assertEqual(strip_province_only_address("Hà Nội"), "")
+        self.assertEqual(strip_province_only_address("Thành phố Hồ Chí Minh"), "")
+        self.assertEqual(strip_province_only_address("Tỉnh Thanh Hóa"), "")
+        self.assertEqual(strip_province_only_address("Tỉnh An GiangTỉnh An Giang"), "")
+        self.assertEqual(strip_province_only_address("Hanoi"), "")
+        self.assertEqual(strip_province_only_address("Ho Chi Minh City"), "")
+        self.assertEqual(strip_province_only_address("Tỉnh, Sóc Trăng"), "")
+        self.assertEqual(strip_province_only_address("thành phố, Bắc Ninh"), "")
+        self.assertEqual(strip_province_only_address("Lạng Sơn"), "")
+        self.assertEqual(strip_province_only_address("Hải Dương"), "")
+        self.assertEqual(strip_province_only_address("xã An Bình\nHà Nội"), "xã An Bình")
+        self.assertEqual(strip_province_only_address("Nha Trang"), "")
+        self.assertEqual(strip_province_only_address("Vinh, Tỉnh Nghệ An"), "")
+        self.assertEqual(strip_province_only_address("Tân An, Long An"), "")
+        self.assertEqual(strip_province_only_address("Hà Nội\nHuế"), "")
+
+    def test_street_ward_and_district_addresses_stay(self) -> None:
+        street = "12 Lê Lợi"
+        self.assertEqual(strip_province_only_address(street), street)
+        mixed = "12 Lê Lợi, Phường Phú Hội, Hà Nội"
+        self.assertEqual(strip_province_only_address(mixed), mixed)
+        self.assertEqual(strip_province_only_address("Phường 1"), "Phường 1")
+        self.assertEqual(strip_province_only_address("Ấp Bình Dương"), "Ấp Bình Dương")
+        self.assertEqual(strip_province_only_address("Ba Đình"), "Ba Đình")
+        self.assertEqual(strip_province_only_address("VALUE"), "VALUE")
+        self.assertEqual(strip_province_only_address("."), ".")
+        self.assertEqual(strip_province_only_address("Làng Hoa"), "Làng Hoa")
+        kept = "12 Lê Lợi\nHà Nội"
+        self.assertEqual(strip_province_only_address(kept), "12 Lê Lợi")
+
+    def test_clear_updates_only_the_address_column(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="khach-tinh-") as folder:
+            path = Path(folder) / "server.db"
+            db.init_db(path)
+            now = "2026-01-01T00:00:00+00:00"
+            db.replace_customers(
+                path,
+                [
+                    {
+                        "id": "tinh",
+                        "name": "Lan",
+                        "phone": "0901222333",
+                        "address": "Hà Nội",
+                        "adminAddress": "Thừa Thiên Huế",
+                        "createdAt": now,
+                        "updatedAt": now,
+                    },
+                    {
+                        "id": "duong",
+                        "name": "Minh",
+                        "phone": "0901444555",
+                        "address": "12 Lê Lợi\nHà Nội",
+                        "adminAddress": "Đà Nẵng",
+                        "createdAt": now,
+                        "updatedAt": now,
+                    },
+                ],
+                [],
+            )
+            stats = clear_province_only_addresses(path, batch=10)
+            self.assertEqual(stats["cleared"], 1)
+            self.assertEqual(stats["trimmed"], 1)
+            with db.session(path) as conn:
+                rows = {
+                    row["id"]: row
+                    for row in conn.execute("SELECT id, address, admin_address, name FROM customers")
+                }
+            self.assertEqual(rows["tinh"]["address"], "")
+            self.assertEqual(rows["tinh"]["admin_address"], "Thừa Thiên Huế")
+            self.assertEqual(rows["tinh"]["name"], "Lan")
+            self.assertEqual(rows["duong"]["address"], "12 Lê Lợi")
+            self.assertEqual(rows["duong"]["admin_address"], "Đà Nẵng")
 
 
 if __name__ == "__main__":

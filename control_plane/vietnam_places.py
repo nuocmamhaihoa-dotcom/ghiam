@@ -789,3 +789,171 @@ def address_levels_present(value: str) -> set[int]:
 def is_complete_address(value: str) -> bool:
     levels = address_levels_present(value)
     return 0 in levels and 4 in levels
+
+
+# Thành phố thuộc tỉnh. Tên trùng tỉnh đã nằm trong danh sách tỉnh.
+_BARE_CITIES = (
+    "Bà Rịa",
+    "Bảo Lộc",
+    "Biên Hòa",
+    "Buôn Ma Thuột",
+    "Buôn Mê Thuột",
+    "Cam Ranh",
+    "Cao Lãnh",
+    "Châu Đốc",
+    "Cửa Lò",
+    "Đà Lạt",
+    "Điện Biên Phủ",
+    "Đông Hà",
+    "Đồng Hới",
+    "Đồng Xoài",
+    "Gia Nghĩa",
+    "Hạ Long",
+    "Hà Tiên",
+    "Hội An",
+    "Hồng Ngự",
+    "Long Khánh",
+    "Long Xuyên",
+    "Mỹ Tho",
+    "Ngã Bảy",
+    "Nha Trang",
+    "Phan Rang",
+    "Phan Rang - Tháp Chàm",
+    "Phan Thiết",
+    "Phủ Lý",
+    "Pleiku",
+    "Quy Nhơn",
+    "Rạch Giá",
+    "Sa Đéc",
+    "Sầm Sơn",
+    "Sông Công",
+    "Tam Kỳ",
+    "Tân An",
+    "Thái Hòa",
+    "Thủ Dầu Một",
+    "Thủ Đức",
+    "Tuy Hòa",
+    "Uông Bí",
+    "Cẩm Phả",
+    "Móng Cái",
+    "Vị Thanh",
+    "Việt Trì",
+    "Vinh",
+    "Vĩnh Yên",
+)
+_BARE_CITY_NAMES = frozenset(fold_vietnamese(name) for name in _BARE_CITIES if fold_vietnamese(name))
+_BARE_LABELS = frozenset({"tinh", "thanh pho", "tp", "city"})
+_PLACE_SPELLINGS = {
+    "hanoi": "ha noi",
+    "haiphong": "hai phong",
+    "hochiminh": "ho chi minh",
+    "danang": "da nang",
+    "cantho": "can tho",
+    "nhatrang": "nha trang",
+    "bienhoa": "bien hoa",
+    "dalat": "da lat",
+    "halong": "ha long",
+    "quynhon": "quy nhon",
+    "buon me thuot": "buon ma thuot",
+    "thudaumot": "thu dau mot",
+}
+_DETAIL_PLACE = re.compile(
+    r"(?:^| )(?:xa|phuong|huyen|quan|thon|xom|ap|lang|duong|ngo|hem|ngach|kiet|"
+    r"khom|buon|soc|khu pho|thi tran|thi xa|to dan pho|kp)(?: |$)"
+)
+# Không gồm lang, duong, soc, buon: các âm này nằm trong Lạng Sơn, Hải Dương, Sóc Trăng, Buôn Ma Thuột.
+_STRICT_DETAIL = re.compile(
+    r"(?:^| )(?:xa|phuong|huyen|quan|thon|xom|ap|ngo|hem|ngach|kiet|khom|"
+    r"khu pho|thi tran|thi xa|to dan pho)(?: |$)"
+)
+_GLUED_PROVINCE = re.compile(r"(?<=\S)(?=(?:Tỉnh|TỈNH|Thành phố|THÀNH PHỐ|Tp\.))")
+
+
+def _core_place(folded: str) -> str:
+    text = " ".join(folded.split())
+    if text.endswith(" city"):
+        text = text[: -len(" city")].strip()
+    changed = True
+    while changed and text:
+        changed = False
+        for prefix in ("tinh ", "thanh pho ", "tp "):
+            if text.startswith(prefix):
+                text = text[len(prefix) :].strip()
+                changed = True
+    return _PLACE_SPELLINGS.get(text, text)
+
+
+def _is_known_province_or_city(folded: str) -> bool:
+    core = _core_place(folded)
+    if not core or core in _BARE_LABELS:
+        return False
+    if core in _PLACE_SPELLINGS:
+        core = _PLACE_SPELLINGS[core]
+    return _is_province_name(core) or core in _PROVINCE_CANON or core in _BARE_CITY_NAMES
+
+
+def _place_segments(line: str) -> list[str]:
+    broken = _GLUED_PROVINCE.sub("\n", line)
+    parts: list[str] = []
+    for chunk in re.split(r"[\n,;|/]+", broken):
+        piece = chunk.strip(" .,;:-")
+        if piece:
+            parts.append(piece)
+    return parts
+
+
+def line_is_province_or_city_only(line: str) -> bool:
+    """Dòng chỉ còn tên tỉnh hoặc thành phố, không có số nhà, đường, thôn, xã, huyện."""
+    raw = " ".join(str(line or "").split())
+    if not raw or len(raw) > 160:
+        return False
+    if any(character.isdigit() for character in raw):
+        return False
+    folded = fold_vietnamese(raw)
+    if _is_known_province_or_city(folded):
+        return True
+    if _DETAIL_PLACE.search(f" {folded} "):
+        return False
+    parts = _place_segments(raw)
+    if not parts:
+        return False
+    for part in parts:
+        part_folded = fold_vietnamese(part)
+        if _DETAIL_PLACE.search(f" {part_folded} "):
+            return False
+        core = _core_place(part_folded)
+        if core in _BARE_LABELS or part_folded in _BARE_LABELS:
+            continue
+        if not _is_known_province_or_city(part_folded):
+            return False
+    return any(_is_known_province_or_city(fold_vietnamese(part)) for part in parts)
+
+
+def strip_province_only_address(value: str) -> str:
+    """Bỏ những dòng địa chỉ chỉ có tỉnh hoặc thành phố. Dòng còn lại giữ nguyên."""
+    text = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
+    if not text.strip():
+        return ""
+    kept: list[str] = []
+    seen: set[str] = set()
+    removed = False
+    for raw in text.split("\n"):
+        line = " ".join(raw.split())
+        if not line:
+            continue
+        if line_is_province_or_city_only(line):
+            removed = True
+            continue
+        key = line.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        kept.append(line)
+    if not removed:
+        return str(value or "")
+    new = "\n".join(kept)
+    folded_old = f" {fold_vietnamese(text)} "
+    folded_new = f" {fold_vietnamese(new)} "
+    if _STRICT_DETAIL.search(folded_old) and not _STRICT_DETAIL.search(folded_new):
+        return str(value or "")
+    return new
