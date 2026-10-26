@@ -1165,12 +1165,12 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(copied.status_code, 200, copied.text)
         self.assertIn("text/plain", copied.headers["content-type"])
         lines = [line for line in copied.text.splitlines() if line]
-        self.assertEqual(lines[0], "Địa chỉ\tSố điện thoại")
+        self.assertEqual(lines[0], "Số điện thoại\tĐịa chỉ")
         self.assertEqual(
             lines[1:],
             [
-                "12 Lê Lợi | Phường Phú Hội | Thừa Thiên Huế\t0901222333",
-                "Đà Nẵng\t0375866792",
+                "0901222333\t12 Lê Lợi | Phường Phú Hội | Thừa Thiên Huế",
+                "0375866792\tĐà Nẵng",
             ],
         )
         self.assertNotIn("0985000000", copied.text)

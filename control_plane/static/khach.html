@@ -343,7 +343,7 @@
     <h2>Tra cứu hàng loạt</h2>
     <details class="guide">
       <summary>Cách tra cứu</summary>
-      <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. Một ô có hai số (0901… - 0912…) thì tra cả hai. File lấy số điện thoại Việt Nam ở mọi cột, cột SĐT lấy cả số lạ; không lấy UID Facebook. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Copy địa chỉ và số điện thoại chỉ lấy khách tra được, dán vào Excel thành hai cột. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách. Nhân viên bị trừ hạn mức theo số mới trong ngày; số đã tra hôm nay không tính lại.</p>
+      <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. Một ô có hai số (0901… - 0912…) thì tra cả hai. File lấy số điện thoại Việt Nam ở mọi cột, cột SĐT lấy cả số lạ; không lấy UID Facebook. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Copy số điện thoại và địa chỉ chỉ lấy khách tra được: số điện thoại đứng bên trái, địa chỉ đứng bên phải. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách. Nhân viên bị trừ hạn mức theo số mới trong ngày; số đã tra hôm nay không tính lại.</p>
     </details>
     <p id="quotaNote" class="note"></p>
     <div class="work">
@@ -361,7 +361,7 @@
         <div class="stats" id="lookupStats"></div>
         <p class="row" id="lookupActions" hidden>
           <button class="primary" type="button" id="lookupExport">Tải file kết quả Excel</button>
-          <button class="ghost" type="button" id="lookupCopy">Copy địa chỉ và số điện thoại</button>
+          <button class="ghost" type="button" id="lookupCopy">Copy số điện thoại và địa chỉ</button>
         </p>
         <div class="scroll" id="lookupPeople"></div>
         <p id="lookupNote" class="note">Chưa tra cứu trong phiên này.</p>
@@ -2174,12 +2174,12 @@
   }
 
   function foundContactText(items) {
-    var lines = ["Địa chỉ\tSố điện thoại"];
+    var lines = ["Số điện thoại\tĐịa chỉ"];
     (items || []).forEach(function (item) {
       if (!item.found) return;
       var customer = item.customer || {};
       var phone = String(customer.phone || item.query || "").replace(/[\t\r\n]+/g, " ").trim();
-      lines.push(contactAddress(customer) + "\t" + phone);
+      lines.push(phone + "\t" + contactAddress(customer));
     });
     return lines.length > 1 ? lines.join("\n") : "";
   }
@@ -2204,7 +2204,7 @@
     }
     var button = document.getElementById("lookupCopy");
     button.disabled = true;
-    setNote("lookupNote", "Đang lấy địa chỉ và số điện thoại của khách tra được…");
+    setNote("lookupNote", "Đang lấy số điện thoại và địa chỉ của khách tra được…");
     try {
       var text = "";
       if (lastLookup.jobId) {
@@ -2221,13 +2221,13 @@
       } else {
         text = foundContactText(lastLookup.items);
       }
-      var rows = text ? text.split("\n").filter(function (line) { return line && line !== "Địa chỉ\tSố điện thoại"; }) : [];
+      var rows = text ? text.split("\n").filter(function (line) { return line && line !== "Số điện thoại\tĐịa chỉ"; }) : [];
       if (!rows.length) {
         setNote("lookupNote", "Không có khách nào tra được để copy.", "warn");
         return;
       }
-      await writeClipboard(rows.length ? ("Địa chỉ\tSố điện thoại\n" + rows.join("\n")) : "");
-      setNote("lookupNote", "Đã copy " + vnNum(rows.length) + " dòng. Dán vào Excel thành hai cột: Địa chỉ và Số điện thoại.", "ok");
+      await writeClipboard(rows.length ? ("Số điện thoại\tĐịa chỉ\n" + rows.join("\n")) : "");
+      setNote("lookupNote", "Đã copy " + vnNum(rows.length) + " dòng. Dán vào Excel: Số điện thoại bên trái, Địa chỉ bên phải.", "ok");
     } catch (error) {
       setNote("lookupNote", "Không copy được. Hãy thử lại.", "warn");
     } finally {

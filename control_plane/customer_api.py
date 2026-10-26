@@ -1531,19 +1531,19 @@ def _lookup_contact_cell(customer: dict[str, Any]) -> str:
 
 
 def _write_lookup_copy(phones: list[str]) -> Path:
-    """Hai cột của khách tra được: địa chỉ và số điện thoại. Số không có trong kho không đưa vào."""
+    """Hai cột của khách tra được: số điện thoại rồi địa chỉ. Số không có trong kho không đưa vào."""
     handle = tempfile.NamedTemporaryFile(prefix="tra-cuu-copy-", suffix=".txt", delete=False)
     dest = Path(handle.name)
     handle.close()
     try:
         with dest.open("w", encoding="utf-8", newline="\n") as handle:
-            handle.write("Địa chỉ\tSố điện thoại\n")
+            handle.write("Số điện thoại\tĐịa chỉ\n")
             for item in iter_lookup_items(settings.db_path, phones):
                 if not item.get("found"):
                     continue
                 customer = item.get("customer") or {}
                 phone = " ".join(str(customer.get("phone") or item.get("query") or "").split()).replace("\t", " ")
-                handle.write(f"{_lookup_contact_cell(customer)}\t{phone}\n")
+                handle.write(f"{phone}\t{_lookup_contact_cell(customer)}\n")
     except Exception:
         dest.unlink(missing_ok=True)
         raise
@@ -1639,7 +1639,7 @@ def customers_lookup_job_copy(
     request: Request,
     authorization: str | None = Header(default=None),
 ) -> FileResponse:
-    """Hai cột địa chỉ và số điện thoại của khách tra được, để dán vào Excel."""
+    """Hai cột của khách tra được, số điện thoại bên trái và địa chỉ bên phải, để dán vào Excel."""
     actor = _actor(request)
     db.init_db(settings.db_path)
     phones = _lookup_job_phones(actor, job_id)
