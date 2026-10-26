@@ -898,6 +898,26 @@ class IngestSqlTests(unittest.TestCase):
         self.assertEqual(stats["emptyPhone"], 0)
         self.assertEqual(stats["uniquePhones"], 1)
 
+    def test_saved_total_tracks_inserts_updates_and_deletes(self) -> None:
+        before = db.customer_count(self.db_path)
+        db.set_customer_total(self.db_path, 10)
+        now = "2026-01-01T00:00:00+00:00"
+        row = {
+            "id": "n1",
+            "name": "Lan",
+            "phone": "0901999888",
+            "address": "Huế",
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        db.replace_customers(self.db_path, [row], [])
+        self.assertEqual(db.cached_customer_total(self.db_path), 11)
+        db.replace_customers(self.db_path, [dict(row, name="Lan 2")], [])
+        self.assertEqual(db.cached_customer_total(self.db_path), 11)
+        db.replace_customers(self.db_path, [], ["n1"])
+        self.assertEqual(db.cached_customer_total(self.db_path), 10)
+        self.assertEqual(db.customer_count(self.db_path), before)
+
     def test_ingest_merges_84_and_00_prefix_to_same_row(self) -> None:
         now = "2026-01-01T00:00:00+00:00"
         first, _preview = ingest_customers(

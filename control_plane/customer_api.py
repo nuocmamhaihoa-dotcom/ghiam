@@ -184,6 +184,31 @@ def _parse_iso(value: str) -> datetime | None:
         return None
 
 
+def _warehouse_is_huge() -> bool:
+    """Kho hàng chục triệu dòng thì không đếm lại từng lần nạp khi mở trang."""
+    saved = db.cached_customer_total(settings.db_path)
+    if saved is not None:
+        return saved >= 100_000
+    try:
+        return settings.db_path.stat().st_size >= 500_000_000
+    except OSError:
+        return False
+
+
+def _listed_customer_total() -> int:
+    stats = db.page_warehouse_stats(settings.db_path)
+    return int(stats["total"] or 0)
+
+
+def _remembered_total() -> int:
+    saved = db.cached_customer_total(settings.db_path)
+    if saved is not None:
+        return saved
+    total = db.customer_count(settings.db_path)
+    db.set_customer_total(settings.db_path, total)
+    return total
+
+
 def _import_sessions() -> dict[str, Any]:
     actions = db.list_actions(settings.db_path, limit=200, q="Nạp Excel")
     parsed: list[dict[str, Any]] = []
@@ -231,7 +256,7 @@ def _import_sessions() -> dict[str, Any]:
         stamp = str(payload.get("importedAt") or "") or at
         moment = _parse_iso(stamp)
         kept = 0
-        if created >= 1000 and moment is not None:
+        if created >= 1000 and moment is not None and not _warehouse_is_huge():
             if payload.get("importedAt"):
                 kept = db.customers_created_between(settings.db_path, stamp, stamp)
             else:
@@ -306,7 +331,7 @@ def _import_sessions() -> dict[str, Any]:
             continue
         seen.add(name)
         unique_reupload.append(name)
-    warehouse = db.warehouse_stats(settings.db_path)
+    warehouse = db.page_warehouse_stats(settings.db_path)
     row_sum = sum(int(item.get("incoming") or 0) for item in sessions)
     unique_phones = int(warehouse["uniquePhones"] or 0)
     return {
@@ -443,7 +468,7 @@ def customers_list(
 ) -> dict[str, Any]:
     _manager(_actor(request))
     db.init_db(settings.db_path)
-    total = db.customer_count(settings.db_path)
+    total = _listed_customer_total()
     if collapse(q):
         rows, matched = db.search_customers(settings.db_path, q, limit=LIST_LIMIT)
         shown = [public_customer(row) for row in rows]
@@ -629,7 +654,7 @@ def _import_files(
     incoming_total = 0
     start_index = max(0, int(start_index or 0))
     if start_index >= len(uploaded):
-        stats["total"] = db.customer_count(settings.db_path)
+        stats["total"] = _remembered_total()
         return {
             "stats": stats,
             "files": [],
@@ -722,7 +747,7 @@ def _import_files(
             status_code=400,
             detail="Không đọc được dòng khách nào. " + " ".join(problems),
         )
-    stats["total"] = db.customer_count(settings.db_path)
+    stats["total"] = _remembered_total()
     empty_files = [item["name"] for item in file_reports if not item.get("rows") and not item.get("error")]
     kept_files = _keep_imported_files(uploaded, now, link=link)
     summary = (

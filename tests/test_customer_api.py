@@ -1008,6 +1008,17 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(db.customer_count(settings.db_path), 2)
         self.assertEqual(len(self.client.get("/v1/customers/sessions", headers=self.headers).json()["sessions"]), 2)
 
+    def test_list_and_sessions_read_the_saved_total(self) -> None:
+        db.set_customer_total(settings.db_path, 42)
+        listed = self.client.get("/v1/customers", headers=self.headers)
+        self.assertEqual(listed.status_code, 200, listed.text)
+        self.assertEqual(listed.json()["total"], 42)
+        history = self.client.get("/v1/customers/sessions", headers=self.headers)
+        self.assertEqual(history.status_code, 200, history.text)
+        self.assertEqual(history.json()["total"], 42)
+        self.assertEqual(history.json()["uniquePhones"], 42)
+        self.assertEqual(history.json()["emptyPhone"], 0)
+
     def test_resume_keeps_the_later_checkpoint_when_the_child_has_no_progress(self) -> None:
         first = write_xlsx(["Tên khách", "SĐT", "Địa chỉ"], [["An", "0912000111", "Huế"]])
         second = write_xlsx(["Tên khách", "SĐT", "Địa chỉ"], [["Bình", "0912000222", "Đà Nẵng"]])
