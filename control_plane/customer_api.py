@@ -463,32 +463,62 @@ def _collect_changed(changed: list[dict[str, str]], folded: list[dict[str, Any]]
             return
 
 
+def _filled_fields(raw: str) -> list[str]:
+    wanted: list[str] = []
+    seen: set[str] = set()
+    for part in str(raw or "").split(","):
+        field = part.strip()
+        if not field or field in seen:
+            continue
+        if field not in FIELDS:
+            raise HTTPException(status_code=400, detail="Mục lọc không có trong kho.")
+        seen.add(field)
+        wanted.append(field)
+    return wanted
+
+
 @router.get("/v1/customers")
 def customers_list(
     request: Request,
     q: str = Query(default=""),
+    has: str = Query(default=""),
+    before: int = Query(default=0, ge=0),
+    limit: int = Query(default=LIST_LIMIT, ge=1, le=LIST_LIMIT),
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
     _manager(_actor(request))
     db.init_db(settings.db_path)
     total = _listed_customer_total()
-    if collapse(q):
-        rows, matched = db.search_customers(settings.db_path, q, limit=LIST_LIMIT)
+    filled = _filled_fields(has)
+    fields = [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS]
+    if collapse(q) and not filled and before <= 0:
+        rows, matched = db.search_customers(settings.db_path, q, limit=limit)
         shown = [public_customer(row) for row in rows]
         return {
             "count": len(shown),
             "matched": matched,
             "total": total,
             "items": shown,
-            "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
+            "hasMore": matched > len(shown),
+            "nextBefore": None,
+            "fields": fields,
         }
-    rows = [public_customer(row) for row in db.list_customers(settings.db_path, limit=LIST_LIMIT)]
+    rows, next_before, has_more = db.browse_customers(
+        settings.db_path,
+        limit=limit,
+        before=before or None,
+        filled=filled,
+        query=q,
+    )
+    shown = [public_customer(row) for row in rows]
     return {
-        "count": len(rows),
-        "matched": total,
+        "count": len(shown),
+        "matched": None if filled or before else total,
         "total": total,
-        "items": rows,
-        "fields": [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS],
+        "items": shown,
+        "hasMore": has_more,
+        "nextBefore": next_before,
+        "fields": fields,
     }
 
 

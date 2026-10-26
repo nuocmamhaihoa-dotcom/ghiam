@@ -938,6 +938,75 @@ def customer_from_sql_row(row: sqlite3.Row) -> dict[str, str]:
     }
 
 
+_FILLED_COLUMNS = {
+    "name": "name",
+    "phone": "phone",
+    "address": "address",
+    "adminAddress": "admin_address",
+    "orderContent": "order_content",
+    "codAmount": "cod_amount",
+    "facebookUid": "facebook_uid",
+    "tiktokId": "tiktok_id",
+}
+
+
+def browse_customers(
+    db_path: Path,
+    *,
+    limit: int,
+    before: int | None = None,
+    filled: list[str] | None = None,
+    query: str = "",
+) -> tuple[list[dict[str, str]], int | None, bool]:
+    """Lật kho theo rowid. Mỗi trang dừng sớm, không sắp và không đếm cả bảng."""
+    clauses: list[str] = []
+    params: list[Any] = []
+    if before:
+        clauses.append("rowid < ?")
+        params.append(int(before))
+    for field in filled or []:
+        column = _FILLED_COLUMNS.get(field)
+        if column:
+            clauses.append(f"{column} != ''")
+    needle = " ".join(str(query or "").split())
+    if needle:
+        number = _phone_query(needle)
+        if number:
+            variants = _phone_variants(number) or [number]
+            clauses.append("phone IN (" + ",".join("?" * len(variants)) + ")")
+            params.extend(variants)
+        else:
+            escaped = needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            like = f"%{escaped}%"
+            text_fields = (
+                "name",
+                "phone",
+                "address",
+                "admin_address",
+                "order_content",
+                "cod_amount",
+                "facebook_uid",
+                "tiktok_id",
+            )
+            clauses.append("(" + " OR ".join(f"{field} LIKE ? ESCAPE '\\'" for field in text_fields) + ")")
+            params.extend([like] * len(text_fields))
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    size = max(1, min(int(limit), 2000))
+    sql = (
+        "SELECT rowid AS _rowid, id, name, phone, address, admin_address, order_content, "
+        "cod_amount, facebook_uid, tiktok_id, created_at, updated_at FROM customers"
+        + where
+        + " ORDER BY rowid DESC LIMIT ?"
+    )
+    params.append(size + 1)
+    with session(db_path) as conn:
+        found = conn.execute(sql, params).fetchall()
+    has_more = len(found) > size
+    page = found[:size]
+    next_before = int(page[-1]["_rowid"]) if has_more and page else None
+    return [customer_from_sql_row(row) for row in page], next_before, has_more
+
+
 def list_customers(db_path: Path, limit: int | None = None) -> list[dict[str, str]]:
     """Có giới hạn thì lấy khách ghi sau cùng theo rowid. Sắp theo updated_at phải đọc cả kho."""
     with session(db_path) as conn:

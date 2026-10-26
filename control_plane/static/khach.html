@@ -141,6 +141,14 @@
       max-width: 100%;
     }
     [hidden] { display: none !important; }
+    body:not(.view-store) #storeBox { display: none !important; }
+    body.view-store #appBody > section:not(#storeBox) { display: none !important; }
+    body.view-store #appBody { display: block; }
+    body.view-store #people { max-height: none; overflow: visible; }
+    .filters { border: 1px solid var(--line); border-radius: 12px; padding: 0.7rem 0.85rem 0.85rem; margin: 0.75rem 0; }
+    .filters legend { font-weight: 700; padding: 0 0.3rem; }
+    .filters .picks { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; margin: 0.35rem 0 0; }
+    .filters .picks label { font-weight: 500; margin: 0; }
     body.staff .manager-only { display: none !important; }
     #appBody > .words,
     .work > .words,
@@ -173,7 +181,6 @@
     #mapBox { order: 3; }
     #lookupBox { order: 4; }
     #sessionBox { order: 5; }
-    #storeBox { order: 6; }
     #accountBox { order: 7; }
     #passwordBox { order: 8; }
     @media (min-width: 1100px) {
@@ -203,7 +210,6 @@
       #mapBox { order: 2; grid-column: 1 / -1; }
       #lookupBox { order: 3; grid-column: 1 / -1; }
       #sessionBox { order: 4; grid-column: 1 / -1; }
-      #storeBox { order: 5; grid-column: 1 / -1; }
       #accountBox { order: 6; grid-column: 1 / -1; }
       #passwordBox { order: 7; grid-column: 1 / -1; }
       .work {
@@ -223,23 +229,25 @@
       .pass-grid input, .staff-create input, .staff-create input.limit { width: 100%; margin-bottom: 0; }
       .pass-grid .row, .staff-create .row { margin: 0; }
       #storeBox .row input[type="search"] { flex: 1; width: auto; min-width: 16rem; }
-      #people, #lookupPeople, #sessionList {
+      #lookupPeople, #sessionList {
         max-height: calc(100vh - 14rem);
         overflow: auto;
       }
-      #people table.sheet, #lookupPeople table.sheet { width: 100%; }
+      #lookupPeople table.sheet, body.view-store #people table.sheet { width: 100%; }
       table.sheet td.addr { max-width: none; }
       #mapFields { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
       .drop { margin-top: 0; }
     }
   </style>
 </head>
-<body translate="no" class="notranslate">
+<body translate="no" class="notranslate view-home">
 <main translate="no">
   <p id="translateWarn" class="note warn" hidden>Google Dịch đang bật nên chữ bị dính. Tắt dịch trang này trên Chrome, rồi tải lại.</p>
   <header class="topbar">
     <h1>Kho khách Excel</h1>
     <p class="row" id="whoBar" hidden>
+      <button class="ghost manager-only" type="button" id="navStore">Khách đã lưu</button>
+      <button class="ghost" type="button" id="navHome" hidden>Trang chủ</button>
       <span id="whoText"></span>
       <button class="ghost" type="button" id="logout">Đăng xuất</button>
     </p>
@@ -360,10 +368,29 @@
 
   <section id="storeBox" class="manager-only">
     <h2>Khách đã lưu</h2>
+    <p class="note">Trang này chỉ để xem kho. Mỗi trang 100 khách. Bấm Trang sau để xem tiếp đến hết. Chọn các ô bên dưới để chỉ hiện khách đã có đủ những thông tin đó.</p>
     <div class="stats" id="storeStats"></div>
+    <fieldset class="filters" id="storeFilters">
+      <legend>Chỉ hiện khách đã có đủ</legend>
+      <div class="picks">
+        <label><input type="checkbox" data-has="name" /> Tên</label>
+        <label><input type="checkbox" data-has="phone" /> Số điện thoại</label>
+        <label><input type="checkbox" data-has="address" /> Địa chỉ</label>
+        <label><input type="checkbox" data-has="adminAddress" /> Địa chỉ hành chính</label>
+        <label><input type="checkbox" data-has="orderContent" /> Hàng mua</label>
+        <label><input type="checkbox" data-has="codAmount" /> Tiền COD</label>
+        <label><input type="checkbox" data-has="facebookUid" /> UID Facebook</label>
+        <label><input type="checkbox" data-has="tiktokId" /> ID TikTok</label>
+      </div>
+    </fieldset>
     <p class="row" style="margin:0.8rem 0">
       <input id="query" type="search" placeholder="Tìm tên, số, địa chỉ, hàng mua, COD, UID Facebook, ID TikTok" />
+      <button class="ghost" type="button" id="storeClear">Bỏ lọc</button>
       <button class="ghost" type="button" id="export">Tải Excel kho khách</button>
+    </p>
+    <p class="row">
+      <button class="ghost" type="button" id="storePrev" hidden>Trang trước</button>
+      <button class="ghost" type="button" id="storeNext" hidden>Trang sau</button>
     </p>
     <div class="scroll" id="people"></div>
     <p id="listNote" class="note"></p>
@@ -422,6 +449,9 @@
   var lookupFiles = [];
   var lookupKeys = {};
   var lastLookup = null;
+  var storeCursor = 0;
+  var storeBack = [];
+  var STORE_PAGE = 100;
 
   function token() { return serverToken; }
 
@@ -1872,10 +1902,64 @@
     }
   }
 
+  function chosenFields() {
+    var fields = [];
+    document.querySelectorAll("#storeFilters input[data-has]:checked").forEach(function (box) {
+      fields.push(box.getAttribute("data-has"));
+    });
+    return fields;
+  }
+
+  function fieldLabel(id) {
+    var box = document.querySelector("#storeFilters input[data-has='" + id + "']");
+    if (!box || !box.parentElement) return id;
+    return box.parentElement.textContent.replace(/\s+/g, " ").trim();
+  }
+
+  function resetStorePage() {
+    storeCursor = 0;
+    storeBack = [];
+  }
+
+  function showHome() {
+    document.body.classList.add("view-home");
+    document.body.classList.remove("view-store");
+    var home = document.getElementById("navHome");
+    var store = document.getElementById("navStore");
+    if (home) home.hidden = true;
+    if (store) store.hidden = !isManager();
+  }
+
+  function showStore() {
+    if (!isManager()) {
+      showHome();
+      return;
+    }
+    document.body.classList.remove("view-home");
+    document.body.classList.add("view-store");
+    var home = document.getElementById("navHome");
+    var store = document.getElementById("navStore");
+    if (home) home.hidden = false;
+    if (store) store.hidden = true;
+    resetStorePage();
+    loadCustomers();
+  }
+
+  function routeView() {
+    if (location.hash === "#kho") showStore();
+    else showHome();
+  }
+
   async function loadCustomers() {
+    if (!document.body.classList.contains("view-store")) return;
     try {
-      var query = document.getElementById("query").value;
-      var response = await api("/v1/customers" + (query ? "?q=" + encodeURIComponent(query) : ""));
+      var query = document.getElementById("query").value.trim();
+      var fields = chosenFields();
+      var params = ["limit=" + STORE_PAGE];
+      if (query) params.push("q=" + encodeURIComponent(query));
+      if (fields.length) params.push("has=" + encodeURIComponent(fields.join(",")));
+      if (storeCursor) params.push("before=" + encodeURIComponent(String(storeCursor)));
+      var response = await api("/v1/customers?" + params.join("&"));
       if (response.status === 401) {
         showGate(false);
         setNote("gateNote", "Hãy đăng nhập lại.", "warn");
@@ -1886,25 +1970,34 @@
         return;
       }
       var body = await response.json();
-      var items = (body.items || []).slice(0, 200);
+      var items = body.items || [];
       var shown = items.length;
-      var matched = body.matched != null ? body.matched : body.count;
-      document.getElementById("storeStats").innerHTML = stat(body.total, "Khách trong kho") + stat(shown, "Khách đang hiện");
+      var matched = body.matched;
+      document.getElementById("storeStats").innerHTML =
+        stat(body.total, "Khách trong kho") + stat(shown, "Khách trang này");
       padSpaces(document.getElementById("storeStats"));
       renderRows(items);
       padSpaces(document.getElementById("people"));
-      if (query) {
-        if (!matched) {
-          setNote("listNote", "Không khớp từ tìm.");
-        } else if (matched > shown) {
-          setNote("listNote", "Tìm thấy " + matched + " khách, đang hiện " + shown + ". Thu hẹp từ khóa nếu cần.");
-        } else {
-          setNote("listNote", "Tìm thấy " + matched + " khách.");
-        }
-      } else if (body.total > shown) {
-        setNote("listNote", "Đang hiện " + shown + "/" + body.total + " khách. Gõ tìm để thu hẹp.");
+      var next = document.getElementById("storeNext");
+      var prev = document.getElementById("storePrev");
+      if (next) {
+        next.hidden = !body.hasMore;
+        next.disabled = false;
+        next.setAttribute("data-before", body.nextBefore || "");
+      }
+      if (prev) prev.hidden = !storeBack.length;
+      var filled = fields.map(fieldLabel).filter(Boolean).join(", ");
+      var lead = filled ? "Khách đã có đủ " + filled + ". " : "";
+      if (!shown) {
+        setNote("listNote", lead + (query || filled ? "Không có khách khớp." : "Kho còn trống."));
+      } else if (matched != null && matched > shown && !body.hasMore) {
+        setNote("listNote", lead + "Tìm thấy " + vnNum(matched) + " khách, trang này hiện " + vnNum(shown) + ".");
+      } else if (body.hasMore) {
+        setNote("listNote", lead + "Trang này hiện " + vnNum(shown) + " khách. Bấm Trang sau để xem tiếp.");
+      } else if (storeBack.length) {
+        setNote("listNote", lead + "Hết danh sách. Trang này hiện " + vnNum(shown) + " khách.");
       } else {
-        setNote("listNote", body.total ? "" : "Kho còn trống.");
+        setNote("listNote", lead + "Đang hiện " + vnNum(shown) + " khách.");
       }
     } catch (error) {
       setNote("listNote", "Không tải được kho khách.", "warn");
@@ -2336,9 +2429,42 @@
     clearPending();
     setNote("uploadNote", "Đã bỏ hết file. Chọn lại, không giới hạn số file và dung lượng.");
   });
+  document.getElementById("navStore").addEventListener("click", function () {
+    if (location.hash !== "#kho") location.hash = "#kho";
+  });
+  document.getElementById("navHome").addEventListener("click", function () {
+    if (location.hash) location.hash = "";
+  });
+  window.addEventListener("hashchange", routeView);
   document.getElementById("query").addEventListener("input", function () {
     window.clearTimeout(window.__khachSearch);
-    window.__khachSearch = window.setTimeout(loadCustomers, 200);
+    window.__khachSearch = window.setTimeout(function () {
+      resetStorePage();
+      loadCustomers();
+    }, 200);
+  });
+  document.getElementById("storeFilters").addEventListener("change", function () {
+    resetStorePage();
+    loadCustomers();
+  });
+  document.getElementById("storeClear").addEventListener("click", function () {
+    document.querySelectorAll("#storeFilters input[data-has]").forEach(function (box) { box.checked = false; });
+    document.getElementById("query").value = "";
+    resetStorePage();
+    loadCustomers();
+  });
+  document.getElementById("storeNext").addEventListener("click", function () {
+    var next = document.getElementById("storeNext").getAttribute("data-before");
+    if (!next) return;
+    storeBack.push(storeCursor);
+    storeCursor = Number(next);
+    loadCustomers();
+    window.scrollTo(0, 0);
+  });
+  document.getElementById("storePrev").addEventListener("click", function () {
+    storeCursor = storeBack.length ? storeBack.pop() : 0;
+    loadCustomers();
+    window.scrollTo(0, 0);
   });
   document.getElementById("export").addEventListener("click", exportBook);
   document.getElementById("lookupPick").addEventListener("click", function () {
@@ -2394,10 +2520,12 @@
     document.body.classList.toggle("staff", !isManager());
     renderWho();
     if (isManager()) {
-      loadCustomers();
       loadSessions();
       loadAccounts();
       loadPaused();
+      routeView();
+    } else {
+      showHome();
     }
     resumeJob();
   }

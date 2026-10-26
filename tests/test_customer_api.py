@@ -1560,6 +1560,74 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIsNone(again.json()["job"])
         self.assertIn("Không còn file", again.json()["detail"])
 
+    def test_store_page_filters_customers_who_have_the_chosen_fields(self) -> None:
+        now = "2026-10-26T00:00:00+00:00"
+        db.replace_customers(
+            settings.db_path,
+            [
+                {
+                    "id": "full",
+                    "name": "Nguyễn Lan",
+                    "phone": "0901111111",
+                    "address": "Huế",
+                    "adminAddress": "Thừa Thiên Huế",
+                    "orderContent": "Nước mắm",
+                    "codAmount": "120000",
+                    "facebookUid": "1001",
+                    "tiktokId": "tt1",
+                    "createdAt": now,
+                    "updatedAt": now,
+                },
+                {
+                    "id": "thin",
+                    "name": "Trần Minh",
+                    "phone": "0902222222",
+                    "address": "",
+                    "createdAt": now,
+                    "updatedAt": now,
+                },
+            ],
+            [],
+        )
+        listed = self.client.get(
+            "/v1/customers",
+            headers=self.headers,
+            params={"has": "name,address,codAmount", "limit": 50},
+        )
+        self.assertEqual(listed.status_code, 200, listed.text)
+        phones = [item["phone"] for item in listed.json()["items"]]
+        self.assertEqual(phones, ["0901111111"])
+        self.assertFalse(listed.json()["hasMore"])
+        unknown = self.client.get("/v1/customers", headers=self.headers, params={"has": "matKhau"})
+        self.assertEqual(unknown.status_code, 400, unknown.text)
+
+    def test_store_page_walks_every_saved_customer(self) -> None:
+        now = "2026-10-26T00:00:00+00:00"
+        db.replace_customers(
+            settings.db_path,
+            [
+                {"id": "a", "name": "An", "phone": "0901000001", "address": "Huế", "createdAt": now, "updatedAt": now},
+                {"id": "b", "name": "Bình", "phone": "0901000002", "address": "Đà Nẵng", "createdAt": now, "updatedAt": now},
+                {"id": "c", "name": "Chi", "phone": "0901000003", "address": "Hà Nội", "createdAt": now, "updatedAt": now},
+            ],
+            [],
+        )
+        seen: list[str] = []
+        before = 0
+        for _ in range(5):
+            params = {"limit": 1}
+            if before:
+                params["before"] = before
+            page = self.client.get("/v1/customers", headers=self.headers, params=params)
+            self.assertEqual(page.status_code, 200, page.text)
+            body = page.json()
+            self.assertEqual(len(body["items"]), 1)
+            seen.append(body["items"][0]["phone"])
+            if not body["hasMore"]:
+                break
+            before = int(body["nextBefore"])
+        self.assertEqual(seen, ["0901000003", "0901000002", "0901000001"])
+
     def test_lookup_file_skips_facebook_uid(self) -> None:
         db.replace_customers(
             settings.db_path,
