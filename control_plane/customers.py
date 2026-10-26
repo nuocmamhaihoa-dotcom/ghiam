@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 import unicodedata
 import uuid
+from pathlib import Path
 from typing import Any, Callable, Iterator
 from urllib.parse import parse_qs, urlparse
 
@@ -359,14 +360,119 @@ def append_distinct_lines(current: str, new: str, limit: int = _LINE_CAP) -> str
     return "\n".join(lines)
 
 
+_REPEAT_SEPARATORS = ("", "\n", " ", ", ", ",", " | ", "|", " / ", "/")
+
+
+def _has_letter(text: str) -> bool:
+    return any(char.isalpha() for char in text)
+
+
+def _copies_match(text: str, unit: str, sep: str, copies: int) -> bool:
+    unit_len = len(unit)
+    sep_len = len(sep)
+    step = unit_len + sep_len
+    if copies < 2 or len(text) != copies * unit_len + (copies - 1) * sep_len:
+        return False
+    if text[:unit_len] != unit:
+        return False
+    for index in range(1, copies):
+        start = index * step
+        if sep_len and text[start - sep_len : start] != sep:
+            return False
+        if text[start : start + unit_len] != unit:
+            return False
+    return True
+
+
+def exact_repeat_unit(text: str) -> str | None:
+    """Khối dài nhất lặp y hệt thành cả chuỗi. Khác một ký tự thì không tính.
+
+    Khối phải từ 8 ký tự và có ít nhất một chữ. Các bản có thể dính liền,
+    hoặc cách nhau bởi xuống dòng, dấu cách, phẩy, gạch đứng hay gạch chéo.
+    """
+    size = len(text)
+    if size < 16 or not _has_letter(text):
+        return None
+    best: str | None = None
+    for sep in _REPEAT_SEPARATORS:
+        sep_len = len(sep)
+        total = size + sep_len
+        max_copies = total // (8 + sep_len)
+        if max_copies < 2:
+            continue
+        copies = 2
+        while copies <= max_copies:
+            if total % copies == 0:
+                unit_len = total // copies - sep_len
+                unit = text[:unit_len]
+                if (
+                    unit_len >= 8
+                    and (best is None or unit_len > len(best))
+                    and _has_letter(unit)
+                    and _copies_match(text, unit, sep, copies)
+                ):
+                    best = unit
+                    if sep_len == 0 and copies == 2:
+                        return unit
+            copies += 1
+    return best
+
+
+def _collapse_address_block(value: str) -> str:
+    text = unicodedata.normalize("NFC", value.replace("\r\n", "\n").replace("\r", "\n"))
+    return "\n".join(" ".join(line.split()) for line in text.split("\n")).strip("\n")
+
+
+def _peel_exact_repeats(text: str) -> str:
+    current = text
+    for _ in range(8):
+        unit = exact_repeat_unit(current)
+        if not unit or unit == current:
+            return current
+        current = unit
+    return current
+
+
+def dedupe_exact_address(value: Any) -> str:
+    """Xóa mọi bản lặp y hệt trong ô địa chỉ, chỉ giữ một bản.
+
+    So khớp nguyên khối, phân biệt hoa thường. Một từ lặp trong câu địa chỉ
+    vẫn giữ nguyên. Chuỗi không đổi thì trả về đúng bản gốc.
+    """
+    raw = "" if value is None else str(value)
+    if not raw.strip():
+        return raw
+    collapsed = _collapse_address_block(raw)
+    peeled = _peel_exact_repeats(collapsed)
+    seen: set[str] = set()
+    lines: list[str] = []
+    dropped = False
+    for line in peeled.split("\n"):
+        item = _peel_exact_repeats(line) if line else ""
+        if item:
+            if item in seen:
+                dropped = True
+                continue
+            seen.add(item)
+        lines.append(item)
+    while lines and not lines[0]:
+        lines.pop(0)
+    while lines and not lines[-1]:
+        lines.pop()
+    result = "\n".join(lines)
+    if not dropped and result == collapsed:
+        return raw
+    return result
+
+
 def clean_address(value: Any) -> str:
     """Một dòng địa chỉ giữ đến 400 ký tự. Nhiều dòng thì tối đa 24 dòng, mỗi dòng 400 ký tự."""
     if not value:
         return ""
     text = str(value).replace("\r\n", "\n").replace("\r", "\n")
     if "\n" not in text:
-        return " ".join(text.split())[:400].rstrip()
-    return join_address_lines(text)
+        return dedupe_exact_address(" ".join(text.split())[:400].rstrip())
+    return dedupe_exact_address(join_address_lines(text))
 
 
 def _address_richness(text: str) -> tuple[int, int]:
@@ -1434,6 +1540,47 @@ def clear_province_only_addresses(db_path: Any, batch: int = 20000) -> dict[str,
     finally:
         conn.close()
     return {"seen": seen, "changed": changed, "cleared": cleared, "trimmed": trimmed}
+
+
+def dedupe_exact_addresses(db_path: Any, batch: int = 50000) -> dict[str, int]:
+    """Trong cột địa chỉ, nội dung lặp y hệt chỉ giữ một bản.
+
+    Không xóa khách. Không đụng địa chỉ hành chính, tên, số điện thoại,
+    và không đổi thời điểm cập nhật.
+    """
+    conn = db.connect(Path(db_path))
+    seen = 0
+    changed = 0
+    try:
+        conn.execute("PRAGMA busy_timeout=60000;")
+        top = int(conn.execute("SELECT COALESCE(MAX(rowid), 0) FROM customers").fetchone()[0] or 0)
+        start = 0
+        size = max(1000, int(batch))
+        while start < top:
+            rows = conn.execute(
+                "SELECT id, address FROM customers WHERE rowid > ? AND rowid <= ? AND address != ''",
+                (start, start + size),
+            ).fetchall()
+            updates: list[tuple[str, str, str]] = []
+            for row in rows:
+                seen += 1
+                current = str(row["address"] or "")
+                deduped = dedupe_exact_address(current)
+                if deduped == current:
+                    continue
+                updates.append((deduped, str(row["id"]), current))
+            if updates:
+                before = conn.total_changes
+                conn.executemany(
+                    "UPDATE customers SET address=? WHERE id=? AND address=?",
+                    updates,
+                )
+                changed += conn.total_changes - before
+            conn.commit()
+            start += size
+    finally:
+        conn.close()
+    return {"seen": seen, "changed": changed}
 
 
 def rewrite_stored_addresses(db_path: Any, now: str, batch: int = 2000) -> dict[str, int]:
