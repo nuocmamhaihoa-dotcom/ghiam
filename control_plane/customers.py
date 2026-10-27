@@ -1153,56 +1153,87 @@ MAX_LOOKUP = 1_000_000
 LOOKUP_BATCH = 20_000
 
 
-def phones_from_text(text: str, limit: int = MAX_LOOKUP) -> tuple[list[str], dict[str, int]]:
-    """Lấy số điện thoại theo thứ tự danh sách, bỏ số trùng và dòng không có số."""
-    phones: list[str] = []
+def _phones_on_lookup_line(line: str) -> list[str]:
+    """Mọi số trên một dòng danh sách, giữ thứ tự. «0901… - 0912…» là hai số của một khách."""
+    stripped = collapse(line)
+    if not stripped or stripped.startswith("#"):
+        return []
+    found: list[str] = []
+    whole = extract_phone(stripped)
+    if whole:
+        found.append(whole)
+    if not stripped.isdigit():
+        for phone in phones_in_text(stripped):
+            if phone not in found:
+                found.append(phone)
+    return found
+
+
+LOOKUP_LINE_MARK = "\x00"
+
+
+def is_lookup_line_mark(phone: str) -> bool:
+    return phone.startswith(LOOKUP_LINE_MARK)
+
+
+def real_lookup_phones(group: list[str]) -> list[str]:
+    """Số thật trong một dòng. Dòng trống hoặc không phải số chỉ mang nhãn, không đem đi tra."""
+    return [phone for phone in group if phone and not is_lookup_line_mark(phone)]
+
+
+def phone_groups_from_text(text: str, limit: int = MAX_LOOKUP) -> tuple[list[list[str]], dict[str, int]]:
+    """Mỗi dòng ô dán là một dòng kết quả, kể cả dòng trống và dòng không phải số.
+
+    Dòng có hai số thì hai số nằm cùng một nhóm. Số lặp lại ở dòng sau vẫn giữ dòng đó.
+    """
+    groups: list[list[str]] = []
     seen: set[str] = set()
     raw = 0
     invalid = 0
     duplicate = 0
     truncated = False
+    kept = 0
     for line in str(text or "").replace("\ufeff", "").splitlines():
-        stripped = collapse(line)
-        if not stripped or stripped.startswith("#"):
-            continue
+        if len(groups) >= limit:
+            truncated = True
+            break
         raw += 1
-        found: list[str] = []
-        whole = extract_phone(stripped)
-        if whole:
-            found.append(whole)
-        if not stripped.isdigit():
-            for phone in phones_in_text(stripped):
-                if phone not in found:
-                    found.append(phone)
+        stripped = collapse(line)
+        found = _phones_on_lookup_line(line) if stripped and not stripped.startswith("#") else []
         if not found:
             invalid += 1
+            groups.append([LOOKUP_LINE_MARK + stripped])
             continue
+        group: list[str] = []
         for phone in found:
             key = db.phone_key(phone) or phone
             if key in seen:
                 duplicate += 1
-                continue
-            if len(phones) >= limit:
-                truncated = True
-                break
-            seen.add(key)
-            phones.append(phone)
-        if truncated:
-            break
-    return phones, {
+            else:
+                seen.add(key)
+            group.append(phone)
+            kept += 1
+        groups.append(group)
+    return groups, {
         "raw": raw,
-        "unique": len(phones),
+        "unique": kept,
         "invalid": invalid,
         "duplicate": duplicate,
         "truncated": int(truncated),
     }
 
 
-def has_both_addresses(customer: dict[str, Any] | None) -> bool:
-    """Khách chỉ được hiện khi tra cứu nếu có cả địa chỉ và địa chỉ hành chính."""
+def phones_from_text(text: str, limit: int = MAX_LOOKUP) -> tuple[list[str], dict[str, int]]:
+    """Lấy số điện thoại theo thứ tự từng dòng. Dòng không có số không thêm số."""
+    groups, parsed = phone_groups_from_text(text, limit)
+    return [phone for group in groups for phone in real_lookup_phones(group)], parsed
+
+
+def has_lookup_address(customer: dict[str, Any] | None) -> bool:
+    """Có kết quả khi còn địa chỉ hoặc địa chỉ hành chính. Thiếu một cột vẫn là có địa chỉ."""
     if not customer:
         return False
-    return bool(str(customer.get("address") or "").strip()) and bool(str(customer.get("adminAddress") or "").strip())
+    return bool(str(customer.get("address") or "").strip()) or bool(str(customer.get("adminAddress") or "").strip())
 
 
 def lookup_by_phones(
@@ -1234,7 +1265,7 @@ def lookup_by_phones(
                     continue
                 seen_ids.add(customer_id)
                 matches.append(customer)
-        ready = [customer for customer in matches if has_both_addresses(customer)]
+        ready = [customer for customer in matches if has_lookup_address(customer)]
         if not ready:
             missing += 1
             continue
@@ -1293,6 +1324,268 @@ def iter_lookup_items(db_path: Any, phones: list[str], batch: int = LOOKUP_BATCH
         yield from items
 
 
+def lookup_contact_text(customer: dict[str, Any]) -> str:
+    """Địa chỉ rồi địa chỉ hành chính, mỗi phần cách nhau bởi dấu gạch."""
+    chunks: list[str] = []
+    for field in ("address", "adminAddress"):
+        raw = str(customer.get(field) or "").replace("\r\n", "\n").replace("\r", "\n")
+        for part in raw.split("\n"):
+            piece = " ".join(part.split()).replace("\t", " ")
+            if piece and piece not in chunks:
+                chunks.append(piece)
+    return " | ".join(chunks)
+
+
+def _lookup_field_lines(customer: dict[str, Any], field: str) -> str:
+    raw = str(customer.get(field) or "").replace("\r\n", "\n").replace("\r", "\n")
+    lines: list[str] = []
+    for part in raw.split("\n"):
+        piece = " ".join(part.split()).replace("\t", " ")
+        if piece and piece not in lines:
+            lines.append(piece)
+    return "\n".join(lines)
+
+
+def _unique_lookup_texts(parts: list[str]) -> list[str]:
+    seen: list[str] = []
+    for part in parts:
+        if part and part not in seen:
+            seen.append(part)
+    return seen
+
+
+def _phones_on_one_line(parts: list[str]) -> str:
+    phones = _unique_lookup_texts(parts)
+    if len(phones) <= 1:
+        return phones[0] if phones else ""
+    return " - ".join(phones)
+
+
+def _stack_choice_lines(parts: list[str]) -> str:
+    if not parts:
+        return ""
+    if len(parts) == 1:
+        return parts[0]
+    if not any(part.strip() for part in parts):
+        return ""
+    return "\n".join(parts)
+
+
+def _one_choice_line(text: str) -> str:
+    """Một số một dòng. Địa chỉ nhiều dòng của cùng một số gộp bằng gạch đứng để các số còn thẳng hàng."""
+    parts = [part.strip() for part in str(text or "").split("\n")]
+    kept = [part for part in parts if part]
+    if not kept:
+        return ""
+    if len(kept) == 1:
+        return kept[0]
+    return " | ".join(kept)
+
+
+def _lookup_slots(phones: list[str], by_phone: dict[str, list[dict[str, Any]]]) -> list[dict[str, str]]:
+    """Mỗi khách khớp một số là một lựa chọn. Số không có địa chỉ vẫn có một lựa chọn dấu chấm."""
+    slots: list[dict[str, str]] = []
+    for phone in phones:
+        ready = [
+            item
+            for item in by_phone.get(phone) or []
+            if item.get("found") and has_lookup_address(item.get("customer") or {})
+        ]
+        if not ready:
+            slots.append(
+                {
+                    "query": phone,
+                    "phone": phone,
+                    "street": ".",
+                    "admin": "",
+                    "contact": ".",
+                    "name": "",
+                    "order": "",
+                    "cod": "",
+                    "facebook": "",
+                    "tiktok": "",
+                    "id": "",
+                    "created": "",
+                    "updated": "",
+                }
+            )
+            continue
+        seen: set[tuple[str, ...]] = set()
+        for item in ready:
+            customer = item.get("customer") or {}
+            street = _lookup_field_lines(customer, "address")
+            admin = _lookup_field_lines(customer, "adminAddress")
+            contact = lookup_contact_text(customer) or "."
+            name = _lookup_field_lines(customer, "name")
+            order = _lookup_field_lines(customer, "orderContent")
+            cod = _lookup_field_lines(customer, "codAmount")
+            facebook = _lookup_field_lines(customer, "facebookUid")
+            tiktok = _lookup_field_lines(customer, "tiktokId")
+            stored = _lookup_field_lines(customer, "phone") or phone
+            identity = (street, admin, contact, name, order, cod, facebook, tiktok, stored)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            slots.append(
+                {
+                    "query": phone,
+                    "phone": stored,
+                    "street": street,
+                    "admin": admin,
+                    "contact": contact,
+                    "name": name,
+                    "order": order,
+                    "cod": cod,
+                    "facebook": facebook,
+                    "tiktok": tiktok,
+                    "id": str(customer.get("id") or ""),
+                    "created": str(customer.get("createdAt") or ""),
+                    "updated": str(customer.get("updatedAt") or ""),
+                }
+            )
+    return slots
+
+
+def _dot_lookup_row(query: str) -> dict[str, Any]:
+    return {
+        "query": query,
+        "found": False,
+        "resultAddress": ".",
+        "customer": {
+            "id": "",
+            "name": "",
+            "phone": query,
+            "address": ".",
+            "adminAddress": "",
+            "orderContent": "",
+            "codAmount": "",
+            "facebookUid": "",
+            "tiktokId": "",
+            "createdAt": "",
+            "updatedAt": "",
+        },
+    }
+
+
+def combine_phone_group(phones: list[str], by_phone: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
+    """Một dòng danh sách ra một dòng kết quả.
+
+    Cả dòng không có địa chỉ thì ô địa chỉ là một dấu chấm. Hai số đều có
+    địa chỉ thì cùng một ô, mỗi địa chỉ một dòng, kể cả khi chữ giống nhau.
+    Một số không có địa chỉ thì chỉ giữ địa chỉ của số còn lại.
+    """
+    labels = [phone[1:] for phone in phones if is_lookup_line_mark(phone)]
+    real = real_lookup_phones(phones)
+    if not real:
+        return _dot_lookup_row(labels[0] if labels else "")
+    slots = _lookup_slots(real, by_phone)
+    chosen = [slot for slot in slots if slot["contact"] != "."]
+    if not chosen:
+        return _dot_lookup_row(_phones_on_one_line(real))
+    several = len(chosen) > 1
+
+    def line(text: str) -> str:
+        return _one_choice_line(text) if several else text
+
+    def down(field: str) -> str:
+        return _stack_choice_lines([line(slot[field]) for slot in chosen])
+
+    query = down("query")
+    stored_phone = down("phone")
+    address = _stack_choice_lines([line(slot["street"] or slot["admin"]) for slot in chosen])
+    first = chosen[0]
+    customer = {
+        "id": first["id"],
+        "name": down("name"),
+        "phone": stored_phone or query,
+        "address": address,
+        "adminAddress": down("admin"),
+        "orderContent": down("order"),
+        "codAmount": down("cod"),
+        "facebookUid": down("facebook"),
+        "tiktokId": down("tiktok"),
+        "createdAt": first["created"],
+        "updatedAt": first["updated"],
+    }
+    return {
+        "query": query,
+        "found": True,
+        "resultAddress": down("contact") or ".",
+        "customer": customer,
+    }
+
+
+def _index_lookup_items(items: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    by_phone: dict[str, list[dict[str, Any]]] = {}
+    for item in items:
+        by_phone.setdefault(str(item.get("query") or ""), []).append(item)
+    return by_phone
+
+
+def _grouped_from_batches(
+    db_path: Any,
+    groups: list[list[str]],
+    batch: int,
+) -> Iterator[tuple[list[dict[str, Any]], dict[str, int]]]:
+    """Đọc kho theo lô nhóm. Mỗi lần trả các dòng kết quả của lô đó."""
+    group_batch = max(1, batch)
+    for start in range(0, len(groups), group_batch):
+        chunk = groups[start : start + group_batch]
+        flat = [phone for group in chunk for phone in real_lookup_phones(group)]
+        by_phone: dict[str, list[dict[str, Any]]] = {}
+        found = 0
+        missing = 0
+        for items, stats in _lookup_batches(db_path, flat, batch):
+            found += stats["found"]
+            missing += stats["missing"]
+            for query, bucket in _index_lookup_items(items).items():
+                by_phone.setdefault(query, []).extend(bucket)
+        rows = [combine_phone_group(group, by_phone) for group in chunk]
+        yield rows, {"found": found, "missing": missing, "queried": len(flat)}
+
+
+def lookup_phone_groups(
+    db_path: Any,
+    groups: list[list[str]],
+    keep: int = 2000,
+    batch: int = LOOKUP_BATCH,
+    progress: Callable[[dict[str, int]], None] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Tra cứu theo dòng danh sách. Số không có địa chỉ vẫn có một dòng, ô địa chỉ là dấu chấm."""
+    shown: list[dict[str, Any]] = []
+    found = 0
+    missing = 0
+    queried = 0
+    rows = 0
+    flat_total = sum(len(real_lookup_phones(group)) for group in groups)
+    for chunk_rows, stats in _grouped_from_batches(db_path, groups, batch):
+        found += stats["found"]
+        missing += stats["missing"]
+        queried += stats["queried"]
+        rows += len(chunk_rows)
+        if len(shown) < keep:
+            shown.extend(chunk_rows[: keep - len(shown)])
+        if progress is not None:
+            progress({"matched": queried, "total": flat_total, "found": found})
+    return shown, {
+        "queried": queried,
+        "found": found,
+        "missing": missing,
+        "hits": found,
+        "rows": rows,
+    }
+
+
+def iter_lookup_groups(
+    db_path: Any,
+    groups: list[list[str]],
+    batch: int = LOOKUP_BATCH,
+) -> Iterator[dict[str, Any]]:
+    """Từng dòng kết quả theo đúng thứ tự dòng danh sách, kể cả số không có địa chỉ."""
+    for chunk_rows, _stats in _grouped_from_batches(db_path, groups, batch):
+        yield from chunk_rows
+
+
 def lookup_by_phone_map(
     by_phone: dict[str, list[dict[str, Any]]],
     phones: list[str],
@@ -1312,7 +1605,7 @@ def lookup_by_phone_map(
                 continue
             if customer_id:
                 seen_ids.add(customer_id)
-            if has_both_addresses(public):
+            if has_lookup_address(public):
                 ready.append(public)
         if not ready:
             missing += 1

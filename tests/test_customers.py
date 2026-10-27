@@ -21,8 +21,11 @@ from control_plane.customers import (
     expand_scientific,
     fold_customers,
     ingest_customers,
+    combine_phone_group,
     lookup_by_phone_map,
     lookup_by_phones,
+        phone_groups_from_text,
+        real_lookup_phones,
     matches_query,
     phones_from_text,
     repair_customer_row,
@@ -420,9 +423,11 @@ class CustomerMergeTests(unittest.TestCase):
         phones, parsed = phones_from_text(
             "0901222333\n+84 901 222 333\nabc\n0901444555\n0901999888"
         )
-        self.assertEqual(phones, ["0901222333", "0901444555", "0901999888"])
+        self.assertEqual(phones, ["0901222333", "0901222333", "0901444555", "0901999888"])
+        self.assertEqual(parsed["raw"], 5)
         self.assertEqual(parsed["invalid"], 1)
         self.assertEqual(parsed["duplicate"], 1)
+        phones = ["0901222333", "0901444555", "0901999888"]
         stored, _stats, _removed = fold_customers(
             [],
             [
@@ -432,9 +437,11 @@ class CustomerMergeTests(unittest.TestCase):
             "2026-01-01T00:00:00+00:00",
         )
         items, stats = lookup_by_phones(stored, phones)
-        self.assertEqual(stats["found"], 1)
-        self.assertEqual(stats["missing"], 2)
-        self.assertEqual([item["customer"]["name"] for item in items], ["Lan"])
+        self.assertEqual(stats["found"], 2)
+        self.assertEqual(stats["missing"], 1)
+        self.assertEqual([item["customer"]["name"] for item in items], ["Lan", "Minh"])
+        self.assertEqual(items[1]["customer"]["address"], "Đà Nẵng")
+        self.assertEqual(items[1]["customer"]["adminAddress"], "")
         items84, stats84 = lookup_by_phones(stored, ["84901222333"])
         self.assertEqual(stats84["found"], 1)
         self.assertEqual(items84[0]["customer"]["name"], "Lan")
@@ -446,9 +453,186 @@ class CustomerMergeTests(unittest.TestCase):
             },
             phones,
         )
-        self.assertEqual(mapped_stats["found"], 1)
-        self.assertEqual(mapped_items[0]["customer"]["name"], "Lan")
-        self.assertEqual(mapped_stats["missing"], 2)
+        self.assertEqual(mapped_stats["found"], 2)
+        self.assertEqual([item["customer"]["name"] for item in mapped_items], ["Lan", "Minh"])
+        self.assertEqual(mapped_stats["missing"], 1)
+        admin_only, admin_stats = lookup_by_phone_map(
+            {"0901555666": [{"id": "hoa", "name": "Hoa", "phone": "0901555666", "address": "", "adminAddress": "Hải Châu"}]},
+            ["0901555666"],
+        )
+        self.assertEqual(admin_stats["found"], 1)
+        self.assertEqual(admin_stats["missing"], 0)
+        self.assertEqual(admin_only[0]["customer"]["adminAddress"], "Hải Châu")
+        blank_and_street, partial_stats = lookup_by_phone_map(
+            {
+                "0901666777": [
+                    {"id": "trong", "name": "Trang", "phone": "0901666777", "address": "", "adminAddress": ""},
+                    {"id": "hoa", "name": "Hoa", "phone": "0901666777", "address": "15 Hùng Vương", "adminAddress": ""},
+                ]
+            },
+            ["0901666777"],
+        )
+        self.assertEqual(partial_stats["found"], 1)
+        self.assertEqual([item["customer"]["name"] for item in blank_and_street], ["Hoa"])
+
+    def test_one_line_with_two_phones_is_one_customer(self) -> None:
+        groups, parsed = phone_groups_from_text(
+            "0901000001 - 0901000002\n0901000003\n0901000001\nabc"
+        )
+        self.assertEqual(
+            [real_lookup_phones(group) for group in groups],
+            [["0901000001", "0901000002"], ["0901000003"], ["0901000001"], []],
+        )
+        self.assertEqual(parsed["duplicate"], 1)
+        self.assertEqual(parsed["invalid"], 1)
+        self.assertEqual(parsed["raw"], 4)
+        flat, flat_parsed = phones_from_text("0901000001 - 0901000002\n0901000003")
+        self.assertEqual(flat, ["0901000001", "0901000002", "0901000003"])
+        self.assertEqual(flat_parsed["unique"], 3)
+
+        def ready(name: str, phone: str, street: str, admin: str) -> dict:
+            return {
+                "query": phone,
+                "found": True,
+                "customer": {
+                    "id": name,
+                    "name": name,
+                    "phone": phone,
+                    "address": street,
+                    "adminAddress": admin,
+                },
+            }
+
+        different = combine_phone_group(
+            ["0901000001", "0901000002"],
+            {
+                "0901000001": [ready("An", "0901000001", "12 Lê Lợi", "Phường Phú Hội")],
+                "0901000002": [ready("Bình", "0901000002", "45 Nguyễn Huệ", "Phường Bến Nghé")],
+            },
+        )
+        self.assertEqual(different["query"], "0901000001\n0901000002")
+        self.assertEqual(different["customer"]["address"], "12 Lê Lợi\n45 Nguyễn Huệ")
+        self.assertEqual(
+            different["resultAddress"],
+            "12 Lê Lợi | Phường Phú Hội\n45 Nguyễn Huệ | Phường Bến Nghé",
+        )
+        same = combine_phone_group(
+            ["0901000003", "0901000004"],
+            {
+                "0901000003": [ready("Chi", "0901000003", "88 Trần Phú", "Quận 1")],
+                "0901000004": [ready("Dung", "0901000004", "88 Trần Phú", "Quận 1")],
+            },
+        )
+        self.assertEqual(same["query"], "0901000003\n0901000004")
+        self.assertEqual(same["customer"]["address"], "88 Trần Phú\n88 Trần Phú")
+        self.assertEqual(same["resultAddress"], "88 Trần Phú | Quận 1\n88 Trần Phú | Quận 1")
+        missing = combine_phone_group(["0901000005"], {})
+        self.assertEqual(missing["customer"]["address"], ".")
+        self.assertEqual(missing["resultAddress"], ".")
+        self.assertFalse(missing["found"])
+        mixed = combine_phone_group(
+            ["0901000006", "0988000111"],
+            {"0901000006": [ready("Em", "0901000006", "9 Bà Triệu", "Phường Trần Hưng Đạo")]},
+        )
+        self.assertEqual(mixed["query"], "0901000006")
+        self.assertEqual(mixed["customer"]["address"], "9 Bà Triệu")
+        self.assertEqual(mixed["resultAddress"], "9 Bà Triệu | Phường Trần Hưng Đạo")
+        self.assertNotIn("0988000111", mixed["query"])
+        shared = combine_phone_group(
+            ["0901000001", "0901000002", "0901000005"],
+            {
+                "0901000001": [ready("An", "0901000001", "12 Lê Lợi", "Phường Phú Hội")],
+                "0901000002": [ready("Bình", "0901000002", "12 Lê Lợi", "Phường Phú Hội")],
+            },
+        )
+        self.assertEqual(shared["query"], "0901000001\n0901000002")
+        self.assertEqual(shared["customer"]["address"], "12 Lê Lợi\n12 Lê Lợi")
+        self.assertEqual(shared["customer"]["name"], "An\nBình")
+        self.assertEqual(shared["resultAddress"], "12 Lê Lợi | Phường Phú Hội\n12 Lê Lợi | Phường Phú Hội")
+        an = ready("An", "0901000003", "88 Trần Phú", "Quận 1")
+        an["customer"]["orderContent"] = "Áo"
+        an["customer"]["codAmount"] = "100000"
+        dung = ready("Dung", "0901000004", "88 Trần Phú", "Phường Bến Nghé")
+        dung["customer"]["orderContent"] = "Quần"
+        dung["customer"]["codAmount"] = "200000"
+        choices = combine_phone_group(
+            ["0901000003", "0901000004"],
+            {"0901000003": [an], "0901000004": [dung]},
+        )
+        self.assertEqual(choices["query"], "0901000003\n0901000004")
+        self.assertEqual(choices["customer"]["address"], "88 Trần Phú\n88 Trần Phú")
+        self.assertEqual(choices["customer"]["adminAddress"], "Quận 1\nPhường Bến Nghé")
+        self.assertEqual(choices["customer"]["orderContent"], "Áo\nQuần")
+        self.assertEqual(choices["customer"]["codAmount"], "100000\n200000")
+        self.assertEqual(
+            choices["resultAddress"],
+            "88 Trần Phú | Quận 1\n88 Trần Phú | Phường Bến Nghé",
+        )
+        first = ready("An", "0901000001", "12 Lê Lợi", "Phường Phú Hội")
+        second = ready("Bình", "0901000001", "45 Nguyễn Huệ", "Phường Bến Nghé")
+        second["customer"]["id"] = "b"
+        several = combine_phone_group(["0901000001"], {"0901000001": [first, second]})
+        self.assertEqual(several["query"], "0901000001\n0901000001")
+        self.assertEqual(several["customer"]["address"], "12 Lê Lợi\n45 Nguyễn Huệ")
+        self.assertEqual(several["customer"]["name"], "An\nBình")
+        self.assertEqual(
+            several["resultAddress"],
+            "12 Lê Lợi | Phường Phú Hội\n45 Nguyễn Huệ | Phường Bến Nghé",
+        )
+        street_only = combine_phone_group(
+            ["0901000008"],
+            {"0901000008": [ready("Hoa", "0901000008", "15 Hùng Vương", "")]},
+        )
+        self.assertTrue(street_only["found"])
+        self.assertEqual(street_only["customer"]["address"], "15 Hùng Vương")
+        self.assertEqual(street_only["customer"]["adminAddress"], "")
+        self.assertEqual(street_only["resultAddress"], "15 Hùng Vương")
+        admin_only = combine_phone_group(
+            ["0901000009"],
+            {"0901000009": [ready("Khanh", "0901000009", "", "Quận Hải Châu")]},
+        )
+        self.assertTrue(admin_only["found"])
+        self.assertEqual(admin_only["customer"]["address"], "Quận Hải Châu")
+        self.assertEqual(admin_only["customer"]["adminAddress"], "Quận Hải Châu")
+        self.assertEqual(admin_only["resultAddress"], "Quận Hải Châu")
+        blank = ready("Trang", "0901000010", "", "")
+        kept = ready("Hoa", "0901000010", "15 Hùng Vương", "")
+        kept["customer"]["id"] = "hoa"
+        partial = combine_phone_group(["0901000010"], {"0901000010": [blank, kept]})
+        self.assertTrue(partial["found"])
+        self.assertEqual(partial["customer"]["address"], "15 Hùng Vương")
+        self.assertEqual(partial["resultAddress"], "15 Hùng Vương")
+        pasted, pasted_parsed = phone_groups_from_text("0901000008\n\nabc\n0901000005")
+        self.assertEqual(pasted_parsed["raw"], 4)
+        self.assertEqual(len(pasted), 4)
+        blank_row = combine_phone_group(pasted[1], {})
+        self.assertEqual(blank_row["query"], "")
+        self.assertEqual(blank_row["customer"]["address"], ".")
+        self.assertFalse(blank_row["found"])
+        junk_row = combine_phone_group(pasted[2], {})
+        self.assertEqual(junk_row["query"], "abc")
+        self.assertEqual(junk_row["resultAddress"], ".")
+        both_missing = combine_phone_group(["0901000005", "0988000111"], {})
+        self.assertEqual(both_missing["query"], "0901000005 - 0988000111")
+        self.assertEqual(both_missing["customer"]["address"], ".")
+        wide = ready("An", "0901000001", "12 Lê Lợi\nTầng 2", "Phường Phú Hội")
+        other = ready("Bình", "0901000002", "45 Nguyễn Huệ", "Phường Bến Nghé")
+        aligned = combine_phone_group(
+            ["0901000001", "0901000002"],
+            {"0901000001": [wide], "0901000002": [other]},
+        )
+        self.assertEqual(aligned["customer"]["address"], "12 Lê Lợi | Tầng 2\n45 Nguyễn Huệ")
+        self.assertEqual(aligned["customer"]["name"], "An\nBình")
+        self.assertEqual(aligned["query"], "0901000001\n0901000002")
+        alone = combine_phone_group(["0901000001"], {"0901000001": [wide]})
+        self.assertEqual(alone["customer"]["address"], "12 Lê Lợi\nTầng 2")
+        edges, edge_parsed = phone_groups_from_text("\n0901000008\n\n")
+        self.assertEqual(edge_parsed["raw"], 3)
+        self.assertEqual(edge_parsed["invalid"], 2)
+        self.assertEqual(len(edges), 3)
+        self.assertEqual(real_lookup_phones(edges[0]), [])
+        self.assertEqual(real_lookup_phones(edges[1]), ["0901000008"])
+        self.assertEqual(real_lookup_phones(edges[2]), [])
 
     def test_search_matches_any_field(self) -> None:
         row = {"name": "Nguyễn A", "phone": "0901234567", "address": "Hà Nội", "facebookUid": "1", "tiktokId": "ban"}
