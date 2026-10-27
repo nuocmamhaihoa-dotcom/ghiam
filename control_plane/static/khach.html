@@ -343,7 +343,7 @@
     <h2>Tra cứu hàng loạt</h2>
     <details class="guide">
       <summary>Cách tra cứu</summary>
-      <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. Một ô có hai số (0901… - 0912…) thì tra cả hai. File lấy số điện thoại Việt Nam ở mọi cột, cột SĐT lấy cả số lạ; không lấy UID Facebook. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Chỉ hiện khách có đủ địa chỉ và địa chỉ hành chính. Copy số điện thoại và địa chỉ chỉ lấy những khách đó: số điện thoại đứng bên trái, địa chỉ đứng bên phải. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách. Nhân viên bị trừ hạn mức theo số mới trong ngày; số đã tra hôm nay không tính lại.</p>
+      <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. Một ô có hai số (0901… - 0912…) thì đó là một khách. File lấy số điện thoại Việt Nam ở mọi cột, cột SĐT lấy cả số lạ; không lấy UID Facebook. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Số không có địa chỉ vẫn hiện trong kết quả, ô địa chỉ là dấu chấm. Một dòng danh sách có hai số thì đó là một khách: hai địa chỉ đều có và khác nhau thì nằm cùng một ô, mỗi địa chỉ một dòng. Copy để số điện thoại bên trái và địa chỉ bên phải. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách. Nhân viên bị trừ hạn mức theo số mới trong ngày; số đã tra hôm nay không tính lại.</p>
     </details>
     <p id="quotaNote" class="note"></p>
     <div class="work">
@@ -2050,19 +2050,10 @@
       stat(stats.invalid || 0, "Dòng không phải số");
     padSpaces(document.getElementById("lookupStats"));
     var items = body.items || [];
-    if (!items.length) {
-      document.getElementById("lookupPeople").innerHTML = "";
-      setNote("lookupNote", "Không có khách nào có đủ cả địa chỉ và địa chỉ hành chính." + quotaExtra(body), "warn");
-      document.getElementById("lookupActions").hidden = true;
-      return;
-    }
-    var shown = items.slice(0, 2000).filter(function (item) {
-      var customer = item.customer || {};
-      return String(customer.address || "").trim() && String(customer.adminAddress || "").trim();
-    });
+    var shown = items.slice(0, 2000);
     if (!shown.length) {
       document.getElementById("lookupPeople").innerHTML = "";
-      setNote("lookupNote", "Không có khách nào có đủ cả địa chỉ và địa chỉ hành chính." + quotaExtra(body), "warn");
+      setNote("lookupNote", "Không có số nào trong danh sách." + quotaExtra(body), "warn");
       document.getElementById("lookupActions").hidden = true;
       return;
     }
@@ -2076,7 +2067,7 @@
     document.getElementById("lookupPeople").innerHTML = html;
     padSpaces(document.getElementById("lookupPeople"));
     document.getElementById("lookupActions").hidden = false;
-    var note = "Đã đối chiếu " + vnNum(queried) + " số. Chỉ hiện khách có đủ địa chỉ và địa chỉ hành chính.";
+    var note = "Đã đối chiếu " + vnNum(queried) + " số. Số không có địa chỉ hiện dấu chấm. Một dòng có hai số mà địa chỉ khác nhau thì mỗi địa chỉ một dòng trong cùng ô.";
     var totalRows = Math.max(items.length, shown.length + (stats.hidden || 0));
     if (totalRows > shown.length) {
       note += " Đang hiện " + vnNum(shown.length) + "/" + vnNum(totalRows) + " dòng. Tải Excel để xem hết — không phải gửi lại file.";
@@ -2171,25 +2162,47 @@
     }
   }
 
-  function contactAddress(customer) {
-    var parts = [];
-    [customer.address, customer.adminAddress].forEach(function (value) {
-      String(value || "").split(/\r?\n/).forEach(function (line) {
-        var text = line.replace(/[\t]+/g, " ").replace(/ +/g, " ").trim();
-        if (text && parts.indexOf(text) < 0) parts.push(text);
-      });
-    });
-    return parts.join(" | ");
+  function tsvField(value) {
+    var text = String(value == null ? "" : value);
+    if (/[\t\n\r"]/.test(text)) return '"' + text.replace(/"/g, '""') + '"';
+    return text;
+  }
+
+  function countTsvRecords(text) {
+    var records = 0;
+    var inQuotes = false;
+    var hasContent = false;
+    for (var i = 0; i < text.length; i++) {
+      var ch = text.charAt(i);
+      if (inQuotes) {
+        hasContent = true;
+        if (ch === '"') {
+          if (text.charAt(i + 1) === '"') { i += 1; continue; }
+          inQuotes = false;
+        }
+        continue;
+      }
+      if (ch === '"') {
+        inQuotes = true;
+        hasContent = true;
+        continue;
+      }
+      if (ch === "\n") {
+        if (hasContent) records += 1;
+        hasContent = false;
+        continue;
+      }
+      if (ch !== "\r") hasContent = true;
+    }
+    if (hasContent) records += 1;
+    return records;
   }
 
   function foundContactText(items) {
     var lines = ["Số điện thoại\tĐịa chỉ"];
     (items || []).forEach(function (item) {
-      if (!item.found) return;
-      var customer = item.customer || {};
-      if (!String(customer.address || "").trim() || !String(customer.adminAddress || "").trim()) return;
-      var phone = String(customer.phone || item.query || "").replace(/[\t\r\n]+/g, " ").trim();
-      lines.push(phone + "\t" + contactAddress(customer));
+      var address = item.resultAddress || ".";
+      lines.push(tsvField(item.query || "") + "\t" + tsvField(address));
     });
     return lines.length > 1 ? lines.join("\n") : "";
   }
@@ -2226,18 +2239,18 @@
           setNote("lookupNote", "Không copy được. Hãy tra cứu lại rồi copy.", "warn");
           return;
         }
-        text = await response.text();
-        if (text && text.charAt(text.length - 1) === "\n") text = text.slice(0, -1);
+        text = String(await response.text() || "").replace(/\s+$/, "");
       } else {
         text = foundContactText(lastLookup.items);
       }
-      var rows = text ? text.split("\n").filter(function (line) { return line && line !== "Số điện thoại\tĐịa chỉ"; }) : [];
-      if (!rows.length) {
-        setNote("lookupNote", "Không có khách nào tra được để copy.", "warn");
+      var records = countTsvRecords(text);
+      var rows = records > 0 ? records - 1 : 0;
+      if (!rows) {
+        setNote("lookupNote", "Không có số nào để copy.", "warn");
         return;
       }
-      await writeClipboard(rows.length ? ("Số điện thoại\tĐịa chỉ\n" + rows.join("\n")) : "");
-      setNote("lookupNote", "Đã copy " + vnNum(rows.length) + " dòng. Dán vào Excel: Số điện thoại bên trái, Địa chỉ bên phải.", "ok");
+      await writeClipboard(text);
+      setNote("lookupNote", "Đã copy " + vnNum(rows) + " dòng. Dán vào Excel: Số điện thoại bên trái, Địa chỉ bên phải. Số không có địa chỉ là dấu chấm.", "ok");
     } catch (error) {
       setNote("lookupNote", "Không copy được. Hãy thử lại.", "warn");
     } finally {

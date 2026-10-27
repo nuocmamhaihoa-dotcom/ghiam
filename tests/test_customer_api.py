@@ -537,7 +537,10 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(body["stats"]["found"], 1)
         self.assertEqual(body["stats"]["missing"], 1)
         self.assertEqual(body["stats"]["invalid"], 1)
-        self.assertEqual([item["customer"]["name"] for item in body["items"]], ["Lan"])
+        self.assertEqual(body["items"][0]["customer"]["name"], "Lan")
+        self.assertEqual(body["items"][1]["query"], "0901999888")
+        self.assertEqual(body["items"][1]["customer"]["address"], ".")
+        self.assertFalse(body["items"][1]["found"])
         by_country = self.client.post(
             "/v1/customers/lookup",
             headers=self.headers,
@@ -637,7 +640,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(capped_body["stats"]["found"], 2)
         self.assertEqual(len(capped_body["items"]), 1)
         self.assertEqual(capped_body["stats"]["shown"], 1)
-        self.assertEqual(capped_body["stats"]["hidden"], 1)
+        self.assertEqual(capped_body["stats"]["hidden"], 2)
 
     def test_preview_and_import_many_files(self) -> None:
         files = [
@@ -1137,7 +1140,8 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(len(rows), 252)
         self.assertEqual(rows[0][1], "Có đủ địa chỉ")
         self.assertEqual(rows[1][:2], ["0909000299", "Có"])
-        self.assertEqual(sum(1 for row in rows[1:] if row[1] == "Không"), 0)
+        self.assertEqual(sum(1 for row in rows[1:] if row[1] == "Không"), 1)
+        self.assertEqual(sum(1 for row in rows[1:] if row[4] == "."), 1)
 
     def test_lookup_copy_keeps_found_address_and_phone(self) -> None:
         now = "2026-01-01T00:00:00+00:00"
@@ -1180,10 +1184,109 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(lines[0], "Số điện thoại\tĐịa chỉ")
         self.assertEqual(
             lines[1:],
-            ["0901222333\t12 Lê Lợi | Phường Phú Hội | Thừa Thiên Huế"],
+            [
+                "0901222333\t12 Lê Lợi | Phường Phú Hội | Thừa Thiên Huế",
+                "0375866792\t.",
+                "0985000000\t.",
+            ],
         )
-        self.assertNotIn("0375866792", copied.text)
-        self.assertNotIn("0985000000", copied.text)
+
+    def test_two_phones_on_one_line_share_one_address_cell(self) -> None:
+        now = "2026-01-01T00:00:00+00:00"
+        db.replace_customers(
+            settings.db_path,
+            [
+                {
+                    "id": "a",
+                    "name": "An",
+                    "phone": "0901000001",
+                    "address": "12 Lê Lợi",
+                    "adminAddress": "Phường Phú Hội",
+                    "createdAt": now,
+                    "updatedAt": now,
+                },
+                {
+                    "id": "b",
+                    "name": "Bình",
+                    "phone": "0901000002",
+                    "address": "45 Nguyễn Huệ",
+                    "adminAddress": "Phường Bến Nghé",
+                    "createdAt": now,
+                    "updatedAt": now,
+                },
+                {
+                    "id": "c",
+                    "name": "Chi",
+                    "phone": "0901000003",
+                    "address": "88 Trần Phú",
+                    "adminAddress": "Quận 1",
+                    "createdAt": now,
+                    "updatedAt": now,
+                },
+                {
+                    "id": "d",
+                    "name": "Dung",
+                    "phone": "0901000004",
+                    "address": "88 Trần Phú",
+                    "adminAddress": "Quận 1",
+                    "createdAt": now,
+                    "updatedAt": now,
+                },
+                {
+                    "id": "e",
+                    "name": "Em",
+                    "phone": "0901000006",
+                    "address": "9 Bà Triệu",
+                    "adminAddress": "Phường Trần Hưng Đạo",
+                    "createdAt": now,
+                    "updatedAt": now,
+                },
+            ],
+            [],
+        )
+        text = "\n".join(
+            [
+                "0901000001 - 0901000002",
+                "0901000003 - 0901000004",
+                "0901000005",
+                "0901000006 - 0988000111",
+            ]
+        )
+        looked = self.client.post("/v1/customers/lookup", headers=self.headers, json={"text": text})
+        self.assertEqual(looked.status_code, 200, looked.text)
+        items = looked.json()["items"]
+        self.assertEqual(len(items), 4)
+        self.assertEqual(looked.json()["stats"]["queried"], 7)
+        self.assertEqual(looked.json()["stats"]["found"], 5)
+        self.assertEqual(looked.json()["stats"]["missing"], 2)
+        self.assertEqual(items[0]["query"], "0901000001\n0901000002")
+        self.assertEqual(items[0]["customer"]["address"], "12 Lê Lợi\n45 Nguyễn Huệ")
+        self.assertEqual(
+            items[0]["resultAddress"],
+            "12 Lê Lợi | Phường Phú Hội\n45 Nguyễn Huệ | Phường Bến Nghé",
+        )
+        self.assertTrue(items[0]["found"])
+        self.assertEqual(items[1]["query"], "0901000003 - 0901000004")
+        self.assertEqual(items[1]["customer"]["address"], "88 Trần Phú")
+        self.assertEqual(items[1]["resultAddress"], "88 Trần Phú | Quận 1")
+        self.assertEqual(items[2]["query"], "0901000005")
+        self.assertEqual(items[2]["customer"]["address"], ".")
+        self.assertEqual(items[2]["resultAddress"], ".")
+        self.assertFalse(items[2]["found"])
+        self.assertEqual(items[3]["query"], "0901000006\n0988000111")
+        self.assertEqual(items[3]["customer"]["address"], "9 Bà Triệu\n.")
+        self.assertEqual(items[3]["resultAddress"], "9 Bà Triệu | Phường Trần Hưng Đạo\n.")
+        exported = self.client.post(
+            "/v1/customers/lookup/export",
+            headers=self.headers,
+            json={"text": "0901000001 - 0901000002"},
+        )
+        self.assertEqual(exported.status_code, 200, exported.text)
+        rows = list(iter_xlsx_rows(exported.content))
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[1][0], "0901000001\n0901000002")
+        self.assertEqual(rows[1][1], "Có")
+        self.assertEqual(rows[1][4], "12 Lê Lợi\n45 Nguyễn Huệ")
 
     def test_list_caps_visible_items_without_hiding_total(self) -> None:
         now = "2026-01-01T00:00:00+00:00"

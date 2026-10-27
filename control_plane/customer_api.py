@@ -36,9 +36,9 @@ from control_plane.customers import (
     collapse,
     fold_customers,
     ingest_customers,
-    iter_lookup_items,
-    lookup_phones,
-    phones_from_text,
+    iter_lookup_groups,
+    lookup_phone_groups,
+    phone_groups_from_text,
     public_customer,
     repair_customer_rows,
 )
@@ -52,7 +52,7 @@ from control_plane.excel_import import (
     iter_mapped_file,
     mapping_from_form,
     merge_preview_columns,
-    phones_from_files,
+    phone_groups_from_files,
     preview_table,
     write_xlsx_to_path,
 )
@@ -1369,37 +1369,76 @@ def _unique_phones(*groups: list[str]) -> tuple[list[str], bool]:
     return phones, False
 
 
-def _collect_lookup_phones(
+def _encode_phone_groups(groups: list[list[str]]) -> str:
+    return "\n".join("\t".join(group) for group in groups)
+
+
+def _decode_phone_groups(text: str) -> list[list[str]]:
+    groups: list[list[str]] = []
+    for line in text.split("\n"):
+        phones = [part for part in line.split("\t") if part]
+        if phones:
+            groups.append(phones)
+    return groups
+
+
+def _flatten_phone_groups(groups: list[list[str]]) -> list[str]:
+    return [phone for group in groups for phone in group]
+
+
+def _collect_lookup_groups(
     text: str,
     uploaded: list[tuple[str, Path]],
     problems: list[str],
     progress: Any = None,
-) -> tuple[list[str], dict[str, Any], list[dict[str, Any]]]:
-    pasted, parsed = phones_from_text(text)
-    file_phones: list[str] = []
+) -> tuple[list[list[str]], dict[str, Any], list[dict[str, Any]]]:
+    """Mỗi dòng dán hoặc mỗi dòng file là một khách. Hai số trên một dòng ở cùng nhóm."""
+    pasted, parsed = phone_groups_from_text(text)
+    file_groups: list[list[str]] = []
     file_reports: list[dict[str, Any]] = []
     if uploaded:
-        file_phones, file_reports = phones_from_files(uploaded, progress=progress)
+        file_groups, file_reports = phone_groups_from_files(uploaded, progress=progress)
         problems.extend(str(item.get("error") or "") for item in file_reports if item.get("error"))
-    phones, cut = _unique_phones(pasted, file_phones)
-    if not phones:
+    seen = {db.phone_key(phone) or phone for group in pasted for phone in group}
+    groups = list(pasted)
+    kept = sum(len(group) for group in groups)
+    truncated = bool(parsed.get("truncated"))
+    for group in file_groups:
+        fresh: list[str] = []
+        for phone in group:
+            key = db.phone_key(phone) or phone
+            if key in seen:
+                continue
+            if kept >= MAX_LOOKUP:
+                truncated = True
+                break
+            seen.add(key)
+            fresh.append(phone)
+            kept += 1
+        if fresh:
+            groups.append(fresh)
+        if truncated:
+            break
+    if not groups:
         raise HTTPException(
             status_code=400,
             detail="Không thấy số điện thoại nào trong danh sách." + ((" " + " ".join(problems)) if problems else ""),
         )
-    if cut:
+    if truncated:
         parsed["truncated"] = 1
-    return phones, parsed, file_reports
+    return groups, parsed, file_reports
 
 
 def _lookup_result(
-    phones: list[str],
+    groups: list[list[str]],
     parsed: dict[str, Any],
     file_reports: list[dict[str, Any]],
     problems: list[str],
     progress: Any = None,
 ) -> dict[str, Any]:
-    shown, stats = lookup_phones(settings.db_path, phones, keep=LOOKUP_RETURN_LIMIT, progress=progress)
+    shown, stats = lookup_phone_groups(
+        settings.db_path, groups, keep=LOOKUP_RETURN_LIMIT, progress=progress
+    )
     rows = int(stats.pop("rows", len(shown)))
     stats.update(parsed)
     if rows > len(shown):
@@ -1416,9 +1455,9 @@ def _lookup_now(
     problems: list[str],
     actor: accounts.Actor,
 ) -> dict[str, Any]:
-    phones, parsed, reports = _collect_lookup_phones(text, uploaded, problems)
-    result = _lookup_result(phones, parsed, reports, problems)
-    result["quota"] = _charge(actor, phones)
+    groups, parsed, reports = _collect_lookup_groups(text, uploaded, problems)
+    result = _lookup_result(groups, parsed, reports, problems)
+    result["quota"] = _charge(actor, _flatten_phone_groups(groups))
     return result
 
 
@@ -1429,16 +1468,17 @@ def _lookup_job(
     actor: accounts.Actor,
 ) -> dict[str, Any]:
     problems: list[str] = []
-    phones, parsed, reports = _collect_lookup_phones(
+    groups, parsed, reports = _collect_lookup_groups(
         text,
         uploaded,
         problems,
         progress=lambda progress: context.report({"phase": "read", **progress}),
     )
-    khach_jobs.job_file(context.id, ".phones").write_text("\n".join(phones), encoding="utf-8")
+    phones = _flatten_phone_groups(groups)
+    khach_jobs.job_file(context.id, ".phones").write_text(_encode_phone_groups(groups), encoding="utf-8")
     context.report({"phase": "match", "matched": 0, "total": len(phones)}, force=True)
     result = _lookup_result(
-        phones,
+        groups,
         parsed,
         reports,
         problems,
@@ -1518,44 +1558,38 @@ def _new_xlsx_path(prefix: str) -> Path:
     return dest
 
 
-def _lookup_contact_cell(customer: dict[str, Any]) -> str:
-    """Một ô địa chỉ: địa chỉ khách rồi địa chỉ hành chính, mỗi dòng cách nhau bởi dấu gạch."""
-    chunks: list[str] = []
-    for field in ("address", "adminAddress"):
-        raw = str(customer.get(field) or "").replace("\r\n", "\n").replace("\r", "\n")
-        for part in raw.split("\n"):
-            piece = " ".join(part.split()).replace("\t", " ")
-            if piece and piece not in chunks:
-                chunks.append(piece)
-    return " | ".join(chunks)
+def _tsv_field(value: Any) -> str:
+    """Giữ xuống dòng trong một ô khi dán vào Excel."""
+    text = str(value if value is not None else "")
+    if any(mark in text for mark in ("\t", "\n", "\r", '"')):
+        return '"' + text.replace('"', '""') + '"'
+    return text
 
 
-def _write_lookup_copy(phones: list[str]) -> Path:
-    """Hai cột của khách tra được: số điện thoại rồi địa chỉ. Số không có trong kho không đưa vào."""
+def _write_lookup_copy(groups: list[list[str]]) -> Path:
+    """Mỗi dòng danh sách một dòng kết quả. Số không có địa chỉ thì ô địa chỉ là dấu chấm."""
     handle = tempfile.NamedTemporaryFile(prefix="tra-cuu-copy-", suffix=".txt", delete=False)
     dest = Path(handle.name)
     handle.close()
     try:
         with dest.open("w", encoding="utf-8", newline="\n") as handle:
             handle.write("Số điện thoại\tĐịa chỉ\n")
-            for item in iter_lookup_items(settings.db_path, phones):
-                if not item.get("found"):
-                    continue
-                customer = item.get("customer") or {}
-                phone = " ".join(str(customer.get("phone") or item.get("query") or "").split()).replace("\t", " ")
-                handle.write(f"{phone}\t{_lookup_contact_cell(customer)}\n")
+            for item in iter_lookup_groups(settings.db_path, groups):
+                phone = str(item.get("query") or "")
+                address = str(item.get("resultAddress") or ".") or "."
+                handle.write(f"{_tsv_field(phone)}\t{_tsv_field(address)}\n")
     except Exception:
         dest.unlink(missing_ok=True)
         raise
     return dest
 
 
-def _write_lookup_xlsx(phones: list[str]) -> Path:
-    """Ghi kết quả tra cứu ra Excel theo từng lô số, không giữ cả triệu dòng trong RAM."""
+def _write_lookup_xlsx(groups: list[list[str]]) -> Path:
+    """Ghi kết quả tra cứu ra Excel theo từng dòng danh sách, kể cả số không có địa chỉ."""
     headers = ["Số tra cứu", "Có đủ địa chỉ", *FIELD_LABELS.values()]
 
     def rows() -> Any:
-        for item in iter_lookup_items(settings.db_path, phones):
+        for item in iter_lookup_groups(settings.db_path, groups):
             customer = item.get("customer") or {}
             yield [
                 item.get("query") or "",
@@ -1578,9 +1612,9 @@ def _export_phones(
     problems: list[str],
     actor: accounts.Actor,
 ) -> Path:
-    phones, _parsed, _reports = _collect_lookup_phones(text, uploaded, problems)
-    _charge(actor, phones)
-    return _write_lookup_xlsx(phones)
+    groups, _parsed, _reports = _collect_lookup_groups(text, uploaded, problems)
+    _charge(actor, _flatten_phone_groups(groups))
+    return _write_lookup_xlsx(groups)
 
 
 @router.post("/v1/customers/lookup/export")
@@ -1615,12 +1649,12 @@ def customers_lookup_job_export(
     """Tải Excel đúng danh sách số của lần tra cứu đã chạy, không gửi lại file."""
     actor = _actor(request)
     db.init_db(settings.db_path)
-    phones = _lookup_job_phones(actor, job_id)
-    _charge(actor, phones)
-    return _xlsx_file_response(_write_lookup_xlsx(phones), "tra-cuu-khach.xlsx")
+    groups = _lookup_job_groups(actor, job_id)
+    _charge(actor, _flatten_phone_groups(groups))
+    return _xlsx_file_response(_write_lookup_xlsx(groups), "tra-cuu-khach.xlsx")
 
 
-def _lookup_job_phones(actor: accounts.Actor, job_id: str) -> list[str]:
+def _lookup_job_groups(actor: accounts.Actor, job_id: str) -> list[list[str]]:
     job = _visible_job(actor, khach_jobs.get_job(job_id))
     if job.get("kind") != "lookup":
         raise HTTPException(status_code=404, detail="Không thấy lần tra cứu này, hãy tra cứu lại.")
@@ -1630,7 +1664,7 @@ def _lookup_job_phones(actor: accounts.Actor, job_id: str) -> list[str]:
         text = khach_jobs.job_file(job_id, ".phones").read_text(encoding="utf-8")
     except (OSError, khach_jobs.JobError) as exc:
         raise HTTPException(status_code=404, detail="Kết quả tra cứu đã quá hạn, hãy tra cứu lại.") from exc
-    return [line for line in text.split("\n") if line]
+    return _decode_phone_groups(text)
 
 
 @router.get("/v1/customers/lookup/jobs/{job_id}/copy")
@@ -1642,9 +1676,9 @@ def customers_lookup_job_copy(
     """Hai cột của khách tra được, số điện thoại bên trái và địa chỉ bên phải, để dán vào Excel."""
     actor = _actor(request)
     db.init_db(settings.db_path)
-    phones = _lookup_job_phones(actor, job_id)
-    _charge(actor, phones)
-    dest = _write_lookup_copy(phones)
+    groups = _lookup_job_groups(actor, job_id)
+    _charge(actor, _flatten_phone_groups(groups))
+    dest = _write_lookup_copy(groups)
     return FileResponse(
         path=dest,
         media_type="text/plain; charset=utf-8",

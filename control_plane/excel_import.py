@@ -1760,36 +1760,63 @@ def phones_in_row(row: list[str], phone_columns: set[int]) -> list[str]:
     return found
 
 
-def phones_from_files(
+def phone_groups_from_files(
     files: Iterable[tuple[str, TableSource]],
     progress: Callable[[dict[str, Any]], None] | None = None,
-) -> tuple[list[str], list[dict[str, Any]]]:
-    phones: list[str] = []
+) -> tuple[list[list[str]], list[dict[str, Any]]]:
+    """Mỗi dòng file là một nhóm số. Ô có hai số thì hai số ở cùng nhóm."""
+    groups: list[list[str]] = []
     reports: list[dict[str, Any]] = []
     for filename, data in files:
-        found: list[str] = []
+        file_groups: list[list[str]] = []
         rows_seen = 0
         try:
             stream = iter_raw_rows(filename, data)
             try:
                 sample = _head_rows(stream, DETECT_ROWS)
                 columns = _phone_columns(sample)
-                for row in sample:
+
+                def take(row: list[str]) -> None:
+                    nonlocal rows_seen
                     rows_seen += 1
-                    found.extend(phones_in_row(row, columns))
-                for row in stream:
-                    rows_seen += 1
-                    found.extend(phones_in_row(row, columns))
+                    found = phones_in_row(row, columns)
+                    if found:
+                        file_groups.append(found)
                     if progress is not None and rows_seen % 50000 == 0:
-                        progress({"file": filename, "rows": rows_seen, "phones": len(found)})
+                        progress(
+                            {
+                                "file": filename,
+                                "rows": rows_seen,
+                                "phones": sum(len(group) for group in file_groups),
+                            }
+                        )
+
+                for row in sample:
+                    take(row)
+                for row in stream:
+                    take(row)
             finally:
                 stream.close()
         except ValueError as exc:
             reports.append({"name": filename, "phones": 0, "rows": rows_seen, "error": str(exc)})
             continue
-        phones.extend(found)
-        reports.append({"name": filename, "phones": len(found), "rows": rows_seen})
-    return phones, reports
+        groups.extend(file_groups)
+        reports.append(
+            {
+                "name": filename,
+                "phones": sum(len(group) for group in file_groups),
+                "rows": rows_seen,
+            }
+        )
+    return groups, reports
+
+
+def phones_from_files(
+    files: Iterable[tuple[str, TableSource]],
+    progress: Callable[[dict[str, Any]], None] | None = None,
+) -> tuple[list[str], list[dict[str, Any]]]:
+    groups, reports = phone_groups_from_files(files, progress=progress)
+    return [phone for group in groups for phone in group], reports
 
 
 def mapping_from_form(raw: dict[str, Any] | None, *, _nested: bool = False) -> dict[str, Any]:
