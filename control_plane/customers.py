@@ -1335,26 +1335,34 @@ def _lookup_field_lines(customer: dict[str, Any], field: str) -> str:
     return "\n".join(lines)
 
 
-def join_lookup_parts(parts: list[str]) -> str:
-    """Các bản giống hệt thì giữ một. Khác nhau thì mỗi bản một dòng."""
+def _unique_lookup_texts(parts: list[str]) -> list[str]:
+    seen: list[str] = []
+    for part in parts:
+        if part and part not in seen:
+            seen.append(part)
+    return seen
+
+
+def _phones_on_one_line(parts: list[str]) -> str:
+    phones = _unique_lookup_texts(parts)
+    if len(phones) <= 1:
+        return phones[0] if phones else ""
+    return " - ".join(phones)
+
+
+def _stack_choice_lines(parts: list[str]) -> str:
     if not parts:
-        return "."
-    if len(set(parts)) == 1:
+        return ""
+    if len(parts) == 1:
         return parts[0]
+    if not any(part.strip() for part in parts):
+        return ""
     return "\n".join(parts)
 
 
-def combine_phone_group(phones: list[str], by_phone: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
-    """Một dòng danh sách ra một dòng kết quả.
-
-    Số không có địa chỉ thì ô địa chỉ là dấu chấm. Hai số trên cùng một dòng
-    mà địa chỉ đều có và khác nhau thì cùng một ô, mỗi địa chỉ một dòng.
-    """
-    streets: list[str] = []
-    admins: list[str] = []
-    contacts: list[str] = []
-    names: list[str] = []
-    first: dict[str, Any] | None = None
+def _lookup_slots(phones: list[str], by_phone: dict[str, list[dict[str, Any]]]) -> list[dict[str, str]]:
+    """Mỗi khách khớp một số là một lựa chọn. Số không có địa chỉ vẫn có một lựa chọn dấu chấm."""
+    slots: list[dict[str, str]] = []
     for phone in phones:
         ready = [
             item
@@ -1362,69 +1370,117 @@ def combine_phone_group(phones: list[str], by_phone: dict[str, list[dict[str, An
             if item.get("found") and has_both_addresses(item.get("customer") or {})
         ]
         if not ready:
-            streets.append(".")
-            admins.append("")
-            contacts.append(".")
+            slots.append(
+                {
+                    "query": phone,
+                    "phone": phone,
+                    "street": ".",
+                    "admin": "",
+                    "contact": ".",
+                    "name": "",
+                    "order": "",
+                    "cod": "",
+                    "facebook": "",
+                    "tiktok": "",
+                    "id": "",
+                    "created": "",
+                    "updated": "",
+                }
+            )
             continue
-        phone_streets: list[str] = []
-        phone_admins: list[str] = []
-        phone_contacts: list[str] = []
+        seen: set[tuple[str, ...]] = set()
         for item in ready:
             customer = item.get("customer") or {}
-            if first is None:
-                first = customer
-            street = _lookup_field_lines(customer, "address")
+            street = _lookup_field_lines(customer, "address") or "."
             admin = _lookup_field_lines(customer, "adminAddress")
-            contact = lookup_contact_text(customer)
-            if street and street not in phone_streets:
-                phone_streets.append(street)
-            if admin and admin not in phone_admins:
-                phone_admins.append(admin)
-            if contact and contact not in phone_contacts:
-                phone_contacts.append(contact)
-            name = str(customer.get("name") or "").strip()
-            if name and name not in names:
-                names.append(name)
-        streets.append("\n".join(phone_streets) if phone_streets else ".")
-        admins.append("\n".join(phone_admins))
-        contacts.append("\n".join(phone_contacts) if phone_contacts else ".")
-    streets_differ = len(set(streets)) > 1
-    if len(phones) == 1:
-        query = phones[0]
-    elif streets_differ:
-        query = "\n".join(phones)
-    else:
-        query = " - ".join(phones)
-    found = any(part != "." for part in contacts)
-    if not found:
-        admin_cell = ""
-    elif streets_differ:
-        admin_cell = "\n".join(part or "." for part in admins)
-    else:
-        present = [part for part in admins if part]
-        admin_cell = join_lookup_parts(present) if present else ""
-    base = first or {}
+            contact = lookup_contact_text(customer) or "."
+            name = _lookup_field_lines(customer, "name")
+            order = _lookup_field_lines(customer, "orderContent")
+            cod = _lookup_field_lines(customer, "codAmount")
+            facebook = _lookup_field_lines(customer, "facebookUid")
+            tiktok = _lookup_field_lines(customer, "tiktokId")
+            stored = _lookup_field_lines(customer, "phone") or phone
+            identity = (street, admin, contact, name, order, cod, facebook, tiktok, stored)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            slots.append(
+                {
+                    "query": phone,
+                    "phone": stored,
+                    "street": street,
+                    "admin": admin,
+                    "contact": contact,
+                    "name": name,
+                    "order": order,
+                    "cod": cod,
+                    "facebook": facebook,
+                    "tiktok": tiktok,
+                    "id": str(customer.get("id") or ""),
+                    "created": str(customer.get("createdAt") or ""),
+                    "updated": str(customer.get("updatedAt") or ""),
+                }
+            )
+    return slots
+
+
+def combine_phone_group(phones: list[str], by_phone: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
+    """Một dòng danh sách ra một dòng kết quả.
+
+    Số không có địa chỉ thì ô địa chỉ là dấu chấm. Hai số cùng địa chỉ thì
+    giữ một dòng. Địa chỉ khác nhau thì cùng một ô, mỗi địa chỉ một dòng,
+    số điện thoại xuống dòng cho khớp để chọn. Hàng mua, COD và tên của
+    từng số vẫn giữ trong ô.
+    """
+    slots = _lookup_slots(phones, by_phone)
+    grouped: dict[str, list[dict[str, str]]] = {}
+    street_order: list[str] = []
+    for slot in slots:
+        street = slot["street"]
+        bucket = grouped.get(street)
+        if bucket is None:
+            bucket = []
+            grouped[street] = bucket
+            street_order.append(street)
+        bucket.append(slot)
+    lines = [grouped[street] for street in street_order]
+    many = len(lines) > 1
+    found = any(slot["contact"] != "." for slot in slots)
+
+    def across(field: str, *, blank_dot: bool = False) -> str:
+        parts: list[str] = []
+        for group in lines:
+            text = " | ".join(_unique_lookup_texts([slot[field] for slot in group]))
+            if not text and blank_dot and many:
+                text = "."
+            parts.append(text)
+        return _stack_choice_lines(parts)
+
+    query = _stack_choice_lines([_phones_on_one_line([slot["query"] for slot in group]) for group in lines])
+    stored_phone = _stack_choice_lines([_phones_on_one_line([slot["phone"] for slot in group]) for group in lines])
+    address = _stack_choice_lines([group[0]["street"] for group in lines]) or "."
+    contact_lines: list[str] = []
+    for group in lines:
+        contacts = _unique_lookup_texts([slot["contact"] for slot in group if slot["contact"] != "."])
+        contact_lines.append("\n".join(contacts) if contacts else ".")
+    first = next((slot for slot in slots if slot["contact"] != "."), None)
     customer = {
-        "id": str(base.get("id") or ""),
-        "name": "\n".join(names),
-        "phone": query,
-        "address": join_lookup_parts(streets),
-        "adminAddress": admin_cell,
-        "orderContent": str(base.get("orderContent") or "") if found else "",
-        "codAmount": str(base.get("codAmount") or "") if found else "",
-        "facebookUid": str(base.get("facebookUid") or "") if found else "",
-        "tiktokId": str(base.get("tiktokId") or "") if found else "",
-        "createdAt": str(base.get("createdAt") or "") if found else "",
-        "updatedAt": str(base.get("updatedAt") or "") if found else "",
+        "id": first["id"] if first else "",
+        "name": across("name") if found else "",
+        "phone": stored_phone or query,
+        "address": address,
+        "adminAddress": across("admin", blank_dot=True) if found else "",
+        "orderContent": across("order") if found else "",
+        "codAmount": across("cod") if found else "",
+        "facebookUid": across("facebook") if found else "",
+        "tiktokId": across("tiktok") if found else "",
+        "createdAt": first["created"] if first else "",
+        "updatedAt": first["updated"] if first else "",
     }
-    if streets_differ:
-        result_address = "\n".join(contacts) if contacts else "."
-    else:
-        result_address = next((part for part in contacts if part != "."), ".")
     return {
         "query": query,
         "found": found,
-        "resultAddress": result_address,
+        "resultAddress": _stack_choice_lines(contact_lines) or ".",
         "customer": customer,
     }
 
@@ -1440,11 +1496,8 @@ def _grouped_from_batches(
     db_path: Any,
     groups: list[list[str]],
     batch: int,
-    progress: Callable[[dict[str, int]], None] | None = None,
 ) -> Iterator[tuple[list[dict[str, Any]], dict[str, int]]]:
     """Đọc kho theo lô nhóm. Mỗi lần trả các dòng kết quả của lô đó."""
-    flat_total = sum(len(group) for group in groups)
-    done = 0
     group_batch = max(1, batch)
     for start in range(0, len(groups), group_batch):
         chunk = groups[start : start + group_batch]
@@ -1455,12 +1508,9 @@ def _grouped_from_batches(
         for items, stats in _lookup_batches(db_path, flat, batch):
             found += stats["found"]
             missing += stats["missing"]
-            done += stats["queried"]
             for query, bucket in _index_lookup_items(items).items():
                 by_phone.setdefault(query, []).extend(bucket)
         rows = [combine_phone_group(group, by_phone) for group in chunk]
-        if progress is not None:
-            progress({"matched": done, "total": flat_total, "found": found})
         yield rows, {"found": found, "missing": missing, "queried": len(flat)}
 
 

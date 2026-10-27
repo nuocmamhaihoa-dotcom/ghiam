@@ -1375,8 +1375,8 @@ def _encode_phone_groups(groups: list[list[str]]) -> str:
 
 def _decode_phone_groups(text: str) -> list[list[str]]:
     groups: list[list[str]] = []
-    for line in text.split("\n"):
-        phones = [part for part in line.split("\t") if part]
+    for line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        phones = [part.strip() for part in line.split("\t") if part.strip()]
         if phones:
             groups.append(phones)
     return groups

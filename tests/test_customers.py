@@ -510,6 +510,47 @@ class CustomerMergeTests(unittest.TestCase):
         self.assertEqual(mixed["query"], "0901000006\n0988000111")
         self.assertEqual(mixed["customer"]["address"], "9 Bà Triệu\n.")
         self.assertEqual(mixed["resultAddress"], "9 Bà Triệu | Phường Trần Hưng Đạo\n.")
+        shared = combine_phone_group(
+            ["0901000001", "0901000002", "0901000005"],
+            {
+                "0901000001": [ready("An", "0901000001", "12 Lê Lợi", "Phường Phú Hội")],
+                "0901000002": [ready("Bình", "0901000002", "12 Lê Lợi", "Phường Phú Hội")],
+            },
+        )
+        self.assertEqual(shared["query"], "0901000001 - 0901000002\n0901000005")
+        self.assertEqual(shared["customer"]["address"], "12 Lê Lợi\n.")
+        self.assertEqual(shared["customer"]["name"], "An | Bình\n")
+        self.assertEqual(shared["resultAddress"], "12 Lê Lợi | Phường Phú Hội\n.")
+        an = ready("An", "0901000003", "88 Trần Phú", "Quận 1")
+        an["customer"]["orderContent"] = "Áo"
+        an["customer"]["codAmount"] = "100000"
+        dung = ready("Dung", "0901000004", "88 Trần Phú", "Phường Bến Nghé")
+        dung["customer"]["orderContent"] = "Quần"
+        dung["customer"]["codAmount"] = "200000"
+        choices = combine_phone_group(
+            ["0901000003", "0901000004"],
+            {"0901000003": [an], "0901000004": [dung]},
+        )
+        self.assertEqual(choices["query"], "0901000003 - 0901000004")
+        self.assertEqual(choices["customer"]["address"], "88 Trần Phú")
+        self.assertEqual(choices["customer"]["adminAddress"], "Quận 1 | Phường Bến Nghé")
+        self.assertEqual(choices["customer"]["orderContent"], "Áo | Quần")
+        self.assertEqual(choices["customer"]["codAmount"], "100000 | 200000")
+        self.assertEqual(
+            choices["resultAddress"],
+            "88 Trần Phú | Quận 1\n88 Trần Phú | Phường Bến Nghé",
+        )
+        first = ready("An", "0901000001", "12 Lê Lợi", "Phường Phú Hội")
+        second = ready("Bình", "0901000001", "45 Nguyễn Huệ", "Phường Bến Nghé")
+        second["customer"]["id"] = "b"
+        several = combine_phone_group(["0901000001"], {"0901000001": [first, second]})
+        self.assertEqual(several["query"], "0901000001\n0901000001")
+        self.assertEqual(several["customer"]["address"], "12 Lê Lợi\n45 Nguyễn Huệ")
+        self.assertEqual(several["customer"]["name"], "An\nBình")
+        self.assertEqual(
+            several["resultAddress"],
+            "12 Lê Lợi | Phường Phú Hội\n45 Nguyễn Huệ | Phường Bến Nghé",
+        )
 
     def test_search_matches_any_field(self) -> None:
         row = {"name": "Nguyễn A", "phone": "0901234567", "address": "Hà Nội", "facebookUid": "1", "tiktokId": "ban"}
