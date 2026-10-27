@@ -434,9 +434,11 @@ class CustomerMergeTests(unittest.TestCase):
             "2026-01-01T00:00:00+00:00",
         )
         items, stats = lookup_by_phones(stored, phones)
-        self.assertEqual(stats["found"], 1)
-        self.assertEqual(stats["missing"], 2)
-        self.assertEqual([item["customer"]["name"] for item in items], ["Lan"])
+        self.assertEqual(stats["found"], 2)
+        self.assertEqual(stats["missing"], 1)
+        self.assertEqual([item["customer"]["name"] for item in items], ["Lan", "Minh"])
+        self.assertEqual(items[1]["customer"]["address"], "Đà Nẵng")
+        self.assertEqual(items[1]["customer"]["adminAddress"], "")
         items84, stats84 = lookup_by_phones(stored, ["84901222333"])
         self.assertEqual(stats84["found"], 1)
         self.assertEqual(items84[0]["customer"]["name"], "Lan")
@@ -448,9 +450,27 @@ class CustomerMergeTests(unittest.TestCase):
             },
             phones,
         )
-        self.assertEqual(mapped_stats["found"], 1)
-        self.assertEqual(mapped_items[0]["customer"]["name"], "Lan")
-        self.assertEqual(mapped_stats["missing"], 2)
+        self.assertEqual(mapped_stats["found"], 2)
+        self.assertEqual([item["customer"]["name"] for item in mapped_items], ["Lan", "Minh"])
+        self.assertEqual(mapped_stats["missing"], 1)
+        admin_only, admin_stats = lookup_by_phone_map(
+            {"0901555666": [{"id": "hoa", "name": "Hoa", "phone": "0901555666", "address": "", "adminAddress": "Hải Châu"}]},
+            ["0901555666"],
+        )
+        self.assertEqual(admin_stats["found"], 1)
+        self.assertEqual(admin_stats["missing"], 0)
+        self.assertEqual(admin_only[0]["customer"]["adminAddress"], "Hải Châu")
+        blank_and_street, partial_stats = lookup_by_phone_map(
+            {
+                "0901666777": [
+                    {"id": "trong", "name": "Trang", "phone": "0901666777", "address": "", "adminAddress": ""},
+                    {"id": "hoa", "name": "Hoa", "phone": "0901666777", "address": "15 Hùng Vương", "adminAddress": ""},
+                ]
+            },
+            ["0901666777"],
+        )
+        self.assertEqual(partial_stats["found"], 1)
+        self.assertEqual([item["customer"]["name"] for item in blank_and_street], ["Hoa"])
 
     def test_one_line_with_two_phones_is_one_customer(self) -> None:
         groups, parsed = phone_groups_from_text(
@@ -551,6 +571,29 @@ class CustomerMergeTests(unittest.TestCase):
             several["resultAddress"],
             "12 Lê Lợi | Phường Phú Hội\n45 Nguyễn Huệ | Phường Bến Nghé",
         )
+        street_only = combine_phone_group(
+            ["0901000008"],
+            {"0901000008": [ready("Hoa", "0901000008", "15 Hùng Vương", "")]},
+        )
+        self.assertTrue(street_only["found"])
+        self.assertEqual(street_only["customer"]["address"], "15 Hùng Vương")
+        self.assertEqual(street_only["customer"]["adminAddress"], "")
+        self.assertEqual(street_only["resultAddress"], "15 Hùng Vương")
+        admin_only = combine_phone_group(
+            ["0901000009"],
+            {"0901000009": [ready("Khanh", "0901000009", "", "Quận Hải Châu")]},
+        )
+        self.assertTrue(admin_only["found"])
+        self.assertEqual(admin_only["customer"]["address"], "Quận Hải Châu")
+        self.assertEqual(admin_only["customer"]["adminAddress"], "Quận Hải Châu")
+        self.assertEqual(admin_only["resultAddress"], "Quận Hải Châu")
+        blank = ready("Trang", "0901000010", "", "")
+        kept = ready("Hoa", "0901000010", "15 Hùng Vương", "")
+        kept["customer"]["id"] = "hoa"
+        partial = combine_phone_group(["0901000010"], {"0901000010": [blank, kept]})
+        self.assertTrue(partial["found"])
+        self.assertEqual(partial["customer"]["address"], "15 Hùng Vương")
+        self.assertEqual(partial["resultAddress"], "15 Hùng Vương")
 
     def test_search_matches_any_field(self) -> None:
         row = {"name": "Nguyễn A", "phone": "0901234567", "address": "Hà Nội", "facebookUid": "1", "tiktokId": "ban"}

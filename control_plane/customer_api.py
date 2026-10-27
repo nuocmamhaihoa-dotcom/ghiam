@@ -1586,7 +1586,7 @@ def _write_lookup_copy(groups: list[list[str]]) -> Path:
 
 def _write_lookup_xlsx(groups: list[list[str]]) -> Path:
     """Ghi kết quả tra cứu ra Excel theo từng dòng danh sách, kể cả số không có địa chỉ."""
-    headers = ["Số tra cứu", "Có đủ địa chỉ", *FIELD_LABELS.values()]
+    headers = ["Số tra cứu", "Có địa chỉ", *FIELD_LABELS.values()]
 
     def rows() -> Any:
         for item in iter_lookup_groups(settings.db_path, groups):

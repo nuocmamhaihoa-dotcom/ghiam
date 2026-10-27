@@ -343,7 +343,7 @@
     <h2>Tra cứu hàng loạt</h2>
     <details class="guide">
       <summary>Cách tra cứu</summary>
-      <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. Một ô có hai số (0901… - 0912…) thì đó là một khách. File lấy số điện thoại Việt Nam ở mọi cột, cột SĐT lấy cả số lạ; không lấy UID Facebook. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Số không có địa chỉ vẫn hiện trong kết quả, ô địa chỉ là dấu chấm. Một dòng danh sách có hai số thì đó là một khách: hai địa chỉ đều có và khác nhau thì nằm cùng một ô, mỗi địa chỉ một dòng. Copy để số điện thoại bên trái và địa chỉ bên phải. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách. Nhân viên bị trừ hạn mức theo số mới trong ngày; số đã tra hôm nay không tính lại.</p>
+      <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. Một ô có hai số (0901… - 0912…) thì đó là một khách. File lấy số điện thoại Việt Nam ở mọi cột, cột SĐT lấy cả số lạ; không lấy UID Facebook. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Có địa chỉ hoặc địa chỉ hành chính thì tính là có kết quả. Chỉ khi cả hai đều trống, hoặc không có khách, ô địa chỉ mới là dấu chấm. Một dòng danh sách có hai số thì đó là một khách: hai địa chỉ đều có và khác nhau thì nằm cùng một ô, mỗi địa chỉ một dòng. Copy để số điện thoại bên trái và địa chỉ bên phải. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách. Nhân viên bị trừ hạn mức theo số mới trong ngày; số đã tra hôm nay không tính lại.</p>
     </details>
     <p id="quotaNote" class="note"></p>
     <div class="work">
@@ -2045,7 +2045,7 @@
     var stats = body.stats || {};
     document.getElementById("lookupStats").innerHTML =
       stat(stats.queried || 0, "Số đã tra") +
-      stat(stats.found || 0, "Có đủ địa chỉ") +
+      stat(stats.found || 0, "Có địa chỉ") +
       stat(stats.missing || 0, "Không có") +
       stat(stats.invalid || 0, "Dòng không phải số");
     padSpaces(document.getElementById("lookupStats"));
@@ -2058,7 +2058,7 @@
       return;
     }
     var queried = stats.queried || items.length;
-    var html = "<table class='sheet'><colgroup><col class='col-query'><col class='col-flag'><col class='col-name'><col class='col-phone'><col class='col-addr'><col class='col-addr'><col class='col-addr'><col class='col-cod'><col class='col-id'><col class='col-id'></colgroup><thead><tr><th>Số tra cứu</th><th>Đủ địa chỉ</th><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
+    var html = "<table class='sheet'><colgroup><col class='col-query'><col class='col-flag'><col class='col-name'><col class='col-phone'><col class='col-addr'><col class='col-addr'><col class='col-addr'><col class='col-cod'><col class='col-id'><col class='col-id'></colgroup><thead><tr><th>Số tra cứu</th><th>Có địa chỉ</th><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
     shown.forEach(function (item) {
       var customer = item.customer || {};
       html += "<tr><td>" + escapeHtml(item.query) + "</td><td>" + (item.found ? "Có" : "Không") + "</td><td>" + escapeHtml(customer.name) + "</td><td>" + escapeHtml(customer.phone) + "</td><td class='addr'>" + escapeHtml(customer.address) + "</td><td class='addr'>" + escapeHtml(customer.adminAddress) + "</td><td class='addr'>" + escapeHtml(customer.orderContent) + "</td><td>" + escapeHtml(customer.codAmount) + "</td><td>" + escapeHtml(customer.facebookUid) + "</td><td>" + escapeHtml(customer.tiktokId) + "</td></tr>";
@@ -2067,7 +2067,7 @@
     document.getElementById("lookupPeople").innerHTML = html;
     padSpaces(document.getElementById("lookupPeople"));
     document.getElementById("lookupActions").hidden = false;
-    var note = "Đã đối chiếu " + vnNum(queried) + " số. Số không có địa chỉ hiện dấu chấm. Một dòng có hai số mà địa chỉ khác nhau thì mỗi địa chỉ một dòng trong cùng ô.";
+    var note = "Đã đối chiếu " + vnNum(queried) + " số. Có địa chỉ hoặc địa chỉ hành chính đều hiện. Chỉ khi không còn địa chỉ nào thì ô là dấu chấm. Một dòng có hai số mà địa chỉ khác nhau thì mỗi địa chỉ một dòng trong cùng ô.";
     var totalRows = Math.max(items.length, shown.length + (stats.hidden || 0));
     if (totalRows > shown.length) {
       note += " Đang hiện " + vnNum(shown.length) + "/" + vnNum(totalRows) + " dòng. Tải Excel để xem hết — không phải gửi lại file.";

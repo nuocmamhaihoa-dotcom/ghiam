@@ -1138,7 +1138,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(exported.status_code, 200)
         rows = list(iter_xlsx_rows(exported.content))
         self.assertEqual(len(rows), 252)
-        self.assertEqual(rows[0][1], "Có đủ địa chỉ")
+        self.assertEqual(rows[0][1], "Có địa chỉ")
         self.assertEqual(rows[1][:2], ["0909000299", "Có"])
         self.assertEqual(sum(1 for row in rows[1:] if row[1] == "Không"), 1)
         self.assertEqual(sum(1 for row in rows[1:] if row[4] == "."), 1)
@@ -1186,7 +1186,7 @@ class CustomerApiTests(unittest.TestCase):
             lines[1:],
             [
                 "0901222333\t12 Lê Lợi | Phường Phú Hội | Thừa Thiên Huế",
-                "0375866792\t.",
+                "0375866792\tĐà Nẵng",
                 "0985000000\t.",
             ],
         )

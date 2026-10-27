@@ -1218,11 +1218,11 @@ def phones_from_text(text: str, limit: int = MAX_LOOKUP) -> tuple[list[str], dic
     return [phone for group in groups for phone in group], parsed
 
 
-def has_both_addresses(customer: dict[str, Any] | None) -> bool:
-    """Khách chỉ được hiện khi tra cứu nếu có cả địa chỉ và địa chỉ hành chính."""
+def has_lookup_address(customer: dict[str, Any] | None) -> bool:
+    """Có kết quả khi còn địa chỉ hoặc địa chỉ hành chính. Thiếu một cột vẫn là có địa chỉ."""
     if not customer:
         return False
-    return bool(str(customer.get("address") or "").strip()) and bool(str(customer.get("adminAddress") or "").strip())
+    return bool(str(customer.get("address") or "").strip()) or bool(str(customer.get("adminAddress") or "").strip())
 
 
 def lookup_by_phones(
@@ -1254,7 +1254,7 @@ def lookup_by_phones(
                     continue
                 seen_ids.add(customer_id)
                 matches.append(customer)
-        ready = [customer for customer in matches if has_both_addresses(customer)]
+        ready = [customer for customer in matches if has_lookup_address(customer)]
         if not ready:
             missing += 1
             continue
@@ -1367,7 +1367,7 @@ def _lookup_slots(phones: list[str], by_phone: dict[str, list[dict[str, Any]]]) 
         ready = [
             item
             for item in by_phone.get(phone) or []
-            if item.get("found") and has_both_addresses(item.get("customer") or {})
+            if item.get("found") and has_lookup_address(item.get("customer") or {})
         ]
         if not ready:
             slots.append(
@@ -1391,7 +1391,7 @@ def _lookup_slots(phones: list[str], by_phone: dict[str, list[dict[str, Any]]]) 
         seen: set[tuple[str, ...]] = set()
         for item in ready:
             customer = item.get("customer") or {}
-            street = _lookup_field_lines(customer, "address") or "."
+            street = _lookup_field_lines(customer, "address")
             admin = _lookup_field_lines(customer, "adminAddress")
             contact = lookup_contact_text(customer) or "."
             name = _lookup_field_lines(customer, "name")
@@ -1436,7 +1436,8 @@ def combine_phone_group(phones: list[str], by_phone: dict[str, list[dict[str, An
     grouped: dict[str, list[dict[str, str]]] = {}
     street_order: list[str] = []
     for slot in slots:
-        street = slot["street"]
+        # Địa chỉ trống nhưng còn địa chỉ hành chính thì không gộp vào dòng dấu chấm.
+        street = slot["street"] if slot["street"] else "admin:" + slot["admin"]
         bucket = grouped.get(street)
         if bucket is None:
             bucket = []
@@ -1458,7 +1459,10 @@ def combine_phone_group(phones: list[str], by_phone: dict[str, list[dict[str, An
 
     query = _stack_choice_lines([_phones_on_one_line([slot["query"] for slot in group]) for group in lines])
     stored_phone = _stack_choice_lines([_phones_on_one_line([slot["phone"] for slot in group]) for group in lines])
-    address = _stack_choice_lines([group[0]["street"] for group in lines]) or "."
+    # Cột địa chỉ hiện đường nếu có. Không có đường nhưng còn địa chỉ hành chính thì hiện phần đó, không để dấu chấm.
+    address = _stack_choice_lines([group[0]["street"] or group[0]["admin"] for group in lines])
+    if not found:
+        address = "."
     contact_lines: list[str] = []
     for group in lines:
         contacts = _unique_lookup_texts([slot["contact"] for slot in group if slot["contact"] != "."])
@@ -1575,7 +1579,7 @@ def lookup_by_phone_map(
                 continue
             if customer_id:
                 seen_ids.add(customer_id)
-            if has_both_addresses(public):
+            if has_lookup_address(public):
                 ready.append(public)
         if not ready:
             missing += 1
