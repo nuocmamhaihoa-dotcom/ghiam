@@ -1132,15 +1132,15 @@ class CustomerApiTests(unittest.TestCase):
             api.LOOKUP_RETURN_LIMIT = previous_limit
         self.assertEqual(job["status"], "done", job)
         result = job["result"]
-        self.assertEqual(result["stats"]["queried"], 253)
-        self.assertEqual(result["stats"]["found"], 251)
+        self.assertEqual(result["stats"]["queried"], 254)
+        self.assertEqual(result["stats"]["found"], 252)
         self.assertEqual(result["stats"]["missing"], 2)
         self.assertEqual(len(result["items"]), 100)
-        self.assertEqual(result["stats"]["hidden"], 151)
+        self.assertEqual(result["stats"]["hidden"], 152)
         exported = self.client.get(f"/v1/customers/lookup/jobs/{job['id']}/export", headers=self.headers)
         self.assertEqual(exported.status_code, 200)
         rows = list(iter_xlsx_rows(exported.content))
-        self.assertEqual(len(rows), 252)
+        self.assertEqual(len(rows), 253)
         self.assertEqual(rows[0][1], "Có địa chỉ")
         self.assertEqual(rows[1][:2], ["0909000299", "Có"])
         self.assertEqual(sum(1 for row in rows[1:] if row[1] == "Không"), 1)
@@ -1290,6 +1290,63 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(rows[1][0], "0901000001\n0901000002")
         self.assertEqual(rows[1][1], "Có")
         self.assertEqual(rows[1][4], "12 Lê Lợi\n45 Nguyễn Huệ")
+
+    def test_lookup_keeps_blank_lines_at_the_edges(self) -> None:
+        looked = self.client.post(
+            "/v1/customers/lookup",
+            headers=self.headers,
+            json={"text": "\n0901000005\n\n"},
+        )
+        self.assertEqual(looked.status_code, 200, looked.text)
+        items = looked.json()["items"]
+        self.assertEqual(len(items), 3)
+        self.assertEqual(items[0]["query"], "")
+        self.assertEqual(items[0]["customer"]["address"], ".")
+        self.assertFalse(items[0]["found"])
+        self.assertEqual(items[1]["query"], "0901000005")
+        self.assertEqual(items[1]["customer"]["address"], ".")
+        self.assertEqual(items[2]["query"], "")
+        self.assertEqual(items[2]["customer"]["address"], ".")
+        self.assertEqual(looked.json()["stats"]["queried"], 1)
+        self.assertEqual(looked.json()["stats"]["invalid"], 2)
+        self.assertEqual(looked.json()["stats"]["missing"], 1)
+
+    def test_lookup_file_keeps_a_phone_already_seen(self) -> None:
+        now = "2026-01-01T00:00:00+00:00"
+        db.replace_customers(
+            settings.db_path,
+            [
+                {
+                    "id": "lan",
+                    "name": "Lan",
+                    "phone": "0901222333",
+                    "address": "12 Lê Lợi",
+                    "adminAddress": "Huế",
+                    "createdAt": now,
+                    "updatedAt": now,
+                }
+            ],
+            [],
+        )
+        name, file_body = self._xlsx(
+            "lap.xlsx",
+            ["SĐT", "Ghi chú"],
+            [["0901222333", ""], ["84901222333", "gọi lại"]],
+        )
+        looked = self.client.post(
+            "/v1/customers/lookup",
+            headers=self.headers,
+            data={"text": "0901222333"},
+            files=[("files", (name, file_body, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))],
+        )
+        self.assertEqual(looked.status_code, 200, looked.text)
+        items = looked.json()["items"]
+        self.assertEqual(len(items), 3)
+        self.assertEqual(looked.json()["stats"]["queried"], 3)
+        self.assertEqual(looked.json()["stats"]["found"], 3)
+        self.assertEqual(looked.json()["stats"]["missing"], 0)
+        self.assertTrue(all(item["found"] and item["customer"]["address"] == "12 Lê Lợi" for item in items))
+        self.assertEqual([item["query"] for item in items], ["0901222333", "0901222333", "0901222333"])
 
     def test_list_caps_visible_items_without_hiding_total(self) -> None:
         now = "2026-01-01T00:00:00+00:00"

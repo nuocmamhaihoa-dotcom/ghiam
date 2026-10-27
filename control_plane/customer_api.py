@@ -1393,32 +1393,28 @@ def _collect_lookup_groups(
     problems: list[str],
     progress: Any = None,
 ) -> tuple[list[list[str]], dict[str, Any], list[dict[str, Any]]]:
-    """Mỗi dòng dán hoặc mỗi dòng file là một khách. Hai số trên một dòng ở cùng nhóm."""
+    """Mỗi dòng dán, và mỗi dòng file có số, là một khách. Số đã gặp ở dòng khác vẫn giữ dòng đó."""
     pasted, parsed = phone_groups_from_text(text)
     file_groups: list[list[str]] = []
     file_reports: list[dict[str, Any]] = []
     if uploaded:
         file_groups, file_reports = phone_groups_from_files(uploaded, progress=progress)
         problems.extend(str(item.get("error") or "") for item in file_reports if item.get("error"))
-    seen = {db.phone_key(phone) or phone for group in pasted for phone in real_lookup_phones(group)}
     groups = list(pasted)
-    kept = sum(len(group) for group in groups)
+    kept = sum(len(real_lookup_phones(group)) for group in groups)
     truncated = bool(parsed.get("truncated"))
     for group in file_groups:
-        fresh: list[str] = []
-        for phone in group:
-            key = db.phone_key(phone) or phone
-            if key in seen:
-                continue
-            if kept >= MAX_LOOKUP:
-                truncated = True
-                break
-            seen.add(key)
-            fresh.append(phone)
-            kept += 1
-        if fresh:
-            groups.append(fresh)
-        if truncated:
+        if not group:
+            continue
+        if kept >= MAX_LOOKUP:
+            truncated = True
+            break
+        room = MAX_LOOKUP - kept
+        chosen = group if len(group) <= room else group[:room]
+        groups.append(list(chosen))
+        kept += len(chosen)
+        if len(chosen) < len(group):
+            truncated = True
             break
     if not groups:
         raise HTTPException(

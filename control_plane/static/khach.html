@@ -343,7 +343,7 @@
     <h2>Tra cứu hàng loạt</h2>
     <details class="guide">
       <summary>Cách tra cứu</summary>
-      <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. Một ô có hai số (0901… - 0912…) thì đó là một khách. File lấy số điện thoại Việt Nam ở mọi cột, cột SĐT lấy cả số lạ; không lấy UID Facebook. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Mỗi dòng trong ô dán ra đúng một dòng kết quả, kể cả dòng trống và dòng không phải số. Có địa chỉ hoặc địa chỉ hành chính thì trả địa chỉ. Cả dòng không có địa chỉ thì ô là dấu chấm. Một dòng có hai số mà cả hai đều có địa chỉ thì hai địa chỉ nằm cùng một ô, mỗi địa chỉ một dòng. Một trong hai số không có địa chỉ thì chỉ trả địa chỉ của số còn lại. Copy để số điện thoại bên trái và địa chỉ bên phải. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách. Nhân viên bị trừ hạn mức theo số mới trong ngày; số đã tra hôm nay không tính lại.</p>
+      <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. Một ô có hai số (0901… - 0912…) thì đó là một khách. File lấy số điện thoại Việt Nam ở mọi cột, cột SĐT lấy cả số lạ; không lấy UID Facebook. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Mỗi dòng trong ô dán ra đúng một dòng kết quả, kể cả dòng trống ở đầu, ở giữa, ở cuối và dòng không phải số. Mỗi dòng file có số cũng ra một dòng, kể cả khi số đó đã có ở dòng khác. Có địa chỉ hoặc địa chỉ hành chính thì trả địa chỉ. Cả dòng không có địa chỉ thì ô là dấu chấm. Một dòng có hai số mà cả hai đều có địa chỉ thì hai địa chỉ nằm cùng một ô, mỗi địa chỉ một dòng. Một trong hai số không có địa chỉ thì chỉ trả địa chỉ của số còn lại. Copy để số điện thoại bên trái và địa chỉ bên phải. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách. Nhân viên bị trừ hạn mức theo số mới trong ngày; số đã tra hôm nay không tính lại.</p>
     </details>
     <p id="quotaNote" class="note"></p>
     <div class="work">
@@ -2047,7 +2047,7 @@
       stat(stats.queried || 0, "Số đã tra") +
       stat(stats.found || 0, "Có địa chỉ") +
       stat(stats.missing || 0, "Không có") +
-      stat(stats.invalid || 0, "Dòng không phải số");
+      stat(stats.invalid || 0, "Dòng không có số");
     padSpaces(document.getElementById("lookupStats"));
     var items = body.items || [];
     var shown = items.slice(0, 2000);
@@ -2067,7 +2067,7 @@
     document.getElementById("lookupPeople").innerHTML = html;
     padSpaces(document.getElementById("lookupPeople"));
     document.getElementById("lookupActions").hidden = false;
-    var note = "Đã đối chiếu " + vnNum(queried) + " số. Mỗi dòng đã dán là một dòng kết quả. Có địa chỉ thì trả địa chỉ. Dòng không có địa chỉ là dấu chấm. Dòng hai số mà một số không có địa chỉ thì chỉ giữ địa chỉ còn lại.";
+    var note = "Đã đối chiếu " + vnNum(queried) + " số. Mỗi dòng đã dán là một dòng kết quả, kể cả dòng trống ở đầu và cuối. Có địa chỉ thì trả địa chỉ. Dòng không có địa chỉ là dấu chấm. Dòng hai số mà một số không có địa chỉ thì chỉ giữ địa chỉ còn lại. Mỗi dòng file có số cũng ra một dòng.";
     var totalRows = Math.max(items.length, shown.length + (stats.hidden || 0));
     if (totalRows > shown.length) {
       note += " Đang hiện " + vnNum(shown.length) + "/" + vnNum(totalRows) + " dòng. Tải Excel để xem hết — không phải gửi lại file.";
@@ -2075,7 +2075,8 @@
     note += quotaExtra(body);
     if (stats.truncated) note += " Danh sách quá dài, chỉ lấy phần đầu.";
     if (body.fileErrors && body.fileErrors.length) note += " File lỗi: " + body.fileErrors.join(" ");
-    setNote("lookupNote", note, (body.fileErrors && body.fileErrors.length) || stats.missing ? "warn" : "ok");
+    var problem = (body.fileErrors && body.fileErrors.length) || stats.truncated;
+    setNote("lookupNote", note, problem ? "warn" : "ok");
   }
 
   function addLookupFiles(fileList) {
@@ -2123,8 +2124,9 @@
   }
 
   async function runLookup() {
-    var text = (document.getElementById("lookupPaste").value || "").trim();
-    if (!text && !lookupFiles.length) {
+    var raw = document.getElementById("lookupPaste").value || "";
+    var hasLine = /[\r\n]/.test(raw) || String(raw).trim();
+    if (!hasLine && !lookupFiles.length) {
       setNote("lookupNote", "Dán list số hoặc chọn file danh sách.", "warn");
       return;
     }
@@ -2137,7 +2139,7 @@
       var response = await api("/v1/customers/lookup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: text, uploads: ids, requestId: newRequestId() }),
+        body: JSON.stringify({ text: raw, uploads: ids, requestId: newRequestId() }),
         tries: 4,
         waitMs: 120000,
         onRetry: function (index, tries) {

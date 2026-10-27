@@ -1371,6 +1371,17 @@ def _stack_choice_lines(parts: list[str]) -> str:
     return "\n".join(parts)
 
 
+def _one_choice_line(text: str) -> str:
+    """Một số một dòng. Địa chỉ nhiều dòng của cùng một số gộp bằng gạch đứng để các số còn thẳng hàng."""
+    parts = [part.strip() for part in str(text or "").split("\n")]
+    kept = [part for part in parts if part]
+    if not kept:
+        return ""
+    if len(kept) == 1:
+        return kept[0]
+    return " | ".join(kept)
+
+
 def _lookup_slots(phones: list[str], by_phone: dict[str, list[dict[str, Any]]]) -> list[dict[str, str]]:
     """Mỗi khách khớp một số là một lựa chọn. Số không có địa chỉ vẫn có một lựa chọn dấu chấm."""
     slots: list[dict[str, str]] = []
@@ -1471,13 +1482,17 @@ def combine_phone_group(phones: list[str], by_phone: dict[str, list[dict[str, An
     chosen = [slot for slot in slots if slot["contact"] != "."]
     if not chosen:
         return _dot_lookup_row(_phones_on_one_line(real))
+    several = len(chosen) > 1
+
+    def line(text: str) -> str:
+        return _one_choice_line(text) if several else text
 
     def down(field: str) -> str:
-        return _stack_choice_lines([slot[field] for slot in chosen])
+        return _stack_choice_lines([line(slot[field]) for slot in chosen])
 
     query = down("query")
     stored_phone = down("phone")
-    address = _stack_choice_lines([slot["street"] or slot["admin"] for slot in chosen])
+    address = _stack_choice_lines([line(slot["street"] or slot["admin"]) for slot in chosen])
     first = chosen[0]
     customer = {
         "id": first["id"],
@@ -1542,7 +1557,7 @@ def lookup_phone_groups(
     missing = 0
     queried = 0
     rows = 0
-    flat_total = sum(len(group) for group in groups)
+    flat_total = sum(len(real_lookup_phones(group)) for group in groups)
     for chunk_rows, stats in _grouped_from_batches(db_path, groups, batch):
         found += stats["found"]
         missing += stats["missing"]

@@ -615,6 +615,24 @@ class CustomerMergeTests(unittest.TestCase):
         both_missing = combine_phone_group(["0901000005", "0988000111"], {})
         self.assertEqual(both_missing["query"], "0901000005 - 0988000111")
         self.assertEqual(both_missing["customer"]["address"], ".")
+        wide = ready("An", "0901000001", "12 Lê Lợi\nTầng 2", "Phường Phú Hội")
+        other = ready("Bình", "0901000002", "45 Nguyễn Huệ", "Phường Bến Nghé")
+        aligned = combine_phone_group(
+            ["0901000001", "0901000002"],
+            {"0901000001": [wide], "0901000002": [other]},
+        )
+        self.assertEqual(aligned["customer"]["address"], "12 Lê Lợi | Tầng 2\n45 Nguyễn Huệ")
+        self.assertEqual(aligned["customer"]["name"], "An\nBình")
+        self.assertEqual(aligned["query"], "0901000001\n0901000002")
+        alone = combine_phone_group(["0901000001"], {"0901000001": [wide]})
+        self.assertEqual(alone["customer"]["address"], "12 Lê Lợi\nTầng 2")
+        edges, edge_parsed = phone_groups_from_text("\n0901000008\n\n")
+        self.assertEqual(edge_parsed["raw"], 3)
+        self.assertEqual(edge_parsed["invalid"], 2)
+        self.assertEqual(len(edges), 3)
+        self.assertEqual(real_lookup_phones(edges[0]), [])
+        self.assertEqual(real_lookup_phones(edges[1]), ["0901000008"])
+        self.assertEqual(real_lookup_phones(edges[2]), [])
 
     def test_search_matches_any_field(self) -> None:
         row = {"name": "Nguyễn A", "phone": "0901234567", "address": "Hà Nội", "facebookUid": "1", "tiktokId": "ban"}
