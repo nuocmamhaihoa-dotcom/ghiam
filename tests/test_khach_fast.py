@@ -223,7 +223,7 @@ class PhoneTextTests(unittest.TestCase):
         phones, stats = phones_from_text(
             "Lan\t0901222333\t12000000\n0912345678 / 0987654321\n84901222333\n12345678\nkhông có số"
         )
-        self.assertEqual(phones, ["0901222333", "0912345678", "0987654321", "12345678"])
+        self.assertEqual(phones, ["0901222333", "0912345678", "0987654321", "0901222333", "12345678"])
         self.assertEqual(stats["duplicate"], 1)
         self.assertEqual(stats["invalid"], 1)
 

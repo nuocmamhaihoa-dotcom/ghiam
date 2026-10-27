@@ -40,6 +40,7 @@ from control_plane.customers import (
     lookup_phone_groups,
     phone_groups_from_text,
     public_customer,
+    real_lookup_phones,
     repair_customer_rows,
 )
 from control_plane.excel_import import (
@@ -1383,7 +1384,7 @@ def _decode_phone_groups(text: str) -> list[list[str]]:
 
 
 def _flatten_phone_groups(groups: list[list[str]]) -> list[str]:
-    return [phone for group in groups for phone in group]
+    return [phone for group in groups for phone in real_lookup_phones(group)]
 
 
 def _collect_lookup_groups(
@@ -1399,7 +1400,7 @@ def _collect_lookup_groups(
     if uploaded:
         file_groups, file_reports = phone_groups_from_files(uploaded, progress=progress)
         problems.extend(str(item.get("error") or "") for item in file_reports if item.get("error"))
-    seen = {db.phone_key(phone) or phone for group in pasted for phone in group}
+    seen = {db.phone_key(phone) or phone for group in pasted for phone in real_lookup_phones(group)}
     groups = list(pasted)
     kept = sum(len(group) for group in groups)
     truncated = bool(parsed.get("truncated"))

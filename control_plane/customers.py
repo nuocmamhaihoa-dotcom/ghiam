@@ -1169,8 +1169,23 @@ def _phones_on_lookup_line(line: str) -> list[str]:
     return found
 
 
+LOOKUP_LINE_MARK = "\x00"
+
+
+def is_lookup_line_mark(phone: str) -> bool:
+    return phone.startswith(LOOKUP_LINE_MARK)
+
+
+def real_lookup_phones(group: list[str]) -> list[str]:
+    """Số thật trong một dòng. Dòng trống hoặc không phải số chỉ mang nhãn, không đem đi tra."""
+    return [phone for phone in group if phone and not is_lookup_line_mark(phone)]
+
+
 def phone_groups_from_text(text: str, limit: int = MAX_LOOKUP) -> tuple[list[list[str]], dict[str, int]]:
-    """Mỗi dòng danh sách là một khách. Dòng có hai số thì hai số nằm cùng một nhóm."""
+    """Mỗi dòng ô dán là một dòng kết quả, kể cả dòng trống và dòng không phải số.
+
+    Dòng có hai số thì hai số nằm cùng một nhóm. Số lặp lại ở dòng sau vẫn giữ dòng đó.
+    """
     groups: list[list[str]] = []
     seen: set[str] = set()
     raw = 0
@@ -1179,30 +1194,26 @@ def phone_groups_from_text(text: str, limit: int = MAX_LOOKUP) -> tuple[list[lis
     truncated = False
     kept = 0
     for line in str(text or "").replace("\ufeff", "").splitlines():
-        stripped = collapse(line)
-        if not stripped or stripped.startswith("#"):
-            continue
+        if len(groups) >= limit:
+            truncated = True
+            break
         raw += 1
-        found = _phones_on_lookup_line(line)
+        stripped = collapse(line)
+        found = _phones_on_lookup_line(line) if stripped and not stripped.startswith("#") else []
         if not found:
             invalid += 1
+            groups.append([LOOKUP_LINE_MARK + stripped])
             continue
         group: list[str] = []
         for phone in found:
             key = db.phone_key(phone) or phone
             if key in seen:
                 duplicate += 1
-                continue
-            if kept >= limit:
-                truncated = True
-                break
-            seen.add(key)
+            else:
+                seen.add(key)
             group.append(phone)
             kept += 1
-        if group:
-            groups.append(group)
-        if truncated:
-            break
+        groups.append(group)
     return groups, {
         "raw": raw,
         "unique": kept,
@@ -1213,9 +1224,9 @@ def phone_groups_from_text(text: str, limit: int = MAX_LOOKUP) -> tuple[list[lis
 
 
 def phones_from_text(text: str, limit: int = MAX_LOOKUP) -> tuple[list[str], dict[str, int]]:
-    """Lấy số điện thoại theo thứ tự danh sách, bỏ số trùng và dòng không có số."""
+    """Lấy số điện thoại theo thứ tự từng dòng. Dòng không có số không thêm số."""
     groups, parsed = phone_groups_from_text(text, limit)
-    return [phone for group in groups for phone in group], parsed
+    return [phone for group in groups for phone in real_lookup_phones(group)], parsed
 
 
 def has_lookup_address(customer: dict[str, Any] | None) -> bool:
@@ -1424,67 +1435,67 @@ def _lookup_slots(phones: list[str], by_phone: dict[str, list[dict[str, Any]]]) 
     return slots
 
 
+def _dot_lookup_row(query: str) -> dict[str, Any]:
+    return {
+        "query": query,
+        "found": False,
+        "resultAddress": ".",
+        "customer": {
+            "id": "",
+            "name": "",
+            "phone": query,
+            "address": ".",
+            "adminAddress": "",
+            "orderContent": "",
+            "codAmount": "",
+            "facebookUid": "",
+            "tiktokId": "",
+            "createdAt": "",
+            "updatedAt": "",
+        },
+    }
+
+
 def combine_phone_group(phones: list[str], by_phone: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
     """Một dòng danh sách ra một dòng kết quả.
 
-    Số không có địa chỉ thì ô địa chỉ là dấu chấm. Hai số cùng địa chỉ thì
-    giữ một dòng. Địa chỉ khác nhau thì cùng một ô, mỗi địa chỉ một dòng,
-    số điện thoại xuống dòng cho khớp để chọn. Hàng mua, COD và tên của
-    từng số vẫn giữ trong ô.
+    Cả dòng không có địa chỉ thì ô địa chỉ là một dấu chấm. Hai số đều có
+    địa chỉ thì cùng một ô, mỗi địa chỉ một dòng, kể cả khi chữ giống nhau.
+    Một số không có địa chỉ thì chỉ giữ địa chỉ của số còn lại.
     """
-    slots = _lookup_slots(phones, by_phone)
-    grouped: dict[str, list[dict[str, str]]] = {}
-    street_order: list[str] = []
-    for slot in slots:
-        # Địa chỉ trống nhưng còn địa chỉ hành chính thì không gộp vào dòng dấu chấm.
-        street = slot["street"] if slot["street"] else "admin:" + slot["admin"]
-        bucket = grouped.get(street)
-        if bucket is None:
-            bucket = []
-            grouped[street] = bucket
-            street_order.append(street)
-        bucket.append(slot)
-    lines = [grouped[street] for street in street_order]
-    many = len(lines) > 1
-    found = any(slot["contact"] != "." for slot in slots)
+    labels = [phone[1:] for phone in phones if is_lookup_line_mark(phone)]
+    real = real_lookup_phones(phones)
+    if not real:
+        return _dot_lookup_row(labels[0] if labels else "")
+    slots = _lookup_slots(real, by_phone)
+    chosen = [slot for slot in slots if slot["contact"] != "."]
+    if not chosen:
+        return _dot_lookup_row(_phones_on_one_line(real))
 
-    def across(field: str, *, blank_dot: bool = False) -> str:
-        parts: list[str] = []
-        for group in lines:
-            text = " | ".join(_unique_lookup_texts([slot[field] for slot in group]))
-            if not text and blank_dot and many:
-                text = "."
-            parts.append(text)
-        return _stack_choice_lines(parts)
+    def down(field: str) -> str:
+        return _stack_choice_lines([slot[field] for slot in chosen])
 
-    query = _stack_choice_lines([_phones_on_one_line([slot["query"] for slot in group]) for group in lines])
-    stored_phone = _stack_choice_lines([_phones_on_one_line([slot["phone"] for slot in group]) for group in lines])
-    # Cột địa chỉ hiện đường nếu có. Không có đường nhưng còn địa chỉ hành chính thì hiện phần đó, không để dấu chấm.
-    address = _stack_choice_lines([group[0]["street"] or group[0]["admin"] for group in lines])
-    if not found:
-        address = "."
-    contact_lines: list[str] = []
-    for group in lines:
-        contacts = _unique_lookup_texts([slot["contact"] for slot in group if slot["contact"] != "."])
-        contact_lines.append("\n".join(contacts) if contacts else ".")
-    first = next((slot for slot in slots if slot["contact"] != "."), None)
+    query = down("query")
+    stored_phone = down("phone")
+    address = _stack_choice_lines([slot["street"] or slot["admin"] for slot in chosen])
+    first = chosen[0]
     customer = {
-        "id": first["id"] if first else "",
-        "name": across("name") if found else "",
+        "id": first["id"],
+        "name": down("name"),
         "phone": stored_phone or query,
         "address": address,
-        "adminAddress": across("admin", blank_dot=True) if found else "",
-        "orderContent": across("order") if found else "",
-        "codAmount": across("cod") if found else "",
-        "facebookUid": across("facebook") if found else "",
-        "tiktokId": across("tiktok") if found else "",
-        "createdAt": first["created"] if first else "",
-        "updatedAt": first["updated"] if first else "",
+        "adminAddress": down("admin"),
+        "orderContent": down("order"),
+        "codAmount": down("cod"),
+        "facebookUid": down("facebook"),
+        "tiktokId": down("tiktok"),
+        "createdAt": first["created"],
+        "updatedAt": first["updated"],
     }
     return {
         "query": query,
-        "found": found,
-        "resultAddress": _stack_choice_lines(contact_lines) or ".",
+        "found": True,
+        "resultAddress": down("contact") or ".",
         "customer": customer,
     }
 
@@ -1505,7 +1516,7 @@ def _grouped_from_batches(
     group_batch = max(1, batch)
     for start in range(0, len(groups), group_batch):
         chunk = groups[start : start + group_batch]
-        flat = [phone for group in chunk for phone in group]
+        flat = [phone for group in chunk for phone in real_lookup_phones(group)]
         by_phone: dict[str, list[dict[str, Any]]] = {}
         found = 0
         missing = 0

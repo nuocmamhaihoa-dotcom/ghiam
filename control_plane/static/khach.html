@@ -343,7 +343,7 @@
     <h2>Tra cứu hàng loạt</h2>
     <details class="guide">
       <summary>Cách tra cứu</summary>
-      <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. Một ô có hai số (0901… - 0912…) thì đó là một khách. File lấy số điện thoại Việt Nam ở mọi cột, cột SĐT lấy cả số lạ; không lấy UID Facebook. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Có địa chỉ hoặc địa chỉ hành chính thì tính là có kết quả. Chỉ khi cả hai đều trống, hoặc không có khách, ô địa chỉ mới là dấu chấm. Một dòng danh sách có hai số thì đó là một khách: hai địa chỉ đều có và khác nhau thì nằm cùng một ô, mỗi địa chỉ một dòng. Copy để số điện thoại bên trái và địa chỉ bên phải. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách. Nhân viên bị trừ hạn mức theo số mới trong ngày; số đã tra hôm nay không tính lại.</p>
+      <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. Một ô có hai số (0901… - 0912…) thì đó là một khách. File lấy số điện thoại Việt Nam ở mọi cột, cột SĐT lấy cả số lạ; không lấy UID Facebook. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Mỗi dòng trong ô dán ra đúng một dòng kết quả, kể cả dòng trống và dòng không phải số. Có địa chỉ hoặc địa chỉ hành chính thì trả địa chỉ. Cả dòng không có địa chỉ thì ô là dấu chấm. Một dòng có hai số mà cả hai đều có địa chỉ thì hai địa chỉ nằm cùng một ô, mỗi địa chỉ một dòng. Một trong hai số không có địa chỉ thì chỉ trả địa chỉ của số còn lại. Copy để số điện thoại bên trái và địa chỉ bên phải. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách. Nhân viên bị trừ hạn mức theo số mới trong ngày; số đã tra hôm nay không tính lại.</p>
     </details>
     <p id="quotaNote" class="note"></p>
     <div class="work">
@@ -2067,7 +2067,7 @@
     document.getElementById("lookupPeople").innerHTML = html;
     padSpaces(document.getElementById("lookupPeople"));
     document.getElementById("lookupActions").hidden = false;
-    var note = "Đã đối chiếu " + vnNum(queried) + " số. Có địa chỉ hoặc địa chỉ hành chính đều hiện. Chỉ khi không còn địa chỉ nào thì ô là dấu chấm. Một dòng có hai số mà địa chỉ khác nhau thì mỗi địa chỉ một dòng trong cùng ô.";
+    var note = "Đã đối chiếu " + vnNum(queried) + " số. Mỗi dòng đã dán là một dòng kết quả. Có địa chỉ thì trả địa chỉ. Dòng không có địa chỉ là dấu chấm. Dòng hai số mà một số không có địa chỉ thì chỉ giữ địa chỉ còn lại.";
     var totalRows = Math.max(items.length, shown.length + (stats.hidden || 0));
     if (totalRows > shown.length) {
       note += " Đang hiện " + vnNum(shown.length) + "/" + vnNum(totalRows) + " dòng. Tải Excel để xem hết — không phải gửi lại file.";

@@ -537,10 +537,13 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(body["stats"]["found"], 1)
         self.assertEqual(body["stats"]["missing"], 1)
         self.assertEqual(body["stats"]["invalid"], 1)
+        self.assertEqual(len(body["items"]), 3)
         self.assertEqual(body["items"][0]["customer"]["name"], "Lan")
         self.assertEqual(body["items"][1]["query"], "0901999888")
         self.assertEqual(body["items"][1]["customer"]["address"], ".")
         self.assertFalse(body["items"][1]["found"])
+        self.assertEqual(body["items"][2]["query"], "không phải số")
+        self.assertEqual(body["items"][2]["customer"]["address"], ".")
         by_country = self.client.post(
             "/v1/customers/lookup",
             headers=self.headers,
@@ -1266,16 +1269,16 @@ class CustomerApiTests(unittest.TestCase):
             "12 Lê Lợi | Phường Phú Hội\n45 Nguyễn Huệ | Phường Bến Nghé",
         )
         self.assertTrue(items[0]["found"])
-        self.assertEqual(items[1]["query"], "0901000003 - 0901000004")
-        self.assertEqual(items[1]["customer"]["address"], "88 Trần Phú")
-        self.assertEqual(items[1]["resultAddress"], "88 Trần Phú | Quận 1")
+        self.assertEqual(items[1]["query"], "0901000003\n0901000004")
+        self.assertEqual(items[1]["customer"]["address"], "88 Trần Phú\n88 Trần Phú")
+        self.assertEqual(items[1]["resultAddress"], "88 Trần Phú | Quận 1\n88 Trần Phú | Quận 1")
         self.assertEqual(items[2]["query"], "0901000005")
         self.assertEqual(items[2]["customer"]["address"], ".")
         self.assertEqual(items[2]["resultAddress"], ".")
         self.assertFalse(items[2]["found"])
-        self.assertEqual(items[3]["query"], "0901000006\n0988000111")
-        self.assertEqual(items[3]["customer"]["address"], "9 Bà Triệu\n.")
-        self.assertEqual(items[3]["resultAddress"], "9 Bà Triệu | Phường Trần Hưng Đạo\n.")
+        self.assertEqual(items[3]["query"], "0901000006")
+        self.assertEqual(items[3]["customer"]["address"], "9 Bà Triệu")
+        self.assertEqual(items[3]["resultAddress"], "9 Bà Triệu | Phường Trần Hưng Đạo")
         exported = self.client.post(
             "/v1/customers/lookup/export",
             headers=self.headers,
