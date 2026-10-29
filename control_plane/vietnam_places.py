@@ -929,6 +929,106 @@ def line_is_province_or_city_only(line: str) -> bool:
     return any(_is_known_province_or_city(fold_vietnamese(part)) for part in parts)
 
 
+_STREET_OR_HAMLET = re.compile(
+    r"(?:^| )(?:duong|pho|ngo|hem|ngach|kiet|so nha|thon|xom|ap|lang|"
+    r"khu pho|to dan pho|chung cu)(?: |$)"
+)
+SHORT_ADDRESS_CHARS = 20
+
+
+def segment_is_admin(segment: str) -> bool:
+    """Một mảnh chỉ là tỉnh, thành phố, quận, huyện, phường, xã hoặc thị trấn."""
+    line = " ".join(str(segment or "").split())
+    if not line:
+        return False
+    if line_is_province_or_city_only(line):
+        return True
+    folded = fold_vietnamese(line)
+    if _STREET_OR_HAMLET.search(f" {folded} "):
+        return False
+    if address_content_rank(line) >= 2:
+        return True
+    return folded in DISTRICT_NAMES or folded in PROVINCE_NAMES
+
+
+def _address_segments(line: str) -> list[str]:
+    broken = _GLUED_PROVINCE.sub("\n", line)
+    parts: list[str] = []
+    for chunk in re.split(r"[\n,;]+", broken):
+        piece = chunk.strip(" .,;:-")
+        if piece:
+            parts.append(piece)
+    return parts
+
+
+def line_has_street_detail(line: str) -> bool:
+    """Còn số nhà, đường, ngõ, hẻm hoặc thôn ấp. Phường 1, Quận 1 không tính."""
+    parts = _address_segments(line) or [" ".join(str(line or "").split())]
+    for part in parts:
+        if not part or segment_is_admin(part):
+            continue
+        if any(character.isdigit() for character in part):
+            return True
+        if address_content_rank(part) == 1:
+            return True
+        folded = fold_vietnamese(part)
+        if _STREET_OR_HAMLET.search(f" {folded} "):
+            return True
+    return False
+
+
+def _clean_admin_address_line(raw: str) -> tuple[str, bool]:
+    original = str(raw or "").strip()
+    line = " ".join(original.split())
+    if not line:
+        return "", False
+    segments = _address_segments(line)
+    if not segments:
+        return "", True
+    kept = [segment for segment in segments if not segment_is_admin(segment)]
+    if not kept:
+        return "", True
+    if len(kept) == len(segments):
+        if len(line) < SHORT_ADDRESS_CHARS and not line_has_street_detail(line):
+            return "", True
+        return line, False
+    joined = ", ".join(kept)
+    if len(joined) < SHORT_ADDRESS_CHARS and not line_has_street_detail(joined):
+        return "", True
+    return joined, True
+
+
+def strip_admin_or_short_address(value: str) -> str:
+    """Bỏ dòng địa chỉ chỉ còn phần hành chính, và dòng dưới 20 ký tự không phải số nhà hay đường.
+
+    Không đụng địa chỉ hành chính ở cột riêng. Số nhà, đường, ngõ, hẻm, thôn, ấp còn lại.
+    """
+    text = str(value or "")
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    if not normalized.strip():
+        return ""
+    kept: list[str] = []
+    changed = False
+    for raw in normalized.split("\n"):
+        if not raw.strip():
+            if raw:
+                changed = True
+            continue
+        cleaned, line_changed = _clean_admin_address_line(raw)
+        if line_changed:
+            changed = True
+        if not cleaned:
+            continue
+        key = cleaned.casefold()
+        if any(item.casefold() == key for item in kept):
+            changed = True
+            continue
+        kept.append(cleaned)
+    if not changed:
+        return text
+    return "\n".join(kept)
+
+
 def strip_province_only_address(value: str) -> str:
     """Bỏ những dòng địa chỉ chỉ có tỉnh hoặc thành phố. Dòng còn lại giữ nguyên."""
     text = str(value or "").replace("\r\n", "\n").replace("\r", "\n")

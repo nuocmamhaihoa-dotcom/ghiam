@@ -22,6 +22,7 @@ from control_plane.vietnam_places import (
     has_address_keyword,
     has_vietnam_place,
     iter_address_pieces,
+    strip_admin_or_short_address,
     strip_province_only_address,
 )
 
@@ -1830,6 +1831,69 @@ def clear_province_only_addresses(db_path: Any, batch: int = 20000) -> dict[str,
                 changed += conn.total_changes - before
             conn.commit()
             start += size
+    finally:
+        conn.close()
+    return {"seen": seen, "changed": changed, "cleared": cleared, "trimmed": trimmed}
+
+
+def clear_admin_or_short_addresses(
+    db_path: Any,
+    batch: int = 20000,
+    start_rowid: int = 0,
+    progress: Callable[[dict[str, int]], None] | None = None,
+) -> dict[str, int]:
+    """Xóa nội dung cột địa chỉ khi dòng chỉ là địa chỉ hành chính hoặc dưới 20 ký tự.
+
+    Không xóa khách. Không đụng địa chỉ hành chính, tên, số điện thoại, hàng mua,
+    COD hay thời điểm cập nhật. Số nhà, đường, ngõ, hẻm, thôn và ấp được giữ.
+    """
+    conn = db.connect(Path(db_path))
+    seen = 0
+    changed = 0
+    cleared = 0
+    trimmed = 0
+    try:
+        conn.execute("PRAGMA busy_timeout=60000;")
+        top = int(conn.execute("SELECT COALESCE(MAX(rowid), 0) FROM customers").fetchone()[0] or 0)
+        start = max(0, int(start_rowid))
+        size = max(1000, int(batch))
+        while start < top:
+            rows = conn.execute(
+                "SELECT id, address FROM customers WHERE rowid > ? AND rowid <= ? AND address != ''",
+                (start, start + size),
+            ).fetchall()
+            updates: list[tuple[str, str, str]] = []
+            for row in rows:
+                seen += 1
+                current = str(row["address"] or "")
+                stripped = strip_admin_or_short_address(current)
+                if stripped == current:
+                    continue
+                updates.append((stripped, str(row["id"]), current))
+                if stripped:
+                    trimmed += 1
+                else:
+                    cleared += 1
+            if updates:
+                before = conn.total_changes
+                conn.executemany(
+                    "UPDATE customers SET address=? WHERE id=? AND address=?",
+                    updates,
+                )
+                changed += conn.total_changes - before
+            conn.commit()
+            start += size
+            if progress is not None:
+                progress(
+                    {
+                        "rowid": start,
+                        "top": top,
+                        "seen": seen,
+                        "changed": changed,
+                        "cleared": cleared,
+                        "trimmed": trimmed,
+                    }
+                )
     finally:
         conn.close()
     return {"seen": seen, "changed": changed, "cleared": cleared, "trimmed": trimmed}
