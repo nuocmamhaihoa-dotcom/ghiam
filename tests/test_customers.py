@@ -35,6 +35,8 @@ from control_plane.customers import (
     dedupe_exact_address,
     dedupe_exact_addresses,
     rewrite_stored_addresses,
+    clear_admin_or_short_addresses,
+    strip_admin_or_short_address,
     strip_province_only_address,
 )
 from control_plane.excel_import import (
@@ -1577,6 +1579,107 @@ class ProvinceOnlyAddressTests(unittest.TestCase):
             self.assertEqual(rows["tinh"]["admin_address"], "Thừa Thiên Huế")
             self.assertEqual(rows["tinh"]["name"], "Lan")
             self.assertEqual(rows["duong"]["address"], "12 Lê Lợi")
+
+
+class AdminOrShortAddressTests(unittest.TestCase):
+    def test_admin_only_and_short_lines_are_removed(self) -> None:
+        self.assertEqual(strip_admin_or_short_address("Hà Nội"), "")
+        self.assertEqual(strip_admin_or_short_address("Thành phố Hồ Chí Minh"), "")
+        self.assertEqual(strip_admin_or_short_address("Phường Phú Hội"), "")
+        self.assertEqual(strip_admin_or_short_address("Phường 1"), "")
+        self.assertEqual(strip_admin_or_short_address("Quận 1"), "")
+        self.assertEqual(strip_admin_or_short_address("Xã An Bình, Huyện Long Hồ, Tỉnh Vĩnh Long"), "")
+        self.assertEqual(strip_admin_or_short_address("Ba Đình"), "")
+        self.assertEqual(strip_admin_or_short_address("Hải Dương"), "")
+        self.assertEqual(strip_admin_or_short_address("Lạng Sơn"), "")
+        self.assertEqual(strip_admin_or_short_address("VALUE"), "")
+        self.assertEqual(strip_admin_or_short_address("."), "")
+        self.assertEqual(strip_admin_or_short_address("xã An Bình\nHà Nội"), "")
+
+    def test_house_street_and_hamlet_stay(self) -> None:
+        self.assertEqual(strip_admin_or_short_address("12 Lê Lợi"), "12 Lê Lợi")
+        self.assertEqual(strip_admin_or_short_address("Đường Lê Lợi"), "Đường Lê Lợi")
+        self.assertEqual(strip_admin_or_short_address("Thôn Trung"), "Thôn Trung")
+        self.assertEqual(strip_admin_or_short_address("Ấp Bình Dương"), "Ấp Bình Dương")
+        self.assertEqual(strip_admin_or_short_address("Làng Hoa"), "Làng Hoa")
+        self.assertEqual(strip_admin_or_short_address("12/5 Lê Lợi, Phường 1"), "12/5 Lê Lợi")
+        self.assertEqual(
+            strip_admin_or_short_address("12 Lê Lợi, Phường Phú Hội, Hà Nội"),
+            "12 Lê Lợi",
+        )
+        self.assertEqual(strip_admin_or_short_address("xã An Bình\n12 Lê Lợi"), "12 Lê Lợi")
+        self.assertEqual(strip_admin_or_short_address("VALUE\n12 Lê Lợi"), "12 Lê Lợi")
+        long_street = "Số 15 đường Nguyễn Huệ, phường Bến Nghé, quận 1"
+        self.assertEqual(strip_admin_or_short_address(long_street), "Số 15 đường Nguyễn Huệ")
+        self.assertEqual(strip_admin_or_short_address(long_street), strip_admin_or_short_address("Số 15 đường Nguyễn Huệ"))
+
+    def test_clear_updates_only_the_address_column(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="khach-hanh-chinh-") as folder:
+            path = Path(folder) / "server.db"
+            db.init_db(path)
+            now = "2026-01-01T00:00:00+00:00"
+            db.replace_customers(
+                path,
+                [
+                    {
+                        "id": "hanh",
+                        "name": "Lan",
+                        "phone": "0901222333",
+                        "address": "Phường Phú Hội, Quận 1",
+                        "adminAddress": "Thừa Thiên Huế",
+                        "orderContent": "Nước mắm",
+                        "codAmount": "150000",
+                        "createdAt": now,
+                        "updatedAt": now,
+                    },
+                    {
+                        "id": "duong",
+                        "name": "Minh",
+                        "phone": "0901444555",
+                        "address": "12 Lê Lợi, Phường 1",
+                        "adminAddress": "Đà Nẵng",
+                        "orderContent": "Áo",
+                        "codAmount": "90000",
+                        "createdAt": now,
+                        "updatedAt": now,
+                    },
+                    {
+                        "id": "ngan",
+                        "name": "Hoa",
+                        "phone": "0901666777",
+                        "address": "VALUE",
+                        "adminAddress": "Huế",
+                        "createdAt": now,
+                        "updatedAt": now,
+                    },
+                ],
+                [],
+            )
+            stats = clear_admin_or_short_addresses(path, batch=10)
+            self.assertEqual(stats["cleared"], 2)
+            self.assertEqual(stats["trimmed"], 1)
+            again = clear_admin_or_short_addresses(path, batch=10)
+            self.assertEqual(again["changed"], 0)
+            with db.session(path) as conn:
+                rows = {
+                    row["id"]: row
+                    for row in conn.execute(
+                        "SELECT id, name, phone, address, admin_address, order_content, cod_amount, updated_at FROM customers"
+                    )
+                }
+            self.assertEqual(rows["hanh"]["address"], "")
+            self.assertEqual(rows["hanh"]["admin_address"], "Thừa Thiên Huế")
+            self.assertEqual(rows["hanh"]["name"], "Lan")
+            self.assertEqual(rows["hanh"]["phone"], "0901222333")
+            self.assertEqual(rows["hanh"]["order_content"], "Nước mắm")
+            self.assertEqual(rows["hanh"]["cod_amount"], "150000")
+            self.assertEqual(rows["hanh"]["updated_at"], now)
+            self.assertEqual(rows["duong"]["address"], "12 Lê Lợi")
+            self.assertEqual(rows["duong"]["admin_address"], "Đà Nẵng")
+            self.assertEqual(rows["duong"]["updated_at"], now)
+            self.assertEqual(rows["ngan"]["address"], "")
+            self.assertEqual(rows["ngan"]["admin_address"], "Huế")
+            self.assertEqual(rows["ngan"]["name"], "Hoa")
             self.assertEqual(rows["duong"]["admin_address"], "Đà Nẵng")
 
 
