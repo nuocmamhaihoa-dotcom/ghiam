@@ -1,0 +1,15 @@
+[Unit]
+Description=coderd local model
+After=network.target
+
+[Service]
+Type=simple
+User=coder
+Environment=HOME=/opt/coderd/var/home
+WorkingDirectory=/opt/coderd/var/home
+ExecStart=/bin/sh /opt/coderd/bin/llamafile -m /opt/coderd/models/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf --server --host 127.0.0.1 --port 11434 -c 4096 -t 2 --parallel 1 --alias coderd
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

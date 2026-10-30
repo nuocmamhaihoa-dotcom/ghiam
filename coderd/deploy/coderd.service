@@ -1,0 +1,16 @@
+[Unit]
+Description=coderd
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%CODERD_USER%
+WorkingDirectory=%CODERD_PREFIX%
+EnvironmentFile=%CODERD_PREFIX%/coderd.env
+ExecStart=%CODERD_PREFIX%/.venv/bin/python -m app
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

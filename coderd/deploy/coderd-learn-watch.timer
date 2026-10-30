@@ -1,0 +1,11 @@
+[Unit]
+Description=coderd watch the ten hour study every two minutes
+
+[Timer]
+OnBootSec=30
+OnUnitActiveSec=2min
+AccuracySec=15
+Unit=coderd-learn-watch.service
+
+[Install]
+WantedBy=timers.target

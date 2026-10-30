@@ -1,0 +1,12 @@
+[Unit]
+Description=coderd continuous study
+After=coderd.service coderd-model.service
+
+[Service]
+Type=oneshot
+TimeoutStartSec=420
+User=coder
+WorkingDirectory=/opt/coderd
+Environment=HOME=/opt/coderd/var/home
+EnvironmentFile=/opt/coderd/worker.env
+ExecStart=/opt/coderd/.venv/bin/python -m worker.study
