@@ -100,6 +100,15 @@ class ImportAddressStore:
         return int(self.conn.execute("SELECT COUNT(*) FROM src").fetchone()[0] or 0)
 
 
+def _mapping_cache_key(filename: str) -> str:
+    name = Path(filename).name.casefold()
+    if name.startswith("delivery_export_"):
+        return "delivery_export"
+    if "tổng hợp" in name or "tong hop" in name:
+        return "tong_hop"
+    return name
+
+
 def collect_import_addresses(
     data_dir: Path,
     store: ImportAddressStore,
@@ -111,10 +120,25 @@ def collect_import_addresses(
     kept = 0
     skipped = 0
     errors = 0
+    dupes = 0
+    seen_files: set[tuple[str, int]] = set()
+    mappings: dict[str, dict[str, Any]] = {}
     for filename, path in iter_import_sources(Path(data_dir), include_uploads=include_uploads):
+        fingerprint = (Path(filename).name.casefold(), path.stat().st_size)
+        if fingerprint in seen_files:
+            dupes += 1
+            continue
+        seen_files.add(fingerprint)
+        if store.count() >= 1_000_000 and _mapping_cache_key(filename) == "tong_hop":
+            dupes += 1
+            continue
         files += 1
         try:
-            mapping = mapping_for_file({}, filename, path)
+            cache_key = _mapping_cache_key(filename)
+            mapping = mappings.get(cache_key)
+            if mapping is None:
+                mapping = mapping_for_file({}, filename, path)
+                mappings[cache_key] = mapping
             _width, mapped = iter_mapped_file(filename, path, mapping, None)
             dirty = 0
             for row in mapped:
@@ -134,11 +158,37 @@ def collect_import_addresses(
         except Exception:
             errors += 1
         if progress is not None and files % 20 == 0:
-            progress({"files": files, "rows": rows, "kept": kept, "skipped": skipped, "errors": errors})
+            progress(
+                {
+                    "files": files,
+                    "rows": rows,
+                    "kept": kept,
+                    "skipped": skipped,
+                    "errors": errors,
+                    "dupes": dupes,
+                }
+            )
     store.commit()
     if progress is not None:
-        progress({"files": files, "rows": rows, "kept": kept, "skipped": skipped, "errors": errors})
-    return {"files": files, "rows": rows, "kept": kept, "skipped": skipped, "errors": errors, "phones": store.count()}
+        progress(
+            {
+                "files": files,
+                "rows": rows,
+                "kept": kept,
+                "skipped": skipped,
+                "errors": errors,
+                "dupes": dupes,
+            }
+        )
+    return {
+        "files": files,
+        "rows": rows,
+        "kept": kept,
+        "skipped": skipped,
+        "errors": errors,
+        "dupes": dupes,
+        "phones": store.count(),
+    }
 
 
 def restore_addresses_from_imports(
@@ -149,7 +199,7 @@ def restore_addresses_from_imports(
 ) -> dict[str, Any]:
     store = ImportAddressStore(store_path)
     try:
-        collect_stats = collect_import_addresses(data_dir, store, progress=progress)
+        collect_stats = collect_import_addresses(data_dir, store, progress=progress, include_uploads=False)
         apply_stats = restore_stored_addresses(db_path, store, progress=progress)
     finally:
         store.close()
