@@ -19,10 +19,14 @@ from control_plane.vietnam_places import cell_is_short_admin_only
 IMPORT_SUFFIXES = {".xlsx", ".xlsm", ".xls", ".csv", ".tsv", ".txt"}
 
 
-def iter_import_sources(data_dir: Path, include_uploads: bool = False) -> Iterator[tuple[str, Path]]:
+def iter_import_sources(
+    data_dir: Path,
+    include_uploads: bool = False,
+    include_imports: bool = True,
+) -> Iterator[tuple[str, Path]]:
     imports = data_dir / "imports"
     uploads = data_dir / "khach-uploads"
-    if imports.is_dir():
+    if include_imports and imports.is_dir():
         for path in sorted(imports.rglob("*")):
             if path.is_file() and path.suffix.lower() in IMPORT_SUFFIXES:
                 yield path.name, path
@@ -114,6 +118,7 @@ def collect_import_addresses(
     store: ImportAddressStore,
     progress: Callable[[dict[str, int]], None] | None = None,
     include_uploads: bool = False,
+    include_imports: bool = True,
 ) -> dict[str, int]:
     files = 0
     rows = 0
@@ -124,7 +129,11 @@ def collect_import_addresses(
     seen_files: set[tuple[str, int]] = set()
     mappings: dict[str, dict[str, Any]] = {}
     skip_tong_hop = store.count() >= 1_000_000
-    for filename, path in iter_import_sources(Path(data_dir), include_uploads=include_uploads):
+    for filename, path in iter_import_sources(
+        Path(data_dir),
+        include_uploads=include_uploads,
+        include_imports=include_imports,
+    ):
         fingerprint = (Path(filename).name.casefold(), path.stat().st_size)
         if fingerprint in seen_files:
             dupes += 1
