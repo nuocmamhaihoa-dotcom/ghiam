@@ -56,6 +56,9 @@ class ImportAddressStore:
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS src(phone_key TEXT PRIMARY KEY, address TEXT NOT NULL)"
         )
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS src_id(id TEXT PRIMARY KEY, address TEXT NOT NULL)"
+        )
         self.conn.commit()
 
     def close(self) -> None:
@@ -67,7 +70,7 @@ class ImportAddressStore:
         row = self.conn.execute("SELECT address FROM src WHERE phone_key=?", (key,)).fetchone()
         return str(row[0]) if row else default
 
-    def get_many(self, keys: list[str]) -> dict[str, str]:
+    def _get_many(self, table: str, column: str, keys: list[str]) -> dict[str, str]:
         wanted = [key for key in keys if key]
         if not wanted:
             return {}
@@ -76,32 +79,68 @@ class ImportAddressStore:
             chunk = wanted[index : index + 400]
             marks = ",".join("?" * len(chunk))
             rows = self.conn.execute(
-                f"SELECT phone_key, address FROM src WHERE phone_key IN ({marks})",
+                f"SELECT {column}, address FROM {table} WHERE {column} IN ({marks})",
                 chunk,
             )
             for key, address in rows:
                 found[str(key)] = str(address or "")
         return found
 
-    def put(self, key: str, address: str) -> bool:
+    def get_many(self, keys: list[str]) -> dict[str, str]:
+        return self._get_many("src", "phone_key", keys)
+
+    def get_id(self, customer_id: str, default: str = "") -> str:
+        if not customer_id:
+            return default
+        row = self.conn.execute("SELECT address FROM src_id WHERE id=?", (customer_id,)).fetchone()
+        return str(row[0]) if row else default
+
+    def get_many_ids(self, keys: list[str]) -> dict[str, str]:
+        return self._get_many("src_id", "id", keys)
+
+    def _put_row(self, table: str, column: str, key: str, address: str, current: str) -> bool:
         if not key or not address or cell_is_short_admin_only(address):
             return False
-        current = self.get(key)
         chosen = prefer_import_address(current, address)
         if not chosen or chosen == current:
             return False
         self.conn.execute(
-            "INSERT INTO src(phone_key, address) VALUES(?, ?) "
-            "ON CONFLICT(phone_key) DO UPDATE SET address=excluded.address",
+            f"INSERT INTO {table}({column}, address) VALUES(?, ?) "
+            f"ON CONFLICT({column}) DO UPDATE SET address=excluded.address",
             (key, chosen),
         )
         return True
+
+    def put(self, key: str, address: str) -> bool:
+        return self._put_row("src", "phone_key", key, address, self.get(key))
+
+    def put_id(self, customer_id: str, address: str) -> bool:
+        return self._put_row("src_id", "id", customer_id, address, self.get_id(customer_id))
+
+    def as_id_sources(self) -> "IdAddressSources":
+        return IdAddressSources(self)
 
     def commit(self) -> None:
         self.conn.commit()
 
     def count(self) -> int:
         return int(self.conn.execute("SELECT COUNT(*) FROM src").fetchone()[0] or 0)
+
+    def count_ids(self) -> int:
+        return int(self.conn.execute("SELECT COUNT(*) FROM src_id").fetchone()[0] or 0)
+
+
+class IdAddressSources:
+    """Khớp địa chỉ gốc theo id hàng khách, không theo số điện thoại."""
+
+    def __init__(self, store: ImportAddressStore) -> None:
+        self.store = store
+
+    def get(self, key: str, default: str = "") -> str:
+        return self.store.get_id(key, default)
+
+    def get_many(self, keys: list[str]) -> dict[str, str]:
+        return self.store.get_many_ids(keys)
 
 
 def _mapping_cache_key(filename: str) -> str:
@@ -221,9 +260,9 @@ def collect_from_customer_db(
             str(row[1]) == "phone_key" for row in conn.execute("PRAGMA table_info(customers)")
         )
         select = (
-            "SELECT phone, phone_key, address FROM customers WHERE rowid > ? AND rowid <= ? AND address != ''"
+            "SELECT id, phone, phone_key, address FROM customers WHERE rowid > ? AND rowid <= ? AND address != ''"
             if has_phone_key
-            else "SELECT phone, address FROM customers WHERE rowid > ? AND rowid <= ? AND address != ''"
+            else "SELECT id, phone, address FROM customers WHERE rowid > ? AND rowid <= ? AND address != ''"
         )
         while start < top:
             rows = conn.execute(select, (start, start + size)).fetchall()
@@ -231,11 +270,14 @@ def collect_from_customer_db(
             for row in rows:
                 seen += 1
                 address = str(row["address"] or "").strip()
+                customer_id = str(row["id"] or "")
                 if has_phone_key:
                     key = str(row["phone_key"] or "") or db.phone_key(row["phone"])
                 else:
                     key = db.phone_key(row["phone"])
-                if store.put(key, address):
+                added = store.put(key, address)
+                added_id = store.put_id(customer_id, address)
+                if added or added_id:
                     kept += 1
                     dirty += 1
                 else:
@@ -248,7 +290,13 @@ def collect_from_customer_db(
     finally:
         conn.close()
     store.commit()
-    return {"seen": seen, "kept": kept, "skipped": skipped, "phones": store.count()}
+    return {
+        "seen": seen,
+        "kept": kept,
+        "skipped": skipped,
+        "phones": store.count(),
+        "ids": store.count_ids(),
+    }
 
 
 def restore_addresses_from_imports(

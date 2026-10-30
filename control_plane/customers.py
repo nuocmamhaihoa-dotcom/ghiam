@@ -1900,18 +1900,37 @@ def clear_admin_or_short_addresses(
     return {"seen": seen, "changed": changed, "cleared": cleared, "trimmed": trimmed}
 
 
+def _fold_tokens(value: str) -> list[str]:
+    folded = fold_vietnamese(" ".join(str(value or "").split()))
+    return [token for token in folded.split() if token]
+
+
 def address_is_remainder(current: str, incoming: str) -> bool:
-    """Ô hiện tại chỉ còn phần đã cắt của địa chỉ gốc."""
+    """Ô hiện tại chỉ còn phần đã cắt của địa chỉ gốc.
+
+    Khớp dòng cũ theo chữ (không phân biệt hoa thường). Nếu dấu, dấu câu
+    hoặc thứ tự từ lệch thì còn khớp khi mọi token đã gộp của ô hiện tại
+    đều nằm trong bản gốc và bản gốc không ngắn hơn.
+    """
     source = " ".join(str(incoming or "").split())
     if not source:
         return False
-    folded = _line_key(source)
     leftover = split_address_lines(current)
     if not leftover:
         return True
-    return all(_line_key(line) in folded for line in leftover) and len(source) >= len(
-        " ".join(str(current or "").split())
-    )
+    current_text = " ".join(str(current or "").split())
+    if len(source) < len(current_text):
+        return False
+    folded = _line_key(source)
+    if all(_line_key(line) in folded for line in leftover):
+        return True
+    incoming_tokens = set(_fold_tokens(source))
+    current_tokens = _fold_tokens(current_text)
+    if not incoming_tokens:
+        return False
+    if not current_tokens:
+        return True
+    return all(token in incoming_tokens for token in current_tokens)
 
 
 def should_restore_address(current: str, incoming: str) -> bool:
@@ -1995,15 +2014,18 @@ def restore_stored_addresses(
     batch: int = 20000,
     start_rowid: int = 0,
     progress: Callable[[dict[str, int]], None] | None = None,
+    key_field: str = "phone_key",
 ) -> dict[str, int]:
-    """Ghi lại cột địa chỉ từ bản gốc theo khóa số điện thoại.
+    """Ghi lại cột địa chỉ từ bản gốc theo khóa số điện thoại hoặc id hàng.
 
-    sources.get(phone_key) trả địa chỉ gốc. Không đụng tên, số điện thoại,
+    sources.get(key) trả địa chỉ gốc. Không đụng tên, số điện thoại,
     địa chỉ hành chính, hàng mua, COD, thời điểm cập nhật.
     """
+    if key_field not in ("phone_key", "id"):
+        raise ValueError("key_field phải là phone_key hoặc id")
     lookup = sources.get if hasattr(sources, "get") else None
     if lookup is None:
-        raise TypeError("sources phải có get(phone_key)")
+        raise TypeError("sources phải có get(key)")
     conn = db.connect(Path(db_path))
     seen = 0
     changed = 0
@@ -2014,12 +2036,17 @@ def restore_stored_addresses(
         top = int(conn.execute("SELECT COALESCE(MAX(rowid), 0) FROM customers").fetchone()[0] or 0)
         start = max(0, int(start_rowid))
         size = max(1000, int(batch))
+        select = (
+            "SELECT id, phone_key, address FROM customers WHERE rowid > ? AND rowid <= ?"
+            if key_field == "phone_key"
+            else "SELECT id, address FROM customers WHERE rowid > ? AND rowid <= ?"
+        )
         while start < top:
-            rows = conn.execute(
-                "SELECT id, phone_key, address FROM customers WHERE rowid > ? AND rowid <= ?",
-                (start, start + size),
-            ).fetchall()
-            keys = [str(row["phone_key"] or "") for row in rows if row["phone_key"]]
+            rows = conn.execute(select, (start, start + size)).fetchall()
+            if key_field == "phone_key":
+                keys = [str(row["phone_key"] or "") for row in rows if row["phone_key"]]
+            else:
+                keys = [str(row["id"] or "") for row in rows if row["id"]]
             found: dict[str, str] = {}
             fetch_many = getattr(sources, "get_many", None)
             if fetch_many is not None:
@@ -2032,7 +2059,7 @@ def restore_stored_addresses(
             updates: list[tuple[str, str, str]] = []
             for row in rows:
                 seen += 1
-                key = str(row["phone_key"] or "")
+                key = str(row[key_field] or "") if key_field == "phone_key" else str(row["id"] or "")
                 incoming = found.get(key) or ""
                 if not incoming:
                     continue
@@ -2067,6 +2094,111 @@ def restore_stored_addresses(
     finally:
         conn.close()
     return {"seen": seen, "changed": changed, "filled": filled, "expanded": expanded}
+
+
+def restore_stored_addresses_paired(
+    db_path: Any,
+    phone_sources: Any,
+    id_sources: Any,
+    batch: int = 20000,
+    start_rowid: int = 0,
+    progress: Callable[[dict[str, int]], None] | None = None,
+) -> dict[str, int]:
+    """Khôi phục một lần: lấy bản gốc theo id hàng rồi theo số điện thoại.
+
+    Không đụng tên, số điện thoại, địa chỉ hành chính, hàng mua, COD,
+    thời điểm cập nhật.
+    """
+    phone_get = getattr(phone_sources, "get", None)
+    id_get = getattr(id_sources, "get", None)
+    if phone_get is None or id_get is None:
+        raise TypeError("sources phải có get(key)")
+    phone_many = getattr(phone_sources, "get_many", None)
+    id_many = getattr(id_sources, "get_many", None)
+    conn = db.connect(Path(db_path))
+    seen = 0
+    changed = 0
+    filled = 0
+    expanded = 0
+    from_id = 0
+    from_phone = 0
+    try:
+        conn.execute("PRAGMA busy_timeout=60000;")
+        top = int(conn.execute("SELECT COALESCE(MAX(rowid), 0) FROM customers").fetchone()[0] or 0)
+        start = max(0, int(start_rowid))
+        size = max(1000, int(batch))
+        while start < top:
+            rows = conn.execute(
+                "SELECT id, phone_key, address FROM customers WHERE rowid > ? AND rowid <= ?",
+                (start, start + size),
+            ).fetchall()
+            ids = [str(row["id"] or "") for row in rows if row["id"]]
+            keys = [str(row["phone_key"] or "") for row in rows if row["phone_key"]]
+            found_ids = id_many(ids) if id_many is not None else {key: id_get(key) or "" for key in ids}
+            found_phones = (
+                phone_many(keys) if phone_many is not None else {key: phone_get(key) or "" for key in keys}
+            )
+            updates: list[tuple[str, str, str]] = []
+            for row in rows:
+                seen += 1
+                current = str(row["address"] or "")
+                incoming_id = found_ids.get(str(row["id"] or "")) or ""
+                incoming_phone = found_phones.get(str(row["phone_key"] or "")) or ""
+                chosen = current
+                used_id = False
+                used_phone = False
+                if should_restore_address(current, incoming_id):
+                    chosen = prefer_import_address(chosen, incoming_id)
+                    used_id = chosen != current
+                if should_restore_address(current, incoming_phone) or should_restore_address(
+                    chosen, incoming_phone
+                ):
+                    before = chosen
+                    chosen = prefer_import_address(chosen, incoming_phone)
+                    used_phone = chosen != before
+                if chosen == current or not should_restore_address(current, chosen):
+                    continue
+                updates.append((chosen, str(row["id"]), current))
+                if current.strip():
+                    expanded += 1
+                else:
+                    filled += 1
+                if used_id:
+                    from_id += 1
+                if used_phone:
+                    from_phone += 1
+            if updates:
+                before = conn.total_changes
+                conn.executemany(
+                    "UPDATE customers SET address=? WHERE id=? AND address=?",
+                    updates,
+                )
+                changed += conn.total_changes - before
+            conn.commit()
+            start += size
+            if progress is not None:
+                progress(
+                    {
+                        "rowid": start,
+                        "top": top,
+                        "seen": seen,
+                        "changed": changed,
+                        "filled": filled,
+                        "expanded": expanded,
+                        "from_id": from_id,
+                        "from_phone": from_phone,
+                    }
+                )
+    finally:
+        conn.close()
+    return {
+        "seen": seen,
+        "changed": changed,
+        "filled": filled,
+        "expanded": expanded,
+        "from_id": from_id,
+        "from_phone": from_phone,
+    }
 
 
 def dedupe_exact_addresses(db_path: Any, batch: int = 50000) -> dict[str, int]:

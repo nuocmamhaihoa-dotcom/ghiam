@@ -39,6 +39,7 @@ from control_plane.customers import (
     clear_short_admin_only_addresses,
     prefer_import_address,
     restore_stored_addresses,
+    restore_stored_addresses_paired,
     should_restore_address,
     strip_admin_or_short_address,
     strip_province_only_address,
@@ -1714,6 +1715,87 @@ class ShortAdminOnlyAddressTests(unittest.TestCase):
         self.assertEqual(prefer_import_address("12 Lê Lợi", full), full)
         self.assertEqual(prefer_import_address(full, "12 Lê Lợi"), full)
 
+    def test_restore_matches_folded_tokens_and_customer_id(self) -> None:
+        full = "12 Lê Lợi, Phường Phú Hội, Hà Nội"
+        self.assertTrue(should_restore_address("12, Lê Lợi", full))
+        self.assertTrue(should_restore_address("12 Le Loi", full))
+        self.assertTrue(should_restore_address("Hà Nội, 12 Lê Lợi", full))
+        self.assertFalse(should_restore_address("99 Trần Phú, Đà Nẵng", full))
+        with tempfile.TemporaryDirectory(prefix="khach-id-src-") as folder:
+            path = Path(folder) / "server.db"
+            db.init_db(path)
+            now = "2026-01-01T00:00:00+00:00"
+            db.replace_customers(
+                path,
+                [
+                    {
+                        "id": "cat",
+                        "name": "Lan",
+                        "phone": "0901222333",
+                        "address": "12, Le Loi",
+                        "adminAddress": "Huế",
+                        "createdAt": now,
+                        "updatedAt": now,
+                    }
+                ],
+                [],
+            )
+            stats = restore_stored_addresses(path, {"cat": full}, batch=10, key_field="id")
+            self.assertEqual(stats["expanded"], 1)
+            with db.session(path) as conn:
+                row = conn.execute("SELECT address, admin_address, updated_at FROM customers WHERE id='cat'").fetchone()
+            self.assertEqual(row["address"], full)
+            self.assertEqual(row["admin_address"], "Huế")
+            self.assertEqual(row["updated_at"], now)
+        with tempfile.TemporaryDirectory(prefix="khach-pair-src-") as folder:
+            path = Path(folder) / "server.db"
+            db.init_db(path)
+            now = "2026-01-01T00:00:00+00:00"
+            db.replace_customers(
+                path,
+                [
+                    {
+                        "id": "cat",
+                        "name": "Lan",
+                        "phone": "0901222333",
+                        "address": "12, Le Loi",
+                        "adminAddress": "Huế",
+                        "createdAt": now,
+                        "updatedAt": now,
+                    },
+                    {
+                        "id": "trong",
+                        "name": "Minh",
+                        "phone": "0901444555",
+                        "address": "",
+                        "adminAddress": "Đà Nẵng",
+                        "createdAt": now,
+                        "updatedAt": now,
+                    },
+                ],
+                [],
+            )
+            phone_full = "Số 8 ngõ 4 đường Lê Lợi, phường Bến Nghé"
+            stats = restore_stored_addresses_paired(
+                path,
+                {db.phone_key("0901444555"): phone_full},
+                {"cat": full},
+                batch=10,
+            )
+            self.assertEqual(stats["expanded"], 1)
+            self.assertEqual(stats["filled"], 1)
+            self.assertEqual(stats["from_id"], 1)
+            self.assertEqual(stats["from_phone"], 1)
+            with db.session(path) as conn:
+                rows = {
+                    row["id"]: row
+                    for row in conn.execute("SELECT id, address, admin_address, updated_at FROM customers")
+                }
+            self.assertEqual(rows["cat"]["address"], full)
+            self.assertEqual(rows["trong"]["address"], phone_full)
+            self.assertEqual(rows["cat"]["updated_at"], now)
+            self.assertEqual(rows["trong"]["admin_address"], "Đà Nẵng")
+
     def test_clear_and_restore_keep_other_columns(self) -> None:
         with tempfile.TemporaryDirectory(prefix="khach-khoi-phuc-") as folder:
             path = Path(folder) / "server.db"
@@ -1855,6 +1937,8 @@ class ShortAdminOnlyAddressTests(unittest.TestCase):
                 self.assertGreaterEqual(stats["kept"], 1)
                 self.assertEqual(store.get(db.phone_key("0901222333")), full)
                 self.assertEqual(store.get(db.phone_key("0901444555")), "")
+                self.assertEqual(store.get_id("mot"), full)
+                self.assertEqual(store.get_id("hai"), "")
             finally:
                 store.close()
 
