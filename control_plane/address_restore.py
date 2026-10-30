@@ -123,13 +123,14 @@ def collect_import_addresses(
     dupes = 0
     seen_files: set[tuple[str, int]] = set()
     mappings: dict[str, dict[str, Any]] = {}
+    skip_tong_hop = store.count() >= 1_000_000
     for filename, path in iter_import_sources(Path(data_dir), include_uploads=include_uploads):
         fingerprint = (Path(filename).name.casefold(), path.stat().st_size)
         if fingerprint in seen_files:
             dupes += 1
             continue
         seen_files.add(fingerprint)
-        if store.count() >= 1_000_000 and _mapping_cache_key(filename) == "tong_hop":
+        if skip_tong_hop and _mapping_cache_key(filename) == "tong_hop":
             dupes += 1
             continue
         files += 1
@@ -189,6 +190,56 @@ def collect_import_addresses(
         "dupes": dupes,
         "phones": store.count(),
     }
+
+
+def collect_from_customer_db(
+    source_db: Path,
+    store: ImportAddressStore,
+    progress: Callable[[dict[str, int]], None] | None = None,
+) -> dict[str, int]:
+    """Lấy địa chỉ gốc từ bản sao kho cũ. Chỉ thêm khi dài hơn bản đang có."""
+    conn = sqlite3.connect(f"file:{Path(source_db)}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    seen = 0
+    kept = 0
+    skipped = 0
+    try:
+        conn.execute("PRAGMA busy_timeout=60000;")
+        top = int(conn.execute("SELECT COALESCE(MAX(rowid), 0) FROM customers").fetchone()[0] or 0)
+        start = 0
+        size = 20000
+        has_phone_key = any(
+            str(row[1]) == "phone_key" for row in conn.execute("PRAGMA table_info(customers)")
+        )
+        select = (
+            "SELECT phone, phone_key, address FROM customers WHERE rowid > ? AND rowid <= ? AND address != ''"
+            if has_phone_key
+            else "SELECT phone, address FROM customers WHERE rowid > ? AND rowid <= ? AND address != ''"
+        )
+        while start < top:
+            rows = conn.execute(select, (start, start + size)).fetchall()
+            dirty = 0
+            for row in rows:
+                seen += 1
+                address = str(row["address"] or "").strip()
+                if has_phone_key:
+                    key = str(row["phone_key"] or "") or db.phone_key(row["phone"])
+                else:
+                    key = db.phone_key(row["phone"])
+                if store.put(key, address):
+                    kept += 1
+                    dirty += 1
+                else:
+                    skipped += 1
+            if dirty:
+                store.commit()
+            start += size
+            if progress is not None:
+                progress({"rowid": start, "top": top, "seen": seen, "kept": kept, "skipped": skipped})
+    finally:
+        conn.close()
+    store.commit()
+    return {"seen": seen, "kept": kept, "skipped": skipped, "phones": store.count()}
 
 
 def restore_addresses_from_imports(

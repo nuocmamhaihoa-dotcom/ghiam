@@ -43,7 +43,11 @@ from control_plane.customers import (
     strip_admin_or_short_address,
     strip_province_only_address,
 )
-from control_plane.address_restore import ImportAddressStore, collect_import_addresses
+from control_plane.address_restore import (
+    ImportAddressStore,
+    collect_from_customer_db,
+    collect_import_addresses,
+)
 from control_plane.vietnam_places import cell_is_short_admin_only
 from control_plane.excel_import import (
     SharedStringStore,
@@ -1810,6 +1814,46 @@ class ShortAdminOnlyAddressTests(unittest.TestCase):
                     store.get(db.phone_key("0901222333")),
                     "12 Lê Lợi, Phường 1, Hà Nội",
                 )
+                self.assertEqual(store.get(db.phone_key("0901444555")), "")
+            finally:
+                store.close()
+
+    def test_collect_from_old_customer_db_keeps_longer_address(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="khach-bak-src-") as folder:
+            root = Path(folder)
+            source = root / "old.db"
+            db.init_db(source)
+            now = "2026-01-01T00:00:00+00:00"
+            full = "12 Lê Lợi, Phường Phú Hội, Hà Nội"
+            db.replace_customers(
+                source,
+                [
+                    {
+                        "id": "mot",
+                        "name": "Lan",
+                        "phone": "0901222333",
+                        "address": full,
+                        "createdAt": now,
+                        "updatedAt": now,
+                    },
+                    {
+                        "id": "hai",
+                        "name": "Minh",
+                        "phone": "0901444555",
+                        "address": "Hà Nội",
+                        "createdAt": now,
+                        "updatedAt": now,
+                    },
+                ],
+                [],
+            )
+            store = ImportAddressStore(root / "src.db")
+            try:
+                store.put(db.phone_key("0901222333"), "12 Lê Lợi")
+                store.commit()
+                stats = collect_from_customer_db(source, store)
+                self.assertGreaterEqual(stats["kept"], 1)
+                self.assertEqual(store.get(db.phone_key("0901222333")), full)
                 self.assertEqual(store.get(db.phone_key("0901444555")), "")
             finally:
                 store.close()
