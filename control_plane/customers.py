@@ -18,6 +18,7 @@ from control_plane.vietnam_places import (
     address_content_rank,
     address_header_rank,
     address_piece_key,
+    cell_is_short_admin_only,
     fold_vietnamese,
     has_address_keyword,
     has_vietnam_place,
@@ -1897,6 +1898,175 @@ def clear_admin_or_short_addresses(
     finally:
         conn.close()
     return {"seen": seen, "changed": changed, "cleared": cleared, "trimmed": trimmed}
+
+
+def address_is_remainder(current: str, incoming: str) -> bool:
+    """Ô hiện tại chỉ còn phần đã cắt của địa chỉ gốc."""
+    source = " ".join(str(incoming or "").split())
+    if not source:
+        return False
+    folded = _line_key(source)
+    leftover = split_address_lines(current)
+    if not leftover:
+        return True
+    return all(_line_key(line) in folded for line in leftover) and len(source) >= len(
+        " ".join(str(current or "").split())
+    )
+
+
+def should_restore_address(current: str, incoming: str) -> bool:
+    """Chỉ ghi lại địa chỉ khi bản gốc dài hơn và chứa phần còn lại, hoặc ô đang trống."""
+    incoming_text = str(incoming or "")
+    current_text = str(current or "")
+    if not incoming_text.strip() or incoming_text == current_text:
+        return False
+    if cell_is_short_admin_only(incoming_text):
+        return False
+    if not current_text.strip():
+        return True
+    return address_is_remainder(current_text, incoming_text)
+
+
+def prefer_import_address(old: str, new: str) -> str:
+    """Giữ địa chỉ đầy đủ hơn từ file nạp. Bản ngắn hành chính thì bỏ."""
+    if not new or new == old:
+        return old
+    if cell_is_short_admin_only(new):
+        return old
+    if not old or cell_is_short_admin_only(old):
+        return new
+    if address_is_remainder(old, new):
+        return new
+    if address_is_remainder(new, old):
+        return old
+    return append_distinct_lines(old, new)
+
+
+def clear_short_admin_only_addresses(
+    db_path: Any,
+    batch: int = 20000,
+    start_rowid: int = 0,
+    progress: Callable[[dict[str, int]], None] | None = None,
+) -> dict[str, int]:
+    """Chỉ xóa ô địa chỉ dưới 20 ký tự và toàn ô là địa chỉ hành chính.
+
+    Ô từ 20 ký tự trở lên giữ nguyên. Số nhà, đường, thôn, ấp ngắn vẫn giữ.
+    Không đụng tên, số điện thoại, cột địa chỉ hành chính, hàng mua, COD.
+    """
+    conn = db.connect(Path(db_path))
+    seen = 0
+    changed = 0
+    try:
+        conn.execute("PRAGMA busy_timeout=60000;")
+        top = int(conn.execute("SELECT COALESCE(MAX(rowid), 0) FROM customers").fetchone()[0] or 0)
+        start = max(0, int(start_rowid))
+        size = max(1000, int(batch))
+        while start < top:
+            rows = conn.execute(
+                "SELECT id, address FROM customers WHERE rowid > ? AND rowid <= ? AND address != ''",
+                (start, start + size),
+            ).fetchall()
+            updates: list[tuple[str, str, str]] = []
+            for row in rows:
+                seen += 1
+                current = str(row["address"] or "")
+                if not cell_is_short_admin_only(current):
+                    continue
+                updates.append(("", str(row["id"]), current))
+            if updates:
+                before = conn.total_changes
+                conn.executemany(
+                    "UPDATE customers SET address=? WHERE id=? AND address=?",
+                    updates,
+                )
+                changed += conn.total_changes - before
+            conn.commit()
+            start += size
+            if progress is not None:
+                progress({"rowid": start, "top": top, "seen": seen, "changed": changed})
+    finally:
+        conn.close()
+    return {"seen": seen, "changed": changed, "cleared": changed}
+
+
+def restore_stored_addresses(
+    db_path: Any,
+    sources: Any,
+    batch: int = 20000,
+    start_rowid: int = 0,
+    progress: Callable[[dict[str, int]], None] | None = None,
+) -> dict[str, int]:
+    """Ghi lại cột địa chỉ từ bản gốc theo khóa số điện thoại.
+
+    sources.get(phone_key) trả địa chỉ gốc. Không đụng tên, số điện thoại,
+    địa chỉ hành chính, hàng mua, COD, thời điểm cập nhật.
+    """
+    lookup = sources.get if hasattr(sources, "get") else None
+    if lookup is None:
+        raise TypeError("sources phải có get(phone_key)")
+    conn = db.connect(Path(db_path))
+    seen = 0
+    changed = 0
+    filled = 0
+    expanded = 0
+    try:
+        conn.execute("PRAGMA busy_timeout=60000;")
+        top = int(conn.execute("SELECT COALESCE(MAX(rowid), 0) FROM customers").fetchone()[0] or 0)
+        start = max(0, int(start_rowid))
+        size = max(1000, int(batch))
+        while start < top:
+            rows = conn.execute(
+                "SELECT id, phone_key, address FROM customers WHERE rowid > ? AND rowid <= ?",
+                (start, start + size),
+            ).fetchall()
+            keys = [str(row["phone_key"] or "") for row in rows if row["phone_key"]]
+            found: dict[str, str] = {}
+            fetch_many = getattr(sources, "get_many", None)
+            if fetch_many is not None:
+                found = fetch_many(keys)
+            else:
+                for key in keys:
+                    incoming = lookup(key) or ""
+                    if incoming:
+                        found[key] = incoming
+            updates: list[tuple[str, str, str]] = []
+            for row in rows:
+                seen += 1
+                key = str(row["phone_key"] or "")
+                incoming = found.get(key) or ""
+                if not incoming:
+                    continue
+                current = str(row["address"] or "")
+                if not should_restore_address(current, incoming):
+                    continue
+                updates.append((incoming, str(row["id"]), current))
+                if current.strip():
+                    expanded += 1
+                else:
+                    filled += 1
+            if updates:
+                before = conn.total_changes
+                conn.executemany(
+                    "UPDATE customers SET address=? WHERE id=? AND address=?",
+                    updates,
+                )
+                changed += conn.total_changes - before
+            conn.commit()
+            start += size
+            if progress is not None:
+                progress(
+                    {
+                        "rowid": start,
+                        "top": top,
+                        "seen": seen,
+                        "changed": changed,
+                        "filled": filled,
+                        "expanded": expanded,
+                    }
+                )
+    finally:
+        conn.close()
+    return {"seen": seen, "changed": changed, "filled": filled, "expanded": expanded}
 
 
 def dedupe_exact_addresses(db_path: Any, batch: int = 50000) -> dict[str, int]:

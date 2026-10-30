@@ -36,9 +36,15 @@ from control_plane.customers import (
     dedupe_exact_addresses,
     rewrite_stored_addresses,
     clear_admin_or_short_addresses,
+    clear_short_admin_only_addresses,
+    prefer_import_address,
+    restore_stored_addresses,
+    should_restore_address,
     strip_admin_or_short_address,
     strip_province_only_address,
 )
+from control_plane.address_restore import ImportAddressStore, collect_import_addresses
+from control_plane.vietnam_places import cell_is_short_admin_only
 from control_plane.excel_import import (
     SharedStringStore,
     _combine_sheets,
@@ -1681,6 +1687,132 @@ class AdminOrShortAddressTests(unittest.TestCase):
             self.assertEqual(rows["ngan"]["admin_address"], "Huế")
             self.assertEqual(rows["ngan"]["name"], "Hoa")
             self.assertEqual(rows["duong"]["admin_address"], "Đà Nẵng")
+
+
+class ShortAdminOnlyAddressTests(unittest.TestCase):
+    def test_only_short_admin_cells_are_removed(self) -> None:
+        self.assertTrue(cell_is_short_admin_only("Hà Nội"))
+        self.assertTrue(cell_is_short_admin_only("Phường 1"))
+        self.assertTrue(cell_is_short_admin_only("Quận 1"))
+        self.assertFalse(cell_is_short_admin_only("Thành phố Hồ Chí Minh"))
+        self.assertFalse(cell_is_short_admin_only("12 Lê Lợi"))
+        self.assertFalse(cell_is_short_admin_only("12 Lê Lợi, Phường 1, Hà Nội"))
+        self.assertFalse(cell_is_short_admin_only("VALUE"))
+        self.assertFalse(cell_is_short_admin_only("."))
+
+    def test_restore_only_when_incoming_contains_current(self) -> None:
+        full = "12 Lê Lợi, Phường Phú Hội, Hà Nội"
+        self.assertTrue(should_restore_address("12 Lê Lợi", full))
+        self.assertTrue(should_restore_address("", full))
+        self.assertFalse(should_restore_address(full, "12 Lê Lợi"))
+        self.assertFalse(should_restore_address("12 Lê Lợi", "Hà Nội"))
+        self.assertFalse(should_restore_address("", "Hà Nội"))
+        self.assertEqual(prefer_import_address("12 Lê Lợi", full), full)
+        self.assertEqual(prefer_import_address(full, "12 Lê Lợi"), full)
+
+    def test_clear_and_restore_keep_other_columns(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="khach-khoi-phuc-") as folder:
+            path = Path(folder) / "server.db"
+            db.init_db(path)
+            now = "2026-01-01T00:00:00+00:00"
+            full = "12 Lê Lợi, Phường Phú Hội, Hà Nội"
+            db.replace_customers(
+                path,
+                [
+                    {
+                        "id": "cat",
+                        "name": "Lan",
+                        "phone": "0901222333",
+                        "address": "12 Lê Lợi",
+                        "adminAddress": "Thừa Thiên Huế",
+                        "orderContent": "Nước mắm",
+                        "codAmount": "150000",
+                        "createdAt": now,
+                        "updatedAt": now,
+                    },
+                    {
+                        "id": "trong",
+                        "name": "Minh",
+                        "phone": "0901444555",
+                        "address": "",
+                        "adminAddress": "Đà Nẵng",
+                        "createdAt": now,
+                        "updatedAt": now,
+                    },
+                    {
+                        "id": "ngan",
+                        "name": "Hoa",
+                        "phone": "0901666777",
+                        "address": "Hà Nội",
+                        "adminAddress": "Huế",
+                        "createdAt": now,
+                        "updatedAt": now,
+                    },
+                    {
+                        "id": "dai",
+                        "name": "Tú",
+                        "phone": "0901888999",
+                        "address": full,
+                        "adminAddress": "Huế",
+                        "createdAt": now,
+                        "updatedAt": now,
+                    },
+                ],
+                [],
+            )
+            sources = {
+                db.phone_key("0901222333"): full,
+                db.phone_key("0901444555"): "Số 8 ngõ 4 đường Lê Lợi, phường Bến Nghé",
+                db.phone_key("0901666777"): "Hà Nội",
+            }
+            stats = restore_stored_addresses(path, sources, batch=10)
+            self.assertEqual(stats["expanded"], 1)
+            self.assertEqual(stats["filled"], 1)
+            cleared = clear_short_admin_only_addresses(path, batch=10)
+            self.assertEqual(cleared["cleared"], 1)
+            with db.session(path) as conn:
+                rows = {
+                    row["id"]: row
+                    for row in conn.execute(
+                        "SELECT id, name, phone, address, admin_address, order_content, cod_amount, updated_at FROM customers"
+                    )
+                }
+            self.assertEqual(rows["cat"]["address"], full)
+            self.assertEqual(rows["cat"]["admin_address"], "Thừa Thiên Huế")
+            self.assertEqual(rows["cat"]["name"], "Lan")
+            self.assertEqual(rows["cat"]["phone"], "0901222333")
+            self.assertEqual(rows["cat"]["order_content"], "Nước mắm")
+            self.assertEqual(rows["cat"]["cod_amount"], "150000")
+            self.assertEqual(rows["cat"]["updated_at"], now)
+            self.assertEqual(rows["trong"]["address"], "Số 8 ngõ 4 đường Lê Lợi, phường Bến Nghé")
+            self.assertEqual(rows["trong"]["admin_address"], "Đà Nẵng")
+            self.assertEqual(rows["ngan"]["address"], "")
+            self.assertEqual(rows["ngan"]["admin_address"], "Huế")
+            self.assertEqual(rows["dai"]["address"], full)
+
+    def test_collect_from_import_csv(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="khach-import-src-") as folder:
+            root = Path(folder)
+            batch = root / "imports" / "20261025T000000"
+            batch.mkdir(parents=True)
+            (batch / "khach.csv").write_text(
+                "Tên,Số điện thoại,Địa chỉ\n"
+                "Lan,0901222333,\"12 Lê Lợi, Phường 1, Hà Nội\"\n"
+                "Minh,0901444555,Hà Nội\n",
+                encoding="utf-8",
+            )
+            store = ImportAddressStore(root / "tmp" / "src.db")
+            try:
+                stats = collect_import_addresses(root, store)
+                self.assertEqual(stats["files"], 1)
+                self.assertGreaterEqual(stats["phones"], 1)
+                self.assertEqual(
+                    store.get(db.phone_key("0901222333")),
+                    "12 Lê Lợi, Phường 1, Hà Nội",
+                )
+                self.assertEqual(store.get(db.phone_key("0901444555")), "")
+            finally:
+                store.close()
 
 
 class ExactRepeatAddressTests(unittest.TestCase):
