@@ -998,6 +998,17 @@ def _clean_admin_address_line(raw: str) -> tuple[str, bool]:
     return joined, True
 
 
+def cell_is_short_admin_only(value: str) -> bool:
+    """Cả ô dưới 20 ký tự và chỉ là tỉnh, thành, quận, huyện, phường, xã, thị trấn."""
+    text = " ".join(str(value or "").replace("\r\n", "\n").replace("\r", "\n").split())
+    if not text or len(text) >= SHORT_ADDRESS_CHARS:
+        return False
+    if line_has_street_detail(text):
+        return False
+    segments = _address_segments(text) or [text]
+    return bool(segments) and all(segment_is_admin(segment) for segment in segments)
+
+
 def strip_admin_or_short_address(value: str) -> str:
     """Bỏ dòng địa chỉ chỉ còn phần hành chính, và dòng dưới 20 ký tự không phải số nhà hay đường.
 
