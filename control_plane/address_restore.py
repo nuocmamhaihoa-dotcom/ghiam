@@ -17,6 +17,7 @@ from control_plane.excel_import import iter_mapped_file, mapping_for_file
 from control_plane.vietnam_places import cell_is_short_admin_only
 
 IMPORT_SUFFIXES = {".xlsx", ".xlsm", ".xls", ".csv", ".tsv", ".txt"}
+_STORE_COLUMNS = {"src": "phone_key", "src_id": "id"}
 
 
 def iter_import_sources(
@@ -71,6 +72,8 @@ class ImportAddressStore:
         return str(row[0]) if row else default
 
     def _get_many(self, table: str, column: str, keys: list[str]) -> dict[str, str]:
+        if _STORE_COLUMNS.get(table) != column:
+            raise ValueError("bảng khôi phục không hợp lệ")
         wanted = [key for key in keys if key]
         if not wanted:
             return {}
@@ -99,6 +102,8 @@ class ImportAddressStore:
         return self._get_many("src_id", "id", keys)
 
     def _put_row(self, table: str, column: str, key: str, address: str, current: str) -> bool:
+        if _STORE_COLUMNS.get(table) != column:
+            raise ValueError("bảng khôi phục không hợp lệ")
         if not key or not address or cell_is_short_admin_only(address):
             return False
         chosen = prefer_import_address(current, address)
