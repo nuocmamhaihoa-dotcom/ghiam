@@ -342,6 +342,8 @@ def _import_sessions() -> dict[str, Any]:
         "uniquePhones": unique_phones,
         "emptyPhone": warehouse["emptyPhone"],
         "duplicatePhones": warehouse["duplicatePhones"],
+        "completeContacts": warehouse.get("completeContacts") or 0,
+        "statsReady": bool(warehouse.get("known")),
         "sessions": sessions,
         "needReupload": unique_reupload,
         "needCount": len(unique_reupload),
@@ -490,9 +492,16 @@ def customers_list(
 ) -> dict[str, Any]:
     _manager(_actor(request))
     db.init_db(settings.db_path)
-    total = _listed_customer_total()
+    warehouse = db.page_warehouse_stats(settings.db_path)
+    total = int(warehouse["total"] or 0)
     filled = _filled_fields(has)
     fields = [{"id": field, "label": FIELD_LABELS[field]} for field in FIELDS]
+    extras = {
+        "uniquePhones": warehouse.get("uniquePhones") or 0,
+        "emptyPhone": warehouse.get("emptyPhone") or 0,
+        "completeContacts": warehouse.get("completeContacts") or 0,
+        "statsReady": bool(warehouse.get("known")),
+    }
     if collapse(q) and not filled and before <= 0 and after <= 0:
         rows, matched = db.search_customers(settings.db_path, q, limit=limit)
         shown = [public_customer(row) for row in rows]
@@ -505,6 +514,7 @@ def customers_list(
             "nextBefore": None,
             "nextAfter": None,
             "fields": fields,
+            **extras,
         }
     rows, next_before, next_after, has_more = db.browse_customers(
         settings.db_path,
@@ -524,6 +534,7 @@ def customers_list(
         "nextBefore": next_before,
         "nextAfter": next_after,
         "fields": fields,
+        **extras,
     }
 
 

@@ -68,6 +68,7 @@ class CustomerApiTests(unittest.TestCase):
         home = self.client.get("/")
         self.assertEqual(home.status_code, 200)
         self.assertIn("Kho khách Excel", home.text)
+        self.assertIn("Đủ SĐT và địa chỉ", home.text)
         self.assertIn("Chọn file Excel", home.text)
         self.assertEqual(home.headers.get("content-language"), "vi")
         self.assertIn('translate="no"', home.text)
@@ -759,8 +760,46 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(history.status_code, 200, history.text)
         self.assertEqual(history.json()["total"], 1)
         self.assertEqual(history.json()["uniquePhones"], 1)
+        self.assertEqual(history.json()["completeContacts"], 0)
+        self.assertTrue(history.json()["statsReady"])
         self.assertEqual(history.json()["rowSum"], 2)
         self.assertEqual(history.json()["repeatRows"], 1)
+
+    def test_sessions_count_complete_contacts_once_per_phone(self) -> None:
+        mapping = json.dumps(
+            {
+                "name": {"index": 0, "header": "Tên khách"},
+                "phone": {"index": 1, "header": "SĐT"},
+                "address": {"index": 2, "header": "Địa chỉ"},
+            }
+        )
+        long_addr = "12 Nguyễn Huệ, Quận 1, Thành phố Hồ Chí Minh"
+        imported = self.client.post(
+            "/v1/customers/import",
+            headers=self.headers,
+            data={"mapping": mapping},
+            files=[
+                self._file(
+                    "du.xlsx",
+                    ["Tên khách", "SĐT", "Địa chỉ"],
+                    [
+                        ["Lan", "0901222333", long_addr],
+                        ["Lan 2", "84901222333", long_addr],
+                        ["Minh", "0901444555", "Huế"],
+                    ],
+                )
+            ],
+        )
+        self.assertEqual(imported.status_code, 200, imported.text)
+        self.assertEqual(imported.json()["stats"]["created"], 2)
+        history = self.client.get("/v1/customers/sessions", headers=self.headers)
+        self.assertEqual(history.status_code, 200, history.text)
+        self.assertEqual(history.json()["completeContacts"], 1)
+        self.assertEqual(history.json()["uniquePhones"], 2)
+        self.assertTrue(history.json()["statsReady"])
+        listed = self.client.get("/v1/customers", headers=self.headers)
+        self.assertEqual(listed.json()["completeContacts"], 1)
+        self.assertEqual(listed.json()["uniquePhones"], 2)
 
     def test_lookup_skips_bad_file_and_uses_text(self) -> None:
         db.replace_customers(
@@ -1027,6 +1066,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(history.json()["total"], 42)
         self.assertEqual(history.json()["uniquePhones"], 42)
         self.assertEqual(history.json()["emptyPhone"], 0)
+        self.assertEqual(history.json()["completeContacts"], 0)
 
     def test_resume_keeps_the_later_checkpoint_when_the_child_has_no_progress(self) -> None:
         first = write_xlsx(["Tên khách", "SĐT", "Địa chỉ"], [["An", "0912000111", "Huế"]])
@@ -1473,6 +1513,7 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(history.json()["total"], 1200)
         self.assertEqual(history.json()["uniquePhones"], 1200)
         self.assertEqual(history.json()["emptyPhone"], 0)
+        self.assertEqual(history.json()["completeContacts"], 0)
         self.assertEqual(history.json()["duplicatePhones"], 0)
         self.assertEqual(history.json()["rowSum"], 1200)
         self.assertEqual(history.json()["repeatRows"], 0)

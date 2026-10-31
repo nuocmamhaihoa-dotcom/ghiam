@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fcntl
 import json
 import sqlite3
 import threading
@@ -208,6 +209,7 @@ def init_db(db_path: Path) -> None:
         ready = _phone_key_flag(conn)
     if not ready:
         ensure_phone_keys(db_path)
+    ensure_warehouse_stats(db_path)
 
 
 def _ensure_customer_columns(conn: sqlite3.Connection) -> None:
@@ -1376,10 +1378,29 @@ def search_customers(db_path: Path, query: str, limit: int = 2000) -> tuple[list
 
 
 _CUSTOMERS_TOTAL_KEY = "customers_total"
+_WAREHOUSE_STATS_KEY = "warehouse_stats_v1"
+_WAREHOUSE_STATS_GEN_KEY = "warehouse_stats_gen"
+_HUGE_DB_BYTES = 500_000_000
+COMPLETE_ADDRESS_CHARS = 20
+_WAREHOUSE_STATS_STARTED: set[str] = set()
+_WAREHOUSE_STATS_LOCK = threading.Lock()
 
 
-def _read_customer_total(conn: sqlite3.Connection) -> int | None:
-    row = conn.execute("SELECT value FROM kv_meta WHERE key = ?", (_CUSTOMERS_TOTAL_KEY,)).fetchone()
+def collapse_spaces(value: Any) -> str:
+    if not value:
+        return ""
+    return " ".join(str(value).split())
+
+
+def has_complete_contact(phone_key_value: str, address: Any) -> bool:
+    """Khách đủ SĐT và ô địa chỉ dài hơn 20 ký tự sau khi gộp khoảng trắng."""
+    if not str(phone_key_value or "").strip():
+        return False
+    return len(collapse_spaces(address)) > COMPLETE_ADDRESS_CHARS
+
+
+def _read_int_meta(conn: sqlite3.Connection, key: str) -> int | None:
+    row = conn.execute("SELECT value FROM kv_meta WHERE key = ?", (key,)).fetchone()
     if row is None:
         return None
     try:
@@ -1388,14 +1409,22 @@ def _read_customer_total(conn: sqlite3.Connection) -> int | None:
         return None
 
 
-def _write_customer_total(conn: sqlite3.Connection, total: int) -> None:
+def _write_int_meta(conn: sqlite3.Connection, key: str, value: int) -> None:
     conn.execute(
         """
         INSERT INTO kv_meta(key, value) VALUES(?, ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
         """,
-        (_CUSTOMERS_TOTAL_KEY, str(max(0, int(total)))),
+        (key, str(max(0, int(value)))),
     )
+
+
+def _read_customer_total(conn: sqlite3.Connection) -> int | None:
+    return _read_int_meta(conn, _CUSTOMERS_TOTAL_KEY)
+
+
+def _write_customer_total(conn: sqlite3.Connection, total: int) -> None:
+    _write_int_meta(conn, _CUSTOMERS_TOTAL_KEY, total)
 
 
 def _bump_customer_total(conn: sqlite3.Connection, delta: int) -> None:
@@ -1403,6 +1432,444 @@ def _bump_customer_total(conn: sqlite3.Connection, delta: int) -> None:
     if current is None or not delta:
         return
     _write_customer_total(conn, current + delta)
+
+
+def _stats_generation(conn: sqlite3.Connection) -> int:
+    return _read_int_meta(conn, _WAREHOUSE_STATS_GEN_KEY) or 0
+
+
+def _bump_stats_generation(conn: sqlite3.Connection) -> None:
+    _write_int_meta(conn, _WAREHOUSE_STATS_GEN_KEY, _stats_generation(conn) + 1)
+
+
+def _empty_stats() -> dict[str, int]:
+    return {
+        "total": 0,
+        "emptyPhone": 0,
+        "uniquePhones": 0,
+        "completeContacts": 0,
+        "duplicatePhones": 0,
+    }
+
+
+def _with_duplicate_phones(stats: dict[str, int]) -> dict[str, int]:
+    total = max(0, int(stats.get("total") or 0))
+    unique = max(0, int(stats.get("uniquePhones") or 0))
+    empty = max(0, int(stats.get("emptyPhone") or 0))
+    complete = max(0, int(stats.get("completeContacts") or 0))
+    return {
+        "total": total,
+        "emptyPhone": empty,
+        "uniquePhones": unique,
+        "completeContacts": complete,
+        "duplicatePhones": max(0, total - unique - empty),
+    }
+
+
+def _read_warehouse_stats(conn: sqlite3.Connection) -> dict[str, int] | None:
+    row = conn.execute("SELECT value FROM kv_meta WHERE key = ?", (_WAREHOUSE_STATS_KEY,)).fetchone()
+    if row is None:
+        return None
+    try:
+        loaded = json.loads(str(row["value"] or ""))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(loaded, dict):
+        return None
+    try:
+        return _with_duplicate_phones(
+            {
+                "total": int(loaded.get("total") or 0),
+                "emptyPhone": int(loaded.get("emptyPhone") or 0),
+                "uniquePhones": int(loaded.get("uniquePhones") or 0),
+                "completeContacts": int(loaded.get("completeContacts") or 0),
+            }
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+def _write_warehouse_stats(conn: sqlite3.Connection, stats: dict[str, int]) -> None:
+    payload = _with_duplicate_phones(stats)
+    conn.execute(
+        """
+        INSERT INTO kv_meta(key, value) VALUES(?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        """,
+        (_WAREHOUSE_STATS_KEY, json.dumps(payload, ensure_ascii=False)),
+    )
+    _write_customer_total(conn, payload["total"])
+
+
+def _db_bytes(conn: sqlite3.Connection) -> int:
+    pages = int(conn.execute("PRAGMA page_count").fetchone()[0] or 0)
+    size = int(conn.execute("PRAGMA page_size").fetchone()[0] or 4096)
+    return pages * size
+
+
+def _warehouse_conn_is_huge(conn: sqlite3.Connection) -> bool:
+    return _db_bytes(conn) >= _HUGE_DB_BYTES
+
+
+def _stat_row_from_sql(row: sqlite3.Row) -> dict[str, str]:
+    phone = str(row["phone"] or "")
+    key = str(row["phone_key"] or "") or phone_key(phone)
+    return {
+        "id": str(row["id"]),
+        "phone": phone,
+        "phone_key": key,
+        "address": str(row["address"] or ""),
+    }
+
+
+def _stat_rows_by_ids(conn: sqlite3.Connection, ids: list[str]) -> dict[str, dict[str, str]]:
+    found: dict[str, dict[str, str]] = {}
+    wanted = [item for item in ids if item]
+    for start in range(0, len(wanted), 400):
+        chunk = wanted[start : start + 400]
+        if not chunk:
+            continue
+        marks = ",".join("?" * len(chunk))
+        rows = conn.execute(
+            f"SELECT id, phone, phone_key, address FROM customers WHERE id IN ({marks})",
+            chunk,
+        ).fetchall()
+        for row in rows:
+            item = _stat_row_from_sql(row)
+            found[item["id"]] = item
+    return found
+
+
+def _other_key_presence(
+    conn: sqlite3.Connection,
+    keys: set[str],
+    exclude_ids: set[str],
+) -> tuple[set[str], set[str]]:
+    unique: set[str] = set()
+    complete: set[str] = set()
+    wanted = [key for key in keys if key]
+    if not wanted:
+        return unique, complete
+    excluded = {item for item in exclude_ids if item}
+    for start in range(0, len(wanted), 200):
+        chunk = wanted[start : start + 200]
+        marks = ",".join("?" * len(chunk))
+        rows = conn.execute(
+            f"SELECT id, phone_key, address FROM customers WHERE phone_key IN ({marks}) AND phone_key != ''",
+            chunk,
+        ).fetchall()
+        for row in rows:
+            if str(row["id"]) in excluded:
+                continue
+            key = str(row["phone_key"] or "")
+            if not key:
+                continue
+            unique.add(key)
+            if has_complete_contact(key, row["address"] or ""):
+                complete.add(key)
+    return unique, complete
+
+
+def _apply_row_stat_deltas(
+    conn: sqlite3.Connection,
+    stats: dict[str, int],
+    old_rows: dict[str, dict[str, str]],
+    new_rows: dict[str, dict[str, str]],
+) -> dict[str, int]:
+    empty_before = sum(1 for row in old_rows.values() if not row.get("phone"))
+    empty_after = sum(1 for row in new_rows.values() if not row.get("phone"))
+    stats["emptyPhone"] = max(0, int(stats.get("emptyPhone") or 0) + empty_after - empty_before)
+
+    keys: set[str] = set()
+    for row in list(old_rows.values()) + list(new_rows.values()):
+        key = row.get("phone_key") or ""
+        if key:
+            keys.add(key)
+    others_unique, others_complete = _other_key_presence(conn, keys, set(old_rows) | set(new_rows))
+    before_unique = set(others_unique)
+    after_unique = set(others_unique)
+    before_complete = set(others_complete)
+    after_complete = set(others_complete)
+    for row in old_rows.values():
+        key = row.get("phone_key") or ""
+        if not key:
+            continue
+        before_unique.add(key)
+        if has_complete_contact(key, row.get("address") or ""):
+            before_complete.add(key)
+    for row in new_rows.values():
+        key = row.get("phone_key") or ""
+        if not key:
+            continue
+        after_unique.add(key)
+        if has_complete_contact(key, row.get("address") or ""):
+            after_complete.add(key)
+    stats["uniquePhones"] = max(0, int(stats.get("uniquePhones") or 0) + len(after_unique) - len(before_unique))
+    stats["completeContacts"] = max(
+        0, int(stats.get("completeContacts") or 0) + len(after_complete) - len(before_complete)
+    )
+    return _with_duplicate_phones(stats)
+
+
+def _warehouse_stats_on_conn(conn: sqlite3.Connection) -> dict[str, int]:
+    complete_keys: set[str] = set()
+    unique_keys: set[str] = set()
+    total = 0
+    empty = 0
+    for row in conn.execute("SELECT phone, phone_key, address FROM customers"):
+        total += 1
+        phone = str(row["phone"] or "")
+        if not phone:
+            empty += 1
+        key = str(row["phone_key"] or "") or phone_key(phone)
+        if key:
+            unique_keys.add(key)
+        if has_complete_contact(key, row["address"] or ""):
+            complete_keys.add(key)
+    return _with_duplicate_phones(
+        {
+            "total": total,
+            "emptyPhone": empty,
+            "uniquePhones": len(unique_keys),
+            "completeContacts": len(complete_keys),
+        }
+    )
+
+
+def _init_stats_before_write(conn: sqlite3.Connection, delta: int) -> dict[str, int] | None:
+    stats = _read_warehouse_stats(conn)
+    if stats is not None:
+        return stats
+    cached = _read_customer_total(conn)
+    if cached is None:
+        return None if _warehouse_conn_is_huge(conn) else _empty_stats()
+    pre_total = max(0, cached - delta)
+    return _with_duplicate_phones(
+        {
+            "total": pre_total,
+            "emptyPhone": 0,
+            "uniquePhones": pre_total,
+            "completeContacts": 0,
+        }
+    )
+
+
+def _sync_warehouse_stats_after_write(
+    conn: sqlite3.Connection,
+    old_rows: dict[str, dict[str, str]],
+    new_rows: dict[str, dict[str, str]],
+    delta: int,
+) -> None:
+    cached = _read_customer_total(conn)
+    if not _warehouse_conn_is_huge(conn):
+        exact = _warehouse_stats_on_conn(conn)
+        if cached is None or cached == exact["total"]:
+            _write_warehouse_stats(conn, exact)
+            _bump_stats_generation(conn)
+            return
+    stats = _init_stats_before_write(conn, delta)
+    if stats is None:
+        return
+    updated = _apply_row_stat_deltas(conn, stats, old_rows, new_rows)
+    if cached is not None:
+        updated["total"] = cached
+        updated = _with_duplicate_phones(updated)
+    _write_warehouse_stats(conn, updated)
+    _bump_stats_generation(conn)
+
+
+def note_address_rewrites(conn: sqlite3.Connection, updates: Iterable[tuple[str, str, str]]) -> None:
+    """Cập nhật chỉ số khách đủ SĐT+địa chỉ sau khi chỉ sửa ô địa chỉ.
+
+    updates: (địa chỉ mới, id, địa chỉ cũ).
+    """
+    changes = [(str(new or ""), str(customer_id or ""), str(old or "")) for new, customer_id, old in updates]
+    changes = [item for item in changes if item[1] and item[0] != item[2]]
+    if not changes:
+        return
+    stats = _read_warehouse_stats(conn)
+    ids = [item[1] for item in changes]
+    if stats is None:
+        if _warehouse_conn_is_huge(conn):
+            return
+        exact = _warehouse_stats_on_conn(conn)
+        cached = _read_customer_total(conn)
+        if cached is None or cached == exact["total"]:
+            _write_warehouse_stats(conn, exact)
+            _bump_stats_generation(conn)
+        return
+    current = _stat_rows_by_ids(conn, ids)
+    old_rows: dict[str, dict[str, str]] = {}
+    new_rows: dict[str, dict[str, str]] = {}
+    for new_address, customer_id, old_address in changes:
+        live = current.get(customer_id) or {
+            "id": customer_id,
+            "phone": "",
+            "phone_key": "",
+            "address": new_address,
+        }
+        old_rows[customer_id] = dict(live, address=old_address)
+        new_rows[customer_id] = dict(live, address=new_address)
+    updated = _apply_row_stat_deltas(conn, stats, old_rows, new_rows)
+    updated["total"] = int(stats.get("total") or 0)
+    _write_warehouse_stats(conn, _with_duplicate_phones(updated))
+    _bump_stats_generation(conn)
+
+
+def _warehouse_stats_lock_path(db_path: Path) -> Path:
+    return Path(db_path).parent / "warehouse_stats.lock"
+
+
+def _try_warehouse_stats_lock(db_path: Path):
+    handle = _warehouse_stats_lock_path(db_path).open("a+")
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        handle.close()
+        return None
+    return handle
+
+
+def rebuild_warehouse_stats(
+    db_path: Path,
+    batch: int = 20_000,
+    progress: Any = None,
+) -> dict[str, int]:
+    """Đếm lại toàn kho theo lô rowid: tổng, SĐT trống, SĐT khác nhau, khách đủ liên hệ."""
+    lock = _try_warehouse_stats_lock(db_path)
+    if lock is None:
+        with session(db_path) as conn:
+            cached = _read_warehouse_stats(conn)
+        return cached or _empty_stats()
+    conn = connect(db_path)
+    try:
+        conn.execute("PRAGMA busy_timeout=60000;")
+        start_gen = _stats_generation(conn)
+        top = int(conn.execute("SELECT COALESCE(MAX(rowid), 0) FROM customers").fetchone()[0] or 0)
+        start = 0
+        size = max(1000, int(batch))
+        huge = _warehouse_conn_is_huge(conn)
+        total = 0
+        empty = 0
+        complete_keys: set[str] = set()
+        unique_keys: set[str] | None = None if huge else set()
+        last_saved = -1
+        select = (
+            "SELECT phone, phone_key, address FROM customers WHERE rowid > ? AND rowid <= ? "
+            "AND phone_key != '' AND address != ''"
+            if huge
+            else "SELECT phone, phone_key, address FROM customers WHERE rowid > ? AND rowid <= ?"
+        )
+        while start < top:
+            rows = conn.execute(select, (start, start + size)).fetchall()
+            for row in rows:
+                phone = str(row["phone"] or "")
+                if not huge:
+                    total += 1
+                    if not phone:
+                        empty += 1
+                key = str(row["phone_key"] or "") or phone_key(phone)
+                if unique_keys is not None and key:
+                    unique_keys.add(key)
+                if has_complete_contact(key, row["address"] or ""):
+                    complete_keys.add(key)
+            start += size
+            if progress is not None:
+                progress({"rowid": start, "top": top, "seen": total, "complete": len(complete_keys)})
+            if huge and (start - last_saved >= size * 25 or start >= top):
+                cached_total = _read_customer_total(conn)
+                running = _read_warehouse_stats(conn) or {
+                    "total": cached_total or 0,
+                    "emptyPhone": 0,
+                    "uniquePhones": cached_total or 0,
+                    "completeContacts": 0,
+                }
+                if cached_total is not None:
+                    running["total"] = cached_total
+                    running["uniquePhones"] = max(
+                        int(running.get("uniquePhones") or 0),
+                        cached_total - int(running.get("emptyPhone") or 0),
+                    )
+                running["completeContacts"] = len(complete_keys)
+                _write_warehouse_stats(conn, running)
+                conn.commit()
+                last_saved = start
+        cached_total = _read_customer_total(conn)
+        if huge:
+            stats = _with_duplicate_phones(
+                {
+                    "total": cached_total or 0,
+                    "emptyPhone": 0,
+                    "uniquePhones": cached_total or 0,
+                    "completeContacts": len(complete_keys),
+                }
+            )
+        else:
+            stats = _with_duplicate_phones(
+                {
+                    "total": total,
+                    "emptyPhone": empty,
+                    "uniquePhones": len(unique_keys or ()),
+                    "completeContacts": len(complete_keys),
+                }
+            )
+        if _stats_generation(conn) != start_gen:
+            conn.close()
+            conn = connect(db_path)
+            conn.execute("PRAGMA busy_timeout=60000;")
+        _write_warehouse_stats(conn, stats)
+        _bump_stats_generation(conn)
+        conn.commit()
+        return stats
+    finally:
+        conn.close()
+        try:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+        except OSError:
+            pass
+        lock.close()
+
+
+def _rebuild_stats_in_background(db_path: Path) -> None:
+    try:
+        rebuild_warehouse_stats(db_path)
+    except Exception:
+        pass
+    finally:
+        with _WAREHOUSE_STATS_LOCK:
+            _WAREHOUSE_STATS_STARTED.discard(str(db_path))
+
+
+def ensure_warehouse_stats(db_path: Path) -> None:
+    """Kho lớn chưa có cache thì đếm nền. Kho nhỏ đếm khi đọc trang."""
+    key = str(db_path)
+    with _WAREHOUSE_STATS_LOCK:
+        if key in _WAREHOUSE_STATS_STARTED:
+            return
+        _WAREHOUSE_STATS_STARTED.add(key)
+    background = False
+    try:
+        conn = connect(db_path)
+        try:
+            if _read_warehouse_stats(conn) is not None:
+                return
+            if not _warehouse_conn_is_huge(conn):
+                return
+        finally:
+            conn.close()
+        threading.Thread(
+            target=_rebuild_stats_in_background,
+            args=(db_path,),
+            name="khach-warehouse-stats",
+            daemon=True,
+        ).start()
+        background = True
+    except Exception:
+        return
+    finally:
+        if not background:
+            with _WAREHOUSE_STATS_LOCK:
+                _WAREHOUSE_STATS_STARTED.discard(key)
 
 
 def _existing_customer_ids(conn: sqlite3.Connection, ids: list[str]) -> set[str]:
@@ -1434,28 +1901,57 @@ def cached_customer_total(db_path: Path) -> int | None:
 def set_customer_total(db_path: Path, total: int) -> None:
     with session(db_path) as conn:
         _write_customer_total(conn, total)
+        stats = _read_warehouse_stats(conn)
+        if stats is None:
+            return
+        stats["total"] = max(0, int(total))
+        stats["uniquePhones"] = max(0, stats["total"] - int(stats.get("emptyPhone") or 0))
+        _write_warehouse_stats(conn, stats)
 
 
 def empty_phone_count(db_path: Path) -> int:
     with session(db_path) as conn:
+        cached = _read_warehouse_stats(conn)
+        if cached is not None:
+            return int(cached["emptyPhone"])
         row = conn.execute("SELECT COUNT(*) AS n FROM customers WHERE phone = ''").fetchone()
     return int(row["n"] if row else 0)
 
 
 def page_warehouse_stats(db_path: Path) -> dict[str, int | bool]:
-    """Số liệu cho trang kho. Kho lớn dùng tổng đã lưu, không quét lại hàng chục triệu dòng."""
-    total = cached_customer_total(db_path)
-    if total is None and db_path.stat().st_size < 500_000_000:
+    """Số liệu cho trang kho. Kho lớn dùng cache, không quét lại hàng chục triệu dòng."""
+    ensure_warehouse_stats(db_path)
+    with session(db_path) as conn:
+        cached = _read_warehouse_stats(conn)
+        if cached is not None:
+            return {**cached, "known": True}
+        total = _read_customer_total(conn)
+        huge = _warehouse_conn_is_huge(conn)
+    if total is None and not huge:
         total = customer_count(db_path)
         set_customer_total(db_path, total)
     if total is None:
-        return {"total": 0, "uniquePhones": 0, "emptyPhone": 0, "duplicatePhones": 0, "known": False}
+        return {**_empty_stats(), "known": False}
+    if huge:
+        return {
+            "total": total,
+            "uniquePhones": total,
+            "emptyPhone": 0,
+            "completeContacts": 0,
+            "duplicatePhones": 0,
+            "known": False,
+        }
     empty = empty_phone_count(db_path)
     unique = max(0, total - empty)
+    complete = 0
+    with session(db_path) as conn:
+        if not _warehouse_conn_is_huge(conn):
+            complete = _warehouse_stats_on_conn(conn)["completeContacts"]
     return {
         "total": total,
         "uniquePhones": unique,
         "emptyPhone": empty,
+        "completeContacts": complete,
         "duplicatePhones": max(0, total - unique - empty),
         "known": True,
     }
@@ -1467,11 +1963,13 @@ def write_customers(conn: sqlite3.Connection, rows: list[dict[str, Any]], remove
     removed = [str(item) for item in removed_ids if str(item or "")]
     if not dirty_ids and not removed:
         return
+    old_rows = _stat_rows_by_ids(conn, dirty_ids + removed)
     delta = _customer_total_delta(conn, dirty_ids, removed)
     if removed:
         conn.executemany("DELETE FROM customers WHERE id=?", [(customer_id,) for customer_id in removed])
     if not dirty:
         _bump_customer_total(conn, delta)
+        _sync_warehouse_stats_after_write(conn, old_rows, {}, delta)
         return
     conn.executemany(
         """
@@ -1512,6 +2010,17 @@ def write_customers(conn: sqlite3.Connection, rows: list[dict[str, Any]], remove
         ],
     )
     _bump_customer_total(conn, delta)
+    new_rows = {
+        str(row["id"]): {
+            "id": str(row["id"]),
+            "phone": str(row.get("phone") or ""),
+            "phone_key": phone_key(row.get("phone") or ""),
+            "address": str(row.get("address") or ""),
+        }
+        for row in dirty
+        if str(row.get("id") or "")
+    }
+    _sync_warehouse_stats_after_write(conn, old_rows, new_rows, delta)
 
 
 def replace_customers(db_path: Path, rows: list[dict[str, Any]], removed_ids: list[str]) -> None:
@@ -1527,6 +2036,18 @@ def delete_customers_without_phone(db_path: Path) -> int:
         if count:
             conn.execute("DELETE FROM customers WHERE phone = ''")
             _bump_customer_total(conn, -count)
+            stats = _read_warehouse_stats(conn)
+            if stats is not None:
+                stats["total"] = max(0, int(stats["total"]) - count)
+                stats["emptyPhone"] = max(0, int(stats["emptyPhone"]) - count)
+                _write_warehouse_stats(conn, stats)
+                _bump_stats_generation(conn)
+            elif not _warehouse_conn_is_huge(conn):
+                exact = _warehouse_stats_on_conn(conn)
+                cached = _read_customer_total(conn)
+                if cached is None or cached == exact["total"]:
+                    _write_warehouse_stats(conn, exact)
+                    _bump_stats_generation(conn)
     return count
 
 
@@ -1537,26 +2058,9 @@ def customer_count(db_path: Path) -> int:
 
 
 def warehouse_stats(db_path: Path) -> dict[str, int]:
-    """Đếm kho một lần: tổng hàng, SĐT khác nhau, hàng không có SĐT."""
+    """Đếm kho một lần: tổng hàng, SĐT khác nhau, hàng không có SĐT, khách đủ liên hệ."""
     with session(db_path) as conn:
-        row = conn.execute(
-            """
-            SELECT
-              COUNT(*) AS total,
-              SUM(CASE WHEN phone = '' THEN 1 ELSE 0 END) AS empty_phone,
-              COUNT(DISTINCT CASE WHEN phone != '' THEN phone END) AS unique_phones
-            FROM customers
-            """
-        ).fetchone()
-    total = int(row["total"] or 0)
-    empty = int(row["empty_phone"] or 0)
-    unique = int(row["unique_phones"] or 0)
-    return {
-        "total": total,
-        "uniquePhones": unique,
-        "emptyPhone": empty,
-        "duplicatePhones": max(0, total - unique - empty),
-    }
+        return _warehouse_stats_on_conn(conn)
 
 
 def customers_created_between(db_path: Path, start: str, end: str) -> int:
