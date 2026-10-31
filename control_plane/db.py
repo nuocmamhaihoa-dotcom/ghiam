@@ -1748,20 +1748,26 @@ def rebuild_warehouse_stats(
         top = int(conn.execute("SELECT COALESCE(MAX(rowid), 0) FROM customers").fetchone()[0] or 0)
         start = 0
         size = max(1000, int(batch))
+        huge = _warehouse_conn_is_huge(conn)
         total = 0
         empty = 0
         complete_keys: set[str] = set()
-        unique_keys: set[str] | None = set() if not _warehouse_conn_is_huge(conn) else None
+        unique_keys: set[str] | None = None if huge else set()
+        last_saved = -1
+        select = (
+            "SELECT phone, phone_key, address FROM customers WHERE rowid > ? AND rowid <= ? "
+            "AND phone_key != '' AND address != ''"
+            if huge
+            else "SELECT phone, phone_key, address FROM customers WHERE rowid > ? AND rowid <= ?"
+        )
         while start < top:
-            rows = conn.execute(
-                "SELECT phone, phone_key, address FROM customers WHERE rowid > ? AND rowid <= ?",
-                (start, start + size),
-            ).fetchall()
+            rows = conn.execute(select, (start, start + size)).fetchall()
             for row in rows:
-                total += 1
                 phone = str(row["phone"] or "")
-                if not phone:
-                    empty += 1
+                if not huge:
+                    total += 1
+                    if not phone:
+                        empty += 1
                 key = str(row["phone_key"] or "") or phone_key(phone)
                 if unique_keys is not None and key:
                     unique_keys.add(key)
@@ -1770,15 +1776,43 @@ def rebuild_warehouse_stats(
             start += size
             if progress is not None:
                 progress({"rowid": start, "top": top, "seen": total, "complete": len(complete_keys)})
-        unique = len(unique_keys) if unique_keys is not None else max(0, total - empty)
-        stats = _with_duplicate_phones(
-            {
-                "total": total,
-                "emptyPhone": empty,
-                "uniquePhones": unique,
-                "completeContacts": len(complete_keys),
-            }
-        )
+            if huge and (start - last_saved >= size * 25 or start >= top):
+                cached_total = _read_customer_total(conn)
+                running = _read_warehouse_stats(conn) or {
+                    "total": cached_total or 0,
+                    "emptyPhone": 0,
+                    "uniquePhones": cached_total or 0,
+                    "completeContacts": 0,
+                }
+                if cached_total is not None:
+                    running["total"] = cached_total
+                    running["uniquePhones"] = max(
+                        int(running.get("uniquePhones") or 0),
+                        cached_total - int(running.get("emptyPhone") or 0),
+                    )
+                running["completeContacts"] = len(complete_keys)
+                _write_warehouse_stats(conn, running)
+                conn.commit()
+                last_saved = start
+        cached_total = _read_customer_total(conn)
+        if huge:
+            stats = _with_duplicate_phones(
+                {
+                    "total": cached_total or 0,
+                    "emptyPhone": 0,
+                    "uniquePhones": cached_total or 0,
+                    "completeContacts": len(complete_keys),
+                }
+            )
+        else:
+            stats = _with_duplicate_phones(
+                {
+                    "total": total,
+                    "emptyPhone": empty,
+                    "uniquePhones": len(unique_keys or ()),
+                    "completeContacts": len(complete_keys),
+                }
+            )
         if _stats_generation(conn) != start_gen:
             conn.close()
             conn = connect(db_path)
