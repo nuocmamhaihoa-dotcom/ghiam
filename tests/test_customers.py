@@ -2026,5 +2026,102 @@ class ExactRepeatAddressTests(unittest.TestCase):
             self.assertEqual(rows["thuong"]["updated_at"], now)
 
 
+class WarehouseContactStatsTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.folder = tempfile.TemporaryDirectory(prefix="khach-stats-")
+        self.db_path = Path(self.folder.name) / "server.db"
+        db.init_db(self.db_path)
+
+    def tearDown(self) -> None:
+        self.folder.cleanup()
+
+    def _row(self, customer_id: str, phone: str, address: str, name: str = "Lan") -> dict[str, str]:
+        now = "2026-01-01T00:00:00+00:00"
+        return {
+            "id": customer_id,
+            "name": name,
+            "phone": phone,
+            "address": address,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+
+    def test_complete_contact_needs_phone_and_address_over_20_chars(self) -> None:
+        long_addr = "12 Nguyễn Huệ, Quận 1, TP.HCM"
+        self.assertGreater(len(long_addr), 20)
+        db.replace_customers(
+            self.db_path,
+            [
+                self._row("a", "0901111111", long_addr),
+                self._row("b", "0902222222", "Huế"),
+                self._row("c", "", long_addr, "Không số"),
+                self._row("d", "0903333333", "12345678901234567890"),
+                self._row("e", "0904444444", "123456789012345678901"),
+                self._row("f", "0905555555", "12" + (" " * 30) + "345"),
+            ],
+            [],
+        )
+        stats = db.page_warehouse_stats(self.db_path)
+        exact = db.warehouse_stats(self.db_path)
+        self.assertEqual(stats["completeContacts"], 2)
+        self.assertEqual(stats["emptyPhone"], 1)
+        self.assertEqual(stats["uniquePhones"], 5)
+        self.assertEqual(stats["total"], 6)
+        self.assertTrue(stats["known"])
+        self.assertEqual(exact["completeContacts"], 2)
+        self.assertEqual(exact["uniquePhones"], 5)
+
+    def test_duplicate_phone_counts_complete_contact_once(self) -> None:
+        long_addr = "12 Nguyễn Huệ, Quận 1, Thành phố Hồ Chí Minh"
+        db.replace_customers(
+            self.db_path,
+            [
+                self._row("a", "0901222333", long_addr, "Lan"),
+                self._row("b", "84901222333", long_addr, "Lan 2"),
+                self._row("c", "0901222333", "Một địa chỉ khác rất dài trên hai mươi", "Lan 3"),
+            ],
+            [],
+        )
+        stats = db.page_warehouse_stats(self.db_path)
+        exact = db.warehouse_stats(self.db_path)
+        self.assertEqual(stats["completeContacts"], 1)
+        self.assertEqual(stats["uniquePhones"], 1)
+        self.assertEqual(exact["completeContacts"], 1)
+        self.assertEqual(exact["uniquePhones"], 1)
+
+    def test_filling_address_updates_complete_contact_count(self) -> None:
+        db.replace_customers(self.db_path, [self._row("a", "0901222333", "")], [])
+        self.assertEqual(db.page_warehouse_stats(self.db_path)["completeContacts"], 0)
+        restore_stored_addresses(
+            self.db_path,
+            {db.phone_key("0901222333"): "12 Nguyễn Huệ, Quận 1, TP.HCM"},
+            batch=10,
+        )
+        stats = db.page_warehouse_stats(self.db_path)
+        self.assertEqual(stats["completeContacts"], 1)
+        self.assertEqual(stats["uniquePhones"], 1)
+        db.replace_customers(self.db_path, [self._row("a", "0901222333", "Huế")], [])
+        self.assertEqual(db.page_warehouse_stats(self.db_path)["completeContacts"], 0)
+
+    def test_rebuild_matches_live_counts(self) -> None:
+        db.replace_customers(
+            self.db_path,
+            [
+                self._row("a", "0901111111", "12 Nguyễn Huệ, Quận 1, TP.HCM"),
+                self._row("b", "0902222222", "Huế"),
+                self._row("c", "", "Không số nhưng địa chỉ rất dài đủ hai mươi"),
+            ],
+            [],
+        )
+        rebuilt = db.rebuild_warehouse_stats(self.db_path, batch=1)
+        exact = db.warehouse_stats(self.db_path)
+        page = db.page_warehouse_stats(self.db_path)
+        self.assertEqual(rebuilt, exact)
+        self.assertEqual(page["completeContacts"], exact["completeContacts"])
+        self.assertEqual(page["uniquePhones"], exact["uniquePhones"])
+        self.assertEqual(page["emptyPhone"], exact["emptyPhone"])
+        self.assertEqual(page["total"], exact["total"])
+
+
 if __name__ == "__main__":
     unittest.main()

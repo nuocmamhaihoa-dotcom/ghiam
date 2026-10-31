@@ -1841,11 +1841,13 @@
       var readSum = body.rowSum != null ? body.rowSum : sessions.reduce(function (sum, item) { return sum + (item.incoming || 0); }, 0);
       var uniquePhones = body.uniquePhones != null ? body.uniquePhones : 0;
       var emptyPhone = body.emptyPhone != null ? body.emptyPhone : 0;
+      var completeContacts = body.statsReady === false ? "…" : (body.completeContacts != null ? body.completeContacts : 0);
       var repeatRows = body.repeatRows != null ? body.repeatRows : Math.max(0, readSum - uniquePhones);
       document.getElementById("sessionStats").innerHTML =
         stat(body.total || 0, "Khách trong kho") +
         stat(uniquePhones, "Số điện thoại khác nhau") +
         stat(emptyPhone, "Không có SĐT") +
+        stat(completeContacts, "Đủ SĐT và địa chỉ") +
         stat(readSum, "Dòng đọc cộng dồn") +
         stat(repeatRows, "Trùng SĐT hoặc nạp lại");
       padSpaces(document.getElementById("sessionStats"));
@@ -1896,6 +1898,7 @@
         setNote(
           "sessionNote",
             "Kho đang có " + vnNum(body.total || 0) + " khách — mỗi số điện thoại một hàng. " +
+            (body.statsReady === false ? "Đang đếm khách đủ SĐT và địa chỉ. " : vnNum(body.completeContacts || 0) + " khách đủ SĐT và địa chỉ trên 20 ký tự, mỗi số chỉ đếm một lần. ") +
             vnNum(readSum) + " dòng đọc cộng dồn không phải " + vnNum(readSum) + " khách: cùng một file nạp lại vẫn cộng dòng, số trùng trong file hoặc giữa các file gộp một hàng. " +
             vnNum(repeatRows) + " dòng là trùng SĐT hoặc nạp lại. Cột Thêm là khách mới; Bổ sung / Giữ nguyên là dòng đã khớp khách sẵn có. File còn thiếu: 0.",
           "ok"
@@ -1979,8 +1982,13 @@
       var items = body.items || [];
       var shown = items.length;
       var matched = body.matched;
+      var storeComplete = body.statsReady === false ? "…" : (body.completeContacts != null ? body.completeContacts : 0);
       document.getElementById("storeStats").innerHTML =
-        stat(body.total, "Khách trong kho") + stat(shown, "Khách trang này");
+        stat(body.total, "Khách trong kho") +
+        stat(body.uniquePhones != null ? body.uniquePhones : 0, "Số điện thoại khác nhau") +
+        stat(body.emptyPhone != null ? body.emptyPhone : 0, "Không có SĐT") +
+        stat(storeComplete, "Đủ SĐT và địa chỉ") +
+        stat(shown, "Khách trang này");
       padSpaces(document.getElementById("storeStats"));
       renderRows(items);
       padSpaces(document.getElementById("people"));

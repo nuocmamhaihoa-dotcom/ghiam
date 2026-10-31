@@ -1830,6 +1830,7 @@ def clear_province_only_addresses(db_path: Any, batch: int = 20000) -> dict[str,
                     updates,
                 )
                 changed += conn.total_changes - before
+                db.note_address_rewrites(conn, updates)
             conn.commit()
             start += size
     finally:
@@ -1882,6 +1883,7 @@ def clear_admin_or_short_addresses(
                     updates,
                 )
                 changed += conn.total_changes - before
+                db.note_address_rewrites(conn, updates)
             conn.commit()
             start += size
             if progress is not None:
@@ -1999,6 +2001,7 @@ def clear_short_admin_only_addresses(
                     updates,
                 )
                 changed += conn.total_changes - before
+                db.note_address_rewrites(conn, updates)
             conn.commit()
             start += size
             if progress is not None:
@@ -2078,6 +2081,7 @@ def restore_stored_addresses(
                     updates,
                 )
                 changed += conn.total_changes - before
+                db.note_address_rewrites(conn, updates)
             conn.commit()
             start += size
             if progress is not None:
@@ -2174,6 +2178,7 @@ def restore_stored_addresses_paired(
                     updates,
                 )
                 changed += conn.total_changes - before
+                db.note_address_rewrites(conn, updates)
             conn.commit()
             start += size
             if progress is not None:
@@ -2235,6 +2240,7 @@ def dedupe_exact_addresses(db_path: Any, batch: int = 50000) -> dict[str, int]:
                     updates,
                 )
                 changed += conn.total_changes - before
+                db.note_address_rewrites(conn, updates)
             conn.commit()
             start += size
     finally:
@@ -2275,6 +2281,7 @@ def rewrite_stored_addresses(db_path: Any, now: str, batch: int = 2000) -> dict[
                     updates,
                 )
                 changed += conn.total_changes - before
+                db.note_address_rewrites(conn, [(item[0], item[2], item[3]) for item in updates])
             conn.commit()
             start += size
     finally:
