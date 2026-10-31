@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fcntl
 import json
 import sqlite3
 import threading
@@ -1715,12 +1716,31 @@ def note_address_rewrites(conn: sqlite3.Connection, updates: Iterable[tuple[str,
     _bump_stats_generation(conn)
 
 
+def _warehouse_stats_lock_path(db_path: Path) -> Path:
+    return Path(db_path).parent / "warehouse_stats.lock"
+
+
+def _try_warehouse_stats_lock(db_path: Path):
+    handle = _warehouse_stats_lock_path(db_path).open("a+")
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        handle.close()
+        return None
+    return handle
+
+
 def rebuild_warehouse_stats(
     db_path: Path,
     batch: int = 20_000,
     progress: Any = None,
 ) -> dict[str, int]:
     """Đếm lại toàn kho theo lô rowid: tổng, SĐT trống, SĐT khác nhau, khách đủ liên hệ."""
+    lock = _try_warehouse_stats_lock(db_path)
+    if lock is None:
+        with session(db_path) as conn:
+            cached = _read_warehouse_stats(conn)
+        return cached or _empty_stats()
     conn = connect(db_path)
     try:
         conn.execute("PRAGMA busy_timeout=60000;")
@@ -1769,6 +1789,11 @@ def rebuild_warehouse_stats(
         return stats
     finally:
         conn.close()
+        try:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+        except OSError:
+            pass
+        lock.close()
 
 
 def _rebuild_stats_in_background(db_path: Path) -> None:
