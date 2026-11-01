@@ -11,6 +11,7 @@ from typing import Any
 
 from pc_macro.events import default_title, sanitize_events
 from pc_macro.numbers import NumberQueue
+from pc_macro.script import compile_script, events_to_steps, sanitize_steps, steps_to_events
 
 _SLUG = re.compile(r"[^\w]+", re.UNICODE)
 
@@ -50,8 +51,14 @@ class MacroStore:
         *,
         slug: str | None = None,
         numbers: dict[str, Any] | None = None,
+        steps: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        cleaned = sanitize_events(events)
+        cleaned_steps = sanitize_steps(steps or [])
+        if cleaned_steps:
+            cleaned_steps, cleaned = compile_script(cleaned_steps)
+        else:
+            cleaned = sanitize_events(events)
+            cleaned_steps = events_to_steps(cleaned)
         if not cleaned:
             raise ValueError("no replayable events")
         title = " ".join(name.split()) or default_title(cleaned)
@@ -68,7 +75,9 @@ class MacroStore:
             "slug": chosen,
             "created": created,
             "event_count": len(cleaned),
+            "step_count": len(cleaned_steps),
             "events": cleaned,
+            "steps": cleaned_steps,
         }
         if numbers:
             payload["numbers"] = NumberQueue.from_dict(numbers).to_dict()
@@ -90,6 +99,11 @@ class MacroStore:
         if not isinstance(data, dict):
             return None
         events = sanitize_events(data.get("events") or [])
+        steps = sanitize_steps(data.get("steps") or [])
+        if steps:
+            events = steps_to_events(steps)
+        elif events:
+            steps = events_to_steps(events)
         if not events:
             return None
         slug = path.stem
@@ -98,7 +112,9 @@ class MacroStore:
             "slug": slug,
             "created": str(data.get("created") or ""),
             "event_count": len(events),
+            "step_count": len(steps),
             "events": events,
+            "steps": steps,
         }
         if data.get("numbers") is not None:
             item["numbers"] = NumberQueue.from_dict(data.get("numbers")).to_dict()

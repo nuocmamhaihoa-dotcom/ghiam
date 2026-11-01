@@ -42,7 +42,9 @@ Windows (đã có venv của agent):
 
 Đặt số lần lặp = `0` để làm mãi đến khi bấm Dừng. Ô **Chờ** cho bạn vài giây chuyển sang cửa sổ cần thao tác trước khi máy tự gõ / bấm.
 
-**Dãy số:** lúc ghi, gõ một số mẫu (ví dụ `1001`). Ô **Dãy số** nhận danh sách — mỗi dòng một số, hoặc dán `1001, 2050, 3300`. Máy tự chọn dãy số dài nhất trong bản ghi để thay; đổi ô **Số sẽ thay** nếu chọn nhầm. Mặc định: mỗi lần làm lại lấy số tiếp theo, rồi **cộng 1** vào đúng dòng vừa dùng. Bỏ tick nếu chỉ muốn đi hết danh sách, không tăng.
+**Kịch bản từng bước:** sau khi Dừng, bản ghi tách thành bước (gõ chữ, gõ số, phím, bấm, cuộn, chờ). Sửa / xoá / lên / xuống / thêm từng bước, hoặc **Ghi thêm** để nối thao tác mới. **Chèn vào kịch bản** ghép một bản đã lưu vào kịch bản đang sửa. Lưu rồi lần sau **Mở** lại đúng thứ tự đã chỉnh.
+
+**Dãy số:** lúc ghi, gõ một số mẫu (ví dụ `1001`), hoặc thêm bước **Gõ số**. Ô **Dãy số** nhận danh sách — mỗi dòng một số, hoặc dán `1001, 2050, 3300`. Máy tự chọn dãy số dài nhất trong kịch bản để thay; đổi ô **Số sẽ thay** nếu chọn nhầm. Mặc định: mỗi lần làm lại lấy số tiếp theo, rồi **cộng 1** vào đúng dòng vừa dùng. Bỏ tick nếu chỉ muốn đi hết danh sách, không tăng.
 
 ## Cài đặt trên PC (dùng tài nguyên máy local)
 

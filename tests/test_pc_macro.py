@@ -12,6 +12,17 @@ from pathlib import Path
 from pc_macro.desktop import key_name
 from pc_macro.events import default_title, point_in_box, sanitize_events, schedule, script_lines
 from pc_macro.numbers import NumberQueue, apply_turn, bump_number, digit_spans, parse_number_list, pick_span
+from pc_macro.script import (
+    compile_script,
+    delete_step,
+    events_to_steps,
+    insert_steps,
+    move_step,
+    new_step,
+    replace_step,
+    script_captions,
+    steps_to_events,
+)
 from pc_macro.session import Player, Recorder
 from pc_macro.store import MacroStore
 
@@ -169,6 +180,80 @@ class NumberListTests(unittest.TestCase):
         self.assertEqual(result["loops"], 2)
 
 
+class ScriptStepTests(unittest.TestCase):
+    def test_collapses_and_compiles_back(self) -> None:
+        events = sanitize_events(
+            [
+                {"t": 0, "kind": "key", "action": "down", "key": "h"},
+                {"t": 5, "kind": "key", "action": "up", "key": "h"},
+                {"t": 10, "kind": "key", "action": "down", "key": "i"},
+                {"t": 15, "kind": "key", "action": "up", "key": "i"},
+                {"t": 40, "kind": "key", "action": "down", "key": "Enter"},
+                {"t": 50, "kind": "click", "action": "down", "button": "left", "x": 8, "y": 9},
+                {"t": 60, "kind": "click", "action": "up", "button": "left", "x": 8, "y": 9},
+            ]
+        )
+        steps = events_to_steps(events)
+        self.assertEqual([step["kind"] for step in steps], ["type", "key", "click"])
+        self.assertEqual(steps[0]["value"], "hi")
+        self.assertEqual(script_captions(steps), ["Gõ hi", "Phím enter", "Bấm trái tại 8,9"])
+        replayed = steps_to_events(steps)
+        downs = [event["key"] for event in replayed if event.get("kind") == "key" and event.get("action") == "down"]
+        self.assertEqual(downs, ["h", "i", "enter"])
+        clicks = [event for event in replayed if event.get("kind") == "click" and event.get("action") == "up"]
+        self.assertEqual(clicks[0]["x"], 8)
+
+    def test_edit_reorder_and_number_after_compile(self) -> None:
+        events = sanitize_events(
+            [
+                {"t": 0, "kind": "key", "action": "down", "key": "1"},
+                {"t": 1, "kind": "key", "action": "up", "key": "1"},
+                {"t": 2, "kind": "key", "action": "down", "key": "0"},
+                {"t": 3, "kind": "key", "action": "up", "key": "0"},
+                {"t": 4, "kind": "key", "action": "down", "key": "0"},
+                {"t": 5, "kind": "key", "action": "up", "key": "0"},
+                {"t": 6, "kind": "key", "action": "down", "key": "1"},
+                {"t": 7, "kind": "key", "action": "up", "key": "1"},
+                {"t": 20, "kind": "key", "action": "down", "key": "Enter"},
+            ]
+        )
+        steps = events_to_steps(events)
+        self.assertEqual(steps[0]["kind"], "number")
+        self.assertEqual(steps[0]["value"], "1001")
+        steps = replace_step(steps, 0, {"kind": "number", "value": "2050", "wait": 0})
+        self.assertEqual(steps[0]["value"], "2050")
+        extra = new_step("wait", wait=400)
+        assert extra is not None
+        steps = insert_steps(steps, 1, [extra])
+        steps = move_step(steps, 2, -1)
+        self.assertEqual([step["kind"] for step in steps], ["number", "key", "wait"])
+        steps = delete_step(steps, 2)
+        self.assertEqual([step["kind"] for step in steps], ["number", "key"])
+        compiled, replayed = compile_script(steps)
+        self.assertEqual(len(compiled), 2)
+        spans = digit_spans(replayed)
+        self.assertEqual([span["value"] for span in spans], ["2050"])
+        queue = NumberQueue(["3300"], bump=True, step=1, span=0)
+        batch, used = apply_turn(replayed, spans, queue)
+        self.assertEqual(used, "3300")
+        self.assertEqual([span["value"] for span in digit_spans(batch)], ["3300"])
+        self.assertEqual(queue.items, ["3301"])
+
+    def test_wait_shifts_clock_and_rejects_junk(self) -> None:
+        events = steps_to_events(
+            [
+                {"kind": "wait", "wait": 500},
+                {"kind": "key", "key": "a"},
+                {"kind": "explode"},
+                {"kind": "type", "value": ""},
+            ]
+        )
+        self.assertEqual(events[0]["t"], 500)
+        self.assertEqual(events[0]["key"], "a")
+        self.assertIsNone(new_step("nope"))
+        self.assertEqual(move_step([{"kind": "key", "key": "a"}], 0, -1)[0]["key"], "a")
+
+
 class StoreTests(unittest.TestCase):
     def test_roundtrip_and_unique_names(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -202,6 +287,16 @@ class StoreTests(unittest.TestCase):
             )
             self.assertEqual(store.get(again["slug"])["numbers"]["items"], ["1003"])
             self.assertEqual(len(store.list()), 2)
+            scripted = store.save(
+                "Kịch bản",
+                [],
+                steps=[{"kind": "number", "value": "42"}, {"kind": "key", "key": "enter", "wait": 200}],
+            )
+            loaded = store.get(scripted["slug"])
+            assert loaded is not None
+            self.assertEqual([step["kind"] for step in loaded["steps"]], ["number", "key"])
+            self.assertEqual(loaded["steps"][0]["value"], "42")
+            self.assertEqual(loaded["step_count"], 2)
 
 
 class HelperTests(unittest.TestCase):
@@ -247,7 +342,7 @@ class CliTests(unittest.TestCase):
                 shown = io.StringIO()
                 with redirect_stdout(shown):
                     self.assertEqual(main(["show", "Gõ a"]), 0)
-                self.assertIn("Gõ a", shown.getvalue())
+                self.assertIn("1. Gõ a", shown.getvalue())
             finally:
                 os.environ.pop("PC_MACRO_DIR", None)
 
