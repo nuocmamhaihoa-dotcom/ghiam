@@ -78,29 +78,51 @@
       font-family: ui-monospace, Consolas, monospace;
       font-size: 1.2rem;
     }
+    .order {
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      margin: 6px 0 8px;
+      color: #0b6bcb;
+    }
     .marks {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
+      display: flex;
+      align-items: stretch;
+      gap: 4px;
       margin: 8px 0;
     }
     .mark {
+      flex: 1;
       border: 2px solid #0b6bcb;
       border-radius: 12px;
-      padding: 10px 8px;
+      padding: 8px 4px;
       text-align: center;
       background: #f3f8fd;
-      min-height: 88px;
+      min-width: 0;
     }
     .mark.empty { border-color: #c5ccd4; background: #f7f9fb; color: #5c6770; }
+    .mark.next { border-color: #c2410c; background: #fff1e8; box-shadow: 0 0 0 3px #ffd166; }
     .mark.on { border-color: #c2410c; background: #fff1e8; }
     .mark b {
       display: block;
-      font-size: 1.8rem;
+      font-size: 1.7rem;
       line-height: 1.1;
+      margin: 0 0 2px;
+    }
+    .mark em {
+      display: block;
+      font-style: normal;
+      font-weight: 700;
+      font-size: 0.78rem;
       margin: 0 0 4px;
     }
-    .mark span { display: block; font-family: ui-monospace, Consolas, monospace; font-size: 0.95rem; }
+    .mark span { display: block; font-family: ui-monospace, Consolas, monospace; font-size: 0.78rem; word-break: break-all; }
+    .arrow {
+      align-self: center;
+      font-weight: 800;
+      color: #0b6bcb;
+      font-size: 1.15rem;
+      padding: 0 1px;
+    }
     .coords { font-family: ui-monospace, Consolas, monospace; font-size: 0.95rem; }
     .flags { list-style: none; margin: 0; padding: 0; }
     .flags li {
@@ -162,7 +184,8 @@
 
   <section class="card">
     <label>4&nbsp;nút&nbsp;chuột&nbsp;trái</label>
-    <p class="hint">Trên&nbsp;máy&nbsp;tính:&nbsp;bấm&nbsp;<b>Ghi&nbsp;4&nbsp;nút</b>,&nbsp;màn&nbsp;hình&nbsp;phủ&nbsp;lên,&nbsp;bấm&nbsp;4&nbsp;chỗ.&nbsp;Mỗi&nbsp;chỗ&nbsp;hiện&nbsp;số&nbsp;1&nbsp;→&nbsp;2&nbsp;→&nbsp;3&nbsp;→&nbsp;4.</p>
+    <p class="hint">Trên&nbsp;máy&nbsp;tính:&nbsp;bấm&nbsp;<b>Ghi&nbsp;4&nbsp;nút</b>.&nbsp;Màn&nbsp;hình&nbsp;phủ&nbsp;lên,&nbsp;bấm&nbsp;4&nbsp;chỗ&nbsp;thật.&nbsp;Mỗi&nbsp;chỗ&nbsp;hiện&nbsp;số&nbsp;1&nbsp;→&nbsp;2&nbsp;→&nbsp;3&nbsp;→&nbsp;4.</p>
+    <p class="order" id="orderStrip">1&nbsp;→&nbsp;2&nbsp;→&nbsp;3&nbsp;→&nbsp;4</p>
     <p class="hint coords" id="recoverLabel">Thứ&nbsp;tự:&nbsp;chưa&nbsp;ghi</p>
     <div class="marks" id="marks"></div>
     <div class="row">
@@ -358,18 +381,29 @@
     var box = $("marks");
     box.innerHTML = "";
     for (var index = 0; index < 4; index++) {
+      if (index) {
+        var arrow = document.createElement("div");
+        arrow.className = "arrow";
+        arrow.textContent = "→";
+        box.appendChild(arrow);
+      }
       var click = recoverClicks[index];
       var card = document.createElement("div");
-      card.className = "mark" + (click ? "" : " empty");
+      var waiting = recordingRecover && index === recoverClicks.length;
+      card.className = "mark" + (click ? "" : " empty") + (waiting ? " next" : "");
       card.id = "mark" + index;
       var title = document.createElement("b");
       title.textContent = String(index + 1);
+      var step = document.createElement("em");
+      step.textContent = "Bước " + (index + 1);
       var detail = document.createElement("span");
-      detail.textContent = click ? ("trái  " + click.x + " , " + click.y) : "chưa ghi";
+      detail.textContent = click ? ("trái " + click.x + "," + click.y) : "chưa ghi";
       card.appendChild(title);
+      card.appendChild(step);
       card.appendChild(detail);
       box.appendChild(card);
     }
+    $("orderStrip").textContent = "1 → 2 → 3 → 4";
     if (!recoverClicks.length) {
       $("recoverLabel").textContent = "Thứ tự: chưa ghi";
       return;

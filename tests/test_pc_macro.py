@@ -35,7 +35,16 @@ from pc_macro.script import (
     script_captions,
     steps_to_events,
 )
-from pc_macro.screen import change_percent, click_order_labels, make_grid, sanitize_clicks, should_recover
+from pc_macro.screen import (
+    append_screen_click,
+    change_percent,
+    click_order_cards,
+    click_order_labels,
+    make_grid,
+    overlay_banner,
+    sanitize_clicks,
+    should_recover,
+)
 from pc_macro.session import Player, Recorder
 from pc_macro.store import MacroStore
 
@@ -282,6 +291,17 @@ class PrefixRangeTests(unittest.TestCase):
                 "Nút 4  →  chưa ghi",
             ],
         )
+        cards = click_order_cards([{"x": 10, "y": 20}, {"x": 30, "y": 40}])
+        self.assertEqual(len(cards), 4)
+        self.assertEqual(cards[0]["title"], "Bước 1")
+        self.assertIn("10 , 20", cards[0]["detail"])
+        self.assertEqual(cards[3]["detail"], "chưa ghi")
+        first = append_screen_click([], 11, 22)
+        second = append_screen_click(first, 33, 44)
+        self.assertEqual([item["x"] for item in second], [11, 33])
+        self.assertEqual(overlay_banner(0, recording=True), "Bấm trái nút 1/4 trên màn hình. Esc hủy.")
+        self.assertEqual(overlay_banner(3, recording=True), "Bấm trái nút 4/4 trên màn hình. Esc hủy.")
+        self.assertIn("1 → 2 → 3 → 4", overlay_banner(4, recording=False))
         queue = NumberQueue(
             range_mode=True,
             prefix="SPXAB",

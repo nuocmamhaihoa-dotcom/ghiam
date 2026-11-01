@@ -22,7 +22,7 @@ Chi tiết vận hành 2 PC: [`deploy/PA1_RUNBOOK.md`](deploy/PA1_RUNBOOK.md).
 
 ## Ghi nhớ phím và chuột trên máy, rồi làm lại
 
-Phần mềm nhỏ **chạy trên máy tính của bạn**: nhập **5 ký tự cố định** (đổi được), **số bắt đầu** và **số kết thúc** của 5 số phía sau, **Ghi 4 nút** nếu sau Enter màn hình có thể đổi. **Bắt đầu**: máy gõ mã (ví dụ `SPXAB00001`), Enter, đo % đổi màn. Đủ ngưỡng (mặc định 80%): lưu mã vừa gõ vào danh sách, bấm 4 nút trái đã chỉ, rồi gõ số tiếp. F9 cũng lưu số vừa Enter. F8 dừng. VPS `http://VPS:8088/` hiện cùng giao diện; Gõ/Enter/bấm thật trên máy Windows.
+Phần mềm nhỏ **chạy trên máy tính của bạn**: nhập **5 ký tự cố định** (đổi được), **số bắt đầu** và **số kết thúc** của 5 số phía sau, **Ghi 4 nút** nếu sau Enter màn hình có thể đổi. Bấm **Ghi 4 nút**: màn hình phủ lên, bấm 4 chỗ thật — mỗi chỗ hiện số **1 → 2 → 3 → 4**. **Bắt đầu**: máy gõ mã (ví dụ `SPXAB00001`), Enter, đo % đổi màn. Đủ ngưỡng (mặc định 80%): lưu mã vừa gõ vào danh sách, bấm 4 nút trái đã chỉ, rồi gõ số tiếp. F9 cũng lưu số vừa Enter. F8 dừng. VPS `http://VPS:8088/` hiện cùng 4 thẻ thứ tự; Gõ/Enter/bấm thật trên máy Windows.
 
 ```bash
 pip install pynput          # hoặc: pip install -e ".[macro]"

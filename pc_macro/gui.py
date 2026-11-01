@@ -12,7 +12,7 @@ from pc_macro.desktop import Desktop, available, install_hint
 from pc_macro.hub import HubError, configured, describe, pull, push
 from pc_macro.numbers import NumberQueue, make_code, normalize_digits, normalize_prefix
 from pc_macro.overlay import ClickOverlay, show_click_overlay
-from pc_macro.screen import RECOVER_CLICKS, capture_grid, click_order_labels, normalize_threshold, sanitize_clicks, should_recover
+from pc_macro.screen import RECOVER_CLICKS, capture_grid, click_order_cards, normalize_threshold, sanitize_clicks, should_recover
 from pc_macro.script import compile_script, number_enter_steps
 from pc_macro.session import Player, Recorder, ignore_window
 from pc_macro.store import MacroStore
@@ -30,8 +30,8 @@ class App:
         self.store = MacroStore()
         self.root = tk.Tk()
         self.root.title("Gõ số rồi Enter")
-        self.root.geometry("430x820")
-        self.root.minsize(400, 740)
+        self.root.geometry("430x860")
+        self.root.minsize(400, 780)
         self.root.attributes("-topmost", True)
         self.status = tk.StringVar(value="Nhập 5 ký tự cố định, số bắt đầu / kết thúc, rồi ghi 4 nút nếu cần.")
         self.current_label = tk.StringVar(value="Sẽ gõ: —")
@@ -111,8 +111,21 @@ class App:
         ttk.Button(extra, text="Lấy VPS", command=self.pull_hub).pack(side="left", padx=2)
 
         ttk.Label(self.root, text="4 nút chuột trái — thứ tự 1 → 2 → 3 → 4").pack(anchor="w", padx=12, pady=(8, 2))
-        self.recover_box = tk.Listbox(self.root, height=4, font=("Segoe UI", 13), activestyle="none")
-        self.recover_box.pack(fill="x", padx=12, pady=2)
+        self._mark_cards: list[tuple[tk.Frame, tk.Label, tk.Label]] = []
+        strip = tk.Frame(self.root)
+        strip.pack(fill="x", padx=10, pady=2)
+        for index in range(RECOVER_CLICKS):
+            card = tk.Frame(strip, bd=2, relief="solid", bg="#f3f8fd", highlightthickness=0)
+            card.pack(side="left", expand=True, fill="both", padx=3)
+            num = tk.Label(card, text=str(index + 1), font=("Segoe UI", 22, "bold"), fg="#0b6bcb", bg="#f3f8fd")
+            num.pack(pady=(6, 0))
+            title = tk.Label(card, text=f"Bước {index + 1}", font=("Segoe UI", 10, "bold"), bg="#f3f8fd")
+            title.pack()
+            detail = tk.Label(card, text="chưa ghi", font=("Segoe UI", 10), bg="#f3f8fd", wraplength=88)
+            detail.pack(pady=(0, 8))
+            self._mark_cards.append((card, num, detail))
+            if index < RECOVER_CLICKS - 1:
+                tk.Label(strip, text="→", font=("Segoe UI", 16, "bold"), fg="#0b6bcb").pack(side="left")
         marks = ttk.Frame(self.root)
         marks.pack(fill="x", **pad)
         ttk.Button(marks, text="Hiện 4 nút trên màn", command=self.preview_recover).pack(side="left", padx=2)
@@ -413,10 +426,17 @@ class App:
 
     def _refresh_recover(self) -> None:
         clicks = self._recover_draft if self._record_recover else self.queue.recover_clicks
-        labels = click_order_labels(clicks)
-        self.recover_box.delete(0, tk.END)
-        for line in labels:
-            self.recover_box.insert(tk.END, line)
+        cards = click_order_cards(clicks)
+        for index, (card, num, detail) in enumerate(self._mark_cards):
+            item = cards[index]
+            detail.configure(text=item["detail"])
+            empty = bool(item["empty"])
+            bg = "#f7f9fb" if empty else "#e8f3ff"
+            fg = "#5c6770" if empty else "#0b6bcb"
+            card.configure(bg=bg)
+            for child in card.winfo_children():
+                child.configure(bg=bg)
+            num.configure(fg=fg)
         done = sum(1 for item in sanitize_clicks(clicks))
         if done >= RECOVER_CLICKS:
             self.recover_label.set("Đủ 4 nút trái. Thứ tự bấm: 1 rồi 2 rồi 3 rồi 4.")

@@ -37,6 +37,45 @@ def click_order_labels(clicks: Any) -> list[str]:
     return labels
 
 
+def click_order_cards(clicks: Any) -> list[dict[str, str]]:
+    """One card per button: big step number plus the saved point."""
+    clean = sanitize_clicks(clicks)
+    cards: list[dict[str, str]] = []
+    for index in range(RECOVER_CLICKS):
+        if index < len(clean):
+            item = clean[index]
+            cards.append(
+                {
+                    "step": str(index + 1),
+                    "title": f"Bước {index + 1}",
+                    "detail": f"trái  {item['x']} , {item['y']}",
+                    "empty": "",
+                }
+            )
+        else:
+            cards.append(
+                {
+                    "step": str(index + 1),
+                    "title": f"Bước {index + 1}",
+                    "detail": "chưa ghi",
+                    "empty": "1",
+                }
+            )
+    return cards
+
+
+def append_screen_click(clicks: Any, x: Any, y: Any) -> list[dict[str, Any]]:
+    """Remember the next left-click in order (max four)."""
+    return sanitize_clicks([*sanitize_clicks(clicks), {"x": x, "y": y}])
+
+
+def overlay_banner(count: int, *, recording: bool, total: int = RECOVER_CLICKS) -> str:
+    """Top bar while the user points at the real screen."""
+    if recording and 0 <= count < total:
+        return f"Bấm trái nút {count + 1}/{total} trên màn hình. Esc hủy."
+    return "Đã nhớ 4 nút trái theo thứ tự 1 → 2 → 3 → 4."
+
+
 def sanitize_clicks(raw: Any) -> list[dict[str, Any]]:
     """Keep up to four left-click points the user pointed at."""
     clicks: list[dict[str, Any]] = []
