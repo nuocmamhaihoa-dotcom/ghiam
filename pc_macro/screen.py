@@ -24,6 +24,19 @@ def normalize_threshold(raw: Any, default: int = DEFAULT_THRESHOLD) -> int:
     return max(1, min(100, value))
 
 
+def click_order_labels(clicks: Any) -> list[str]:
+    """Four lines: Nút 1 → … so the order stays obvious."""
+    clean = sanitize_clicks(clicks)
+    labels: list[str] = []
+    for index in range(RECOVER_CLICKS):
+        if index < len(clean):
+            item = clean[index]
+            labels.append(f"Nút {index + 1}  →  chuột trái  ·  {item['x']} , {item['y']}")
+        else:
+            labels.append(f"Nút {index + 1}  →  chưa ghi")
+    return labels
+
+
 def sanitize_clicks(raw: Any) -> list[dict[str, Any]]:
     """Keep up to four left-click points the user pointed at."""
     clicks: list[dict[str, Any]] = []

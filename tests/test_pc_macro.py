@@ -35,7 +35,7 @@ from pc_macro.script import (
     script_captions,
     steps_to_events,
 )
-from pc_macro.screen import change_percent, make_grid, sanitize_clicks, should_recover
+from pc_macro.screen import change_percent, click_order_labels, make_grid, sanitize_clicks, should_recover
 from pc_macro.session import Player, Recorder
 from pc_macro.store import MacroStore
 
@@ -273,6 +273,15 @@ class PrefixRangeTests(unittest.TestCase):
         miss, _percent = should_recover(same, make_grid((10, 10, 10), flip=10), 80)
         self.assertFalse(miss)
         self.assertEqual(len(sanitize_clicks([{"x": 1, "y": 2}, {"x": 3, "y": 4}, {"x": 5, "y": 6}, {"x": 7, "y": 8}, {"x": 9, "y": 10}])), 4)
+        self.assertEqual(
+            click_order_labels([{"x": 10, "y": 20}]),
+            [
+                "Nút 1  →  chuột trái  ·  10 , 20",
+                "Nút 2  →  chưa ghi",
+                "Nút 3  →  chưa ghi",
+                "Nút 4  →  chưa ghi",
+            ],
+        )
         queue = NumberQueue(
             range_mode=True,
             prefix="SPXAB",

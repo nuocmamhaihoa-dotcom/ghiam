@@ -19,6 +19,7 @@
       font-family: -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
       font-size: 17px;
       line-height: 1.45;
+      word-spacing: 0.22em;
     }
     main { max-width: 430px; margin: 0 auto; padding: 14px 12px 36px; }
     h1 { font-size: 1.45rem; margin: 0 0 8px; }
@@ -77,30 +78,29 @@
       font-family: ui-monospace, Consolas, monospace;
       font-size: 1.2rem;
     }
-    .stage {
-      position: relative;
-      height: 140px;
-      border: 1.5px dashed #9aa4b0;
-      border-radius: 8px;
-      background: #f7f9fb;
-      overflow: hidden;
+    .marks {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 8px 0;
     }
-    .dot {
-      position: absolute;
-      width: 28px;
-      height: 28px;
-      margin: -14px 0 0 -14px;
-      border-radius: 50%;
-      background: #0b6bcb;
-      color: #fff;
-      font-size: 13px;
-      font-weight: 700;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      pointer-events: none;
+    .mark {
+      border: 2px solid #0b6bcb;
+      border-radius: 12px;
+      padding: 10px 8px;
+      text-align: center;
+      background: #f3f8fd;
+      min-height: 88px;
     }
-    .dot.on { background: #c2410c; transform: scale(1.15); }
+    .mark.empty { border-color: #c5ccd4; background: #f7f9fb; color: #5c6770; }
+    .mark.on { border-color: #c2410c; background: #fff1e8; }
+    .mark b {
+      display: block;
+      font-size: 1.8rem;
+      line-height: 1.1;
+      margin: 0 0 4px;
+    }
+    .mark span { display: block; font-family: ui-monospace, Consolas, monospace; font-size: 0.95rem; }
     .coords { font-family: ui-monospace, Consolas, monospace; font-size: 0.95rem; }
     .flags { list-style: none; margin: 0; padding: 0; }
     .flags li {
@@ -154,20 +154,20 @@
       </div>
     </div>
     <div class="row">
-      <button type="button" class="go" id="btnStart"><span class="w">Bắt</span><span class="w">đầu</span></button>
-      <button type="button" id="btnStop"><span class="w">Dừng</span></button>
-      <button type="button" class="warn" id="btnFlag"><span class="w">Giao</span><span class="w">diện</span><span class="w">đổi</span></button>
+      <button type="button" class="go" id="btnStart">Bắt&nbsp;đầu</button>
+      <button type="button" id="btnStop">Dừng</button>
+      <button type="button" class="warn" id="btnFlag">Giao&nbsp;diện&nbsp;đổi</button>
     </div>
   </section>
 
   <section class="card">
-    <label><span class="w">4</span><span class="w">nút</span><span class="w">chuột</span><span class="w">trái</span></label>
-    <p class="hint"><span class="w">Trên</span><span class="w">PC:</span><span class="w">Ghi</span><span class="w">4</span><span class="w">nút</span><span class="w">rồi</span><span class="w">bấm</span><span class="w">đúng</span><span class="w">4</span><span class="w">vị</span><span class="w">trí.</span><span class="w">Ở</span><span class="w">đây</span><span class="w">bấm</span><span class="w">4</span><span class="w">điểm</span><span class="w">để</span><span class="w">tập,</span><span class="w">hoặc</span><span class="w">gõ</span><span class="w">tọa</span><span class="w">độ.</span></p>
-    <p class="hint coords" id="recoverLabel"><span class="w">4</span><span class="w">nút:</span><span class="w">chưa</span><span class="w">ghi</span></p>
-    <div class="stage" id="stage"></div>
+    <label>4&nbsp;nút&nbsp;chuột&nbsp;trái</label>
+    <p class="hint">Trên&nbsp;máy&nbsp;tính:&nbsp;bấm&nbsp;<b>Ghi&nbsp;4&nbsp;nút</b>,&nbsp;màn&nbsp;hình&nbsp;phủ&nbsp;lên,&nbsp;bấm&nbsp;4&nbsp;chỗ.&nbsp;Mỗi&nbsp;chỗ&nbsp;hiện&nbsp;số&nbsp;1&nbsp;→&nbsp;2&nbsp;→&nbsp;3&nbsp;→&nbsp;4.</p>
+    <p class="hint coords" id="recoverLabel">Thứ&nbsp;tự:&nbsp;chưa&nbsp;ghi</p>
+    <div class="marks" id="marks"></div>
     <div class="row">
-      <button type="button" id="btnRecordRecover"><span class="w">Ghi</span><span class="w">4</span><span class="w">nút</span></button>
-      <button type="button" id="btnClearRecover"><span class="w">Xóa</span><span class="w">4</span><span class="w">nút</span></button>
+      <button type="button" id="btnRecordRecover">Ghi&nbsp;4&nbsp;nút</button>
+      <button type="button" id="btnClearRecover">Xóa&nbsp;4&nbsp;nút</button>
     </div>
   </section>
 
@@ -355,28 +355,28 @@
     return n;
   }
   function renderRecover() {
-    var stage = $("stage");
-    stage.innerHTML = "";
-    recoverClicks.forEach(function (click, index) {
-      var dot = document.createElement("div");
-      dot.className = "dot";
-      dot.id = "dot" + index;
-      dot.textContent = String(index + 1);
-      var left = Math.max(14, Math.min(stage.clientWidth - 14, click.x > 400 ? 40 + index * 70 : click.x));
-      var top = Math.max(14, Math.min(stage.clientHeight - 14, click.y > 200 ? 40 : click.y));
-      if (click.sx != null) left = click.sx;
-      if (click.sy != null) top = click.sy;
-      dot.style.left = left + "px";
-      dot.style.top = top + "px";
-      stage.appendChild(dot);
-    });
+    var box = $("marks");
+    box.innerHTML = "";
+    for (var index = 0; index < 4; index++) {
+      var click = recoverClicks[index];
+      var card = document.createElement("div");
+      card.className = "mark" + (click ? "" : " empty");
+      card.id = "mark" + index;
+      var title = document.createElement("b");
+      title.textContent = String(index + 1);
+      var detail = document.createElement("span");
+      detail.textContent = click ? ("trái  " + click.x + " , " + click.y) : "chưa ghi";
+      card.appendChild(title);
+      card.appendChild(detail);
+      box.appendChild(card);
+    }
     if (!recoverClicks.length) {
-      $("recoverLabel").textContent = "4 nút: chưa ghi";
+      $("recoverLabel").textContent = "Thứ tự: chưa ghi";
       return;
     }
     $("recoverLabel").textContent = recoverClicks.map(function (click, index) {
-      return (index + 1) + ". " + click.x + "," + click.y;
-    }).join("  ·  ");
+      return "Nút " + (index + 1) + " → " + click.x + " , " + click.y;
+    }).join("   |   ");
   }
   function afterEnter(value, done) {
     if (!playing) { done(); return; }
@@ -404,8 +404,8 @@
       return;
     }
     renderRecover();
-    var dot = $("dot" + index);
-    if (dot) dot.className = "dot on";
+    var card = $("mark" + index);
+    if (card) card.className = "mark on";
     timer = window.setTimeout(function () { flashDots(index + 1, done); }, 220);
   }
   function flagNow() {
@@ -450,7 +450,7 @@
     recoverClicks = [];
     recordingRecover = true;
     renderRecover();
-    setStatus("Bấm 4 điểm trên khung tập, theo đúng thứ tự 4 nút.");
+    setStatus("Trên máy tính hãy dùng Ghi 4 nút để bấm 4 chỗ trên màn hình. Ở đây bấm 4 thẻ theo thứ tự.");
   };
   $("btnClearRecover").onclick = function () {
     recoverClicks = [];
@@ -459,18 +459,18 @@
     persist().catch(function () {});
     setStatus("Đã xóa 4 nút.");
   };
-  $("stage").onclick = function (ev) {
+  $("marks").onclick = function (ev) {
     if (!recordingRecover && recoverClicks.length >= 4) return;
     if (!recordingRecover) recordingRecover = true;
-    var box = $("stage").getBoundingClientRect();
+    var box = $("marks").getBoundingClientRect();
     var x = Math.round(ev.clientX - box.left);
     var y = Math.round(ev.clientY - box.top);
     recoverClicks.push({ x: x, y: y, sx: x, sy: y });
     if (recoverClicks.length >= 4) {
       recordingRecover = false;
-      setStatus("Đã nhớ 4 nút tập. Trên PC hãy Ghi 4 nút vào vị trí thật.", "ok");
+      setStatus("Đã nhớ 4 nút tập theo thứ tự 1 → 2 → 3 → 4. Trên PC hãy Ghi 4 nút trên màn hình thật.", "ok");
     } else {
-      setStatus("Đã ghi " + recoverClicks.length + "/4 nút.");
+      setStatus("Đã ghi nút " + recoverClicks.length + "/4.");
     }
     renderRecover();
   };

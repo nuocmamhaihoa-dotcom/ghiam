@@ -60,7 +60,7 @@ class MacroHubPageTests(unittest.TestCase):
         self.assertIn('id="end"', home.text)
         self.assertIn('id="threshold"', home.text)
         self.assertIn('id="btnRecordRecover"', home.text)
-        self.assertIn('id="stage"', home.text)
+        self.assertIn('id="marks"', home.text)
         self.assertIn("giao diện đổi", home.text)
         self.assertIn("F9", home.text)
         self.assertIn("/tai/pc-macro.zip", home.text)
