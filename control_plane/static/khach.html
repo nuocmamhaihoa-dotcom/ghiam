@@ -2,7 +2,8 @@
 <html lang="vi" translate="no" class="notranslate">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="format-detection" content="telephone=no" />
   <meta name="color-scheme" content="only light" />
   <meta name="supported-color-schemes" content="light only" />
   <meta name="google" content="notranslate" />
@@ -14,39 +15,39 @@
     html { color-scheme: only light; }
     :root { color-scheme: only light; --ink: #17202a; --muted: #5c6770; --line: #e4e7ec; --bg: #f4f6f8; --card: #fff; --blue: #0b6bcb; }
     * { box-sizing: border-box; }
-    html, body, button, input, textarea, select {
+    html, body, button, input, textarea, select, h1, h2, h3, p, span, label, a {
       color-scheme: only light;
       forced-color-adjust: none;
+      font-synthesis: none;
+      -webkit-text-stroke: 0;
+      text-shadow: none;
     }
     html, body {
       margin: 0;
       color: var(--ink);
       background: var(--bg);
-      font-family: Tahoma, "Segoe UI", Arial, Helvetica, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
       font-size: 16px;
       font-weight: 400;
-      line-height: 1.45;
+      line-height: 1.5;
       letter-spacing: 0;
-      word-spacing: 0.14em;
-      font-kerning: none;
-      font-variant-ligatures: none;
-      text-autospace: no-autospace;
-      text-rendering: auto;
+      word-spacing: normal;
+      overflow-wrap: anywhere;
     }
     main { max-width: 960px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
-    h1 { font-size: 1.7rem; margin: 0 0 0.25rem; font-weight: 700; }
-    h2 { font-size: 1.15rem; margin: 0 0 0.7rem; font-weight: 700; }
+    h1 { font-size: 1.7rem; margin: 0 0 0.25rem; font-weight: 600; }
+    h2 { font-size: 1.15rem; margin: 0 0 0.7rem; font-weight: 600; }
     p { margin: 0; }
     .lead { color: var(--muted); margin-bottom: 1rem; }
     section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1rem; margin: 0 0 0.8rem; }
-    label { display: block; font-weight: 700; margin: 0 0 0.35rem; }
+    label { display: block; font-weight: 600; margin: 0 0 0.35rem; }
     input[type="search"], select, textarea {
       width: 100%; font: inherit; padding: 0.7rem 0.75rem; border: 1px solid #cfd5dc; border-radius: 10px; background: #fff;
     }
     textarea { min-height: 140px; resize: vertical; }
     .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
     button, .file {
-      font: inherit; font-weight: 700; border: 0; border-radius: 10px; min-height: 46px; padding: 0 1rem; cursor: pointer;
+      font: inherit; font-weight: 600; border: 0; border-radius: 10px; min-height: 46px; padding: 0 1rem; cursor: pointer;
     }
     button.primary, .file { background: var(--blue); color: #fff; }
     button.ghost { background: #eef1f4; color: var(--ink); }
@@ -82,7 +83,7 @@
     }
     table.sheet th {
       color: var(--ink);
-      font-weight: 700;
+      font-weight: 600;
       background: #eef2f6;
       white-space: nowrap;
     }
@@ -116,15 +117,15 @@
     .map-card h3 { font-size: 1rem; margin: 0 0 0.35rem; }
     .map-card .core { display: grid; gap: 0.55rem; }
     details.extra { margin-top: 0.55rem; }
-    details.extra summary { cursor: pointer; font-weight: 700; }
+    details.extra summary { cursor: pointer; font-weight: 600; }
     .note { color: var(--muted); margin-top: 0.55rem; }
-    .warn { color: #8a2b2b; font-weight: 700; }
+    .warn { color: #8a2b2b; font-weight: 600; }
     .ok { color: #0d6b3a; }
     .map { display: grid; gap: 0.7rem; margin: 0.8rem 0; }
     .files { margin: 0.4rem 0 0.8rem; padding: 0; }
     .files li { margin: 0.25rem 0; }
     .nav { margin: 0 0 1rem; }
-    .nav a { color: var(--blue); font-weight: 700; text-decoration: none; }
+    .nav a { color: var(--blue); font-weight: 600; text-decoration: none; }
     .scroll {
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
@@ -139,7 +140,7 @@
     .sp {
       display: inline;
       font-weight: 400;
-      padding: 0 0.02em;
+      white-space: normal;
     }
     table.sess { width: 100%; table-layout: auto; }
     table.sess th, table.sess td { white-space: normal; overflow: visible; }
@@ -281,7 +282,7 @@
         var spacer = document.createElement("span");
         spacer.className = "sp";
         spacer.setAttribute("translate", "no");
-        spacer.textContent = "\u00A0";
+        spacer.textContent = " ";
         wrap.appendChild(spacer);
       }
       if (part) {
@@ -343,8 +344,11 @@
   function watchSpaces() {
     var banner = document.getElementById("translateWarn");
     function tick() {
-      if (banner) banner.hidden = !pageTranslated();
-      padSpaces(document.body);
+      var translated = pageTranslated();
+      if (banner) banner.hidden = !translated;
+      // Chỉ bọc chữ khi Google Dịch đang bật. Bọc sẵn bằng khoảng cứng
+      // làm iPhone dính chữ (filelle, Kếtquả) và không xuống dòng.
+      if (translated) padSpaces(document.body);
     }
     tick();
     var count = 0;
@@ -355,8 +359,7 @@
     }, 600);
     if (window.MutationObserver) {
       var obs = new MutationObserver(function () {
-        if (banner) banner.hidden = !pageTranslated();
-        if (pageTranslated()) padSpaces(document.body);
+        tick();
       });
       obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     }
