@@ -20,6 +20,28 @@ Chi tiết vận hành 2 PC: [`deploy/PA1_RUNBOOK.md`](deploy/PA1_RUNBOOK.md).
 
 > Hot 100 @ 30s là biên cứng với ~20 browser. Hệ thống mặc định `HOT_INTERVAL_SEC=45`. Hạ xuống 30 chỉ khi KPI đạt.
 
+## Ghi nhớ phím và chuột trên máy, rồi làm lại
+
+Phần mềm nhỏ trên PC: bấm **Ghi**, làm thao tác trên máy (gõ phím, bấm chuột), bấm **Dừng**, rồi bấm **Làm lại** bao nhiêu lần cần. F8 cũng dừng. Bản ghi lưu local trong `data/macros/`, không gửi lên hub.
+
+Đây khác tab **Kịch bản** trên dashboard — tab đó chỉ nhớ thao tác *trong trang web*. `pc-macro` nhớ thao tác *cả máy*.
+
+```bash
+pip install pynput          # hoặc: pip install -e ".[macro]"
+python -m pc_macro          # cửa sổ Ghi / Dừng / Làm lại
+python -m pc_macro list
+python -m pc_macro play "tên bản ghi" --repeat 3 --delay 2
+```
+
+Windows (đã có venv của agent):
+
+```powershell
+.\.venv\Scripts\pip install pynput
+.\.venv\Scripts\python -m pc_macro
+```
+
+Đặt số lần lặp = `0` để làm mãi đến khi bấm Dừng. Ô **Chờ** cho bạn vài giây chuyển sang cửa sổ cần thao tác trước khi máy tự gõ / bấm.
+
 ## Cài đặt trên PC (dùng tài nguyên máy local)
 
 - Linux: [`docs/CAI_DAT_PC.md`](docs/CAI_DAT_PC.md)

@@ -13,3 +13,5 @@ pillow>=10.0.0
 numpy>=1.26.0
 # Optional for Postgres:
 # asyncpg>=0.30.0
+# Optional desktop macro recorder (python -m pc_macro):
+# pynput>=1.7.7
