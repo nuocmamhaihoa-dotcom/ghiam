@@ -45,6 +45,7 @@ from control_plane.recordings import (
 )
 from control_plane.settings import ROOT, settings
 from control_plane.customer_api import router as customer_router
+from control_plane.macro_api import router as macro_router
 from control_plane.video_api import router as video_router
 from control_plane.video_store import init_db as init_video_db
 from control_plane.video_store import merge_close_results
@@ -60,6 +61,7 @@ app = FastAPI(
 )
 app.include_router(video_router)
 app.include_router(customer_router)
+app.include_router(macro_router)
 app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(
     CORSMiddleware,
@@ -201,7 +203,8 @@ def health() -> dict[str, Any]:
         "danhbaBuild": DANHBA_BUILD,
         "danhba": "/danhba/",
         "delivery": "/tai",
-        "customers": "/",
+        "macros": "/",
+        "customers": "/khach",
         "customersAlias": "/khach",
         "videos": "/video",
     }
@@ -215,8 +218,9 @@ def _html(name: str) -> HTMLResponse:
     baked = json.dumps(settings.page_token or "").replace("<", "\\u003c")
     text = text.replace("__CONTROL_TOKEN__", baked)
     headers = {"Cache-Control": "no-cache"}
-    if name == "khach.html":
-        text = text.replace("__KHACH_BUILD__", "20261024g")
+    if name in {"khach.html", "macro.html"}:
+        if name == "khach.html":
+            text = text.replace("__KHACH_BUILD__", "20261024g")
         headers = {
             "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
             "Pragma": "no-cache",
@@ -228,8 +232,8 @@ def _html(name: str) -> HTMLResponse:
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard() -> HTMLResponse:
-    """Trang chính: nạp khách bằng Excel, tra cứu theo số điện thoại."""
-    return _html("khach.html")
+    """Trang chính: kho kịch bản click tự động trên PC."""
+    return _html("macro.html")
 
 
 @app.get("/video", response_class=HTMLResponse)

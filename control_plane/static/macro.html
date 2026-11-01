@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Click tự động trên PC</title>
+  <style>
+    :root { --ink: #17202a; --muted: #5c6770; --line: #d9dee5; --bg: #f3f5f7; --card: #fff; --blue: #0b6bcb; --ok: #0d7a46; }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font-family: system-ui, "Segoe UI", Tahoma, Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.45;
+    }
+    main { max-width: 760px; margin: 0 auto; padding: 1.4rem 1rem 3rem; }
+    h1 { font-size: 1.7rem; margin: 0 0 0.3rem; }
+    h2 { font-size: 1.1rem; margin: 0 0 0.6rem; }
+    p { margin: 0 0 0.7rem; }
+    .lead { color: var(--muted); }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 1rem 1.1rem;
+      margin: 0 0 1rem;
+    }
+    ol { margin: 0; padding-left: 1.2rem; }
+    li { margin: 0.35rem 0; }
+    .row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.8rem; }
+    a.btn, button {
+      display: inline-block;
+      border: 0;
+      border-radius: 8px;
+      background: var(--blue);
+      color: #fff;
+      text-decoration: none;
+      padding: 0.55rem 0.9rem;
+      font: inherit;
+      cursor: pointer;
+    }
+    button.ghost { background: #e8edf2; color: var(--ink); }
+    code { background: #eef2f6; padding: 0.05rem 0.3rem; border-radius: 4px; }
+    .status { color: var(--muted); min-height: 1.3em; }
+    .ok { color: var(--ok); }
+    .err { color: #b42318; }
+    ul.macros { list-style: none; margin: 0; padding: 0; }
+    ul.macros li {
+      border-top: 1px solid var(--line);
+      padding: 0.7rem 0;
+    }
+    ul.macros li:first-child { border-top: 0; padding-top: 0; }
+    .meta { color: var(--muted); font-size: 0.92rem; }
+    .caps { margin: 0.25rem 0 0; color: var(--ink); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Click tự động trên PC</h1>
+    <p class="lead">VPS này giữ kịch bản thao tác. Ghi phím, bấm chuột và bấm Làm lại phải chạy trên máy tính có màn hình.</p>
+
+    <section class="card">
+      <h2>Cài trên máy Windows</h2>
+      <ol>
+        <li>Tải gói phần mềm, giải nén.</li>
+        <li>Cài Python 3.11 trở lên nếu máy chưa có.</li>
+        <li>Mở PowerShell trong thư mục vừa giải nén rồi chạy <code>.\Cai-dat.ps1</code>.</li>
+        <li>Cửa sổ Ghi / Dừng / Làm lại hiện ra. Bấm Ghi, làm thao tác trên máy, Dừng, rồi Làm lại. F8 cũng dừng.</li>
+      </ol>
+      <div class="row">
+        <a class="btn" href="/tai/pc-macro.zip">Tải phần mềm PC</a>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Đưa kịch bản lên VPS</h2>
+      <p>Sau khi cài, đặt địa chỉ kho rồi đẩy bản đã lưu từ máy lên đây:</p>
+      <p><code id="hubEnv">$env:PC_MACRO_HUB='http://IP:8088'</code></p>
+      <p><code id="tokenEnv">$env:PC_MACRO_TOKEN=''</code></p>
+      <p>Trên máy: nút <strong>Lên VPS</strong> / <strong>Lấy VPS</strong>, hoặc:</p>
+      <p><code>python -m pc_macro push</code></p>
+      <p><code>python -m pc_macro pull</code></p>
+    </section>
+
+    <section class="card">
+      <h2>Kịch bản trên kho</h2>
+      <p class="status" id="status">Đang tải danh sách…</p>
+      <div class="row">
+        <button type="button" id="reload">Tải lại</button>
+        <button type="button" class="ghost" id="emptyHint">Ghi trên PC rồi Lên VPS</button>
+      </div>
+      <ul class="macros" id="list"></ul>
+    </section>
+  </main>
+  <script>
+    var serverToken = __CONTROL_TOKEN__;
+    var statusEl = document.getElementById("status");
+    var listEl = document.getElementById("list");
+
+    function headers() {
+      var out = { "Accept": "application/json" };
+      if (serverToken) out.Authorization = "Bearer " + serverToken;
+      return out;
+    }
+
+    function setStatus(text, kind) {
+      statusEl.textContent = text;
+      statusEl.className = "status" + (kind ? " " + kind : "");
+    }
+
+    function render(items) {
+      listEl.innerHTML = "";
+      if (!items.length) {
+        setStatus("Chưa có kịch bản trên kho. Ghi trên PC rồi bấm Lên VPS.", "");
+        return;
+      }
+      setStatus(items.length + " kịch bản trên kho.", "ok");
+      items.forEach(function (item) {
+        var li = document.createElement("li");
+        var title = document.createElement("strong");
+        title.textContent = item.name || item.slug || "kịch bản";
+        var meta = document.createElement("div");
+        meta.className = "meta";
+        meta.textContent = (item.step_count || 0) + " bước · " + (item.slug || "");
+        var caps = document.createElement("div");
+        caps.className = "caps";
+        caps.textContent = (item.captions || []).slice(0, 6).join(" → ");
+        li.appendChild(title);
+        li.appendChild(meta);
+        if (caps.textContent) li.appendChild(caps);
+        listEl.appendChild(li);
+      });
+    }
+
+    function loadMacros() {
+      setStatus("Đang tải danh sách…", "");
+      fetch("/v1/macros", { headers: headers() })
+        .then(function (res) {
+          if (res.status === 401) throw new Error("Thiếu mã kết nối trang.");
+          if (!res.ok) throw new Error("Không đọc được kho.");
+          return res.json();
+        })
+        .then(function (body) { render(body.items || []); })
+        .catch(function (err) { setStatus(err.message || "Lỗi tải kho.", "err"); });
+    }
+
+    document.getElementById("reload").addEventListener("click", loadMacros);
+    document.getElementById("emptyHint").addEventListener("click", function () {
+      setStatus("Mở phần mềm trên PC: Ghi → Dừng → Lưu → Lên VPS.", "");
+    });
+    document.getElementById("hubEnv").textContent = "$env:PC_MACRO_HUB='" + location.origin + "'";
+    document.getElementById("tokenEnv").textContent = "$env:PC_MACRO_TOKEN='" + (serverToken || "") + "'";
+    loadMacros();
+  </script>
+</body>
+</html>

@@ -58,7 +58,7 @@ class CustomerApiTests(unittest.TestCase):
         )
 
     def test_page_is_served(self) -> None:
-        home = self.client.get("/")
+        home = self.client.get("/khach")
         self.assertEqual(home.status_code, 200)
         self.assertIn("Kho khách Excel", home.text)
         self.assertIn("Chọn file Excel", home.text)

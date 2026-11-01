@@ -1,0 +1,176 @@
+"""VPS store for PC desktop macros — homepage is the clicker hub, not Kho khách."""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import tempfile
+import unittest
+import zipfile
+from io import BytesIO
+from pathlib import Path
+from urllib.request import Request
+
+_TMP = tempfile.mkdtemp(prefix="fb-macro-")
+os.environ["CONTROL_DATA_DIR"] = _TMP
+os.environ["CONTROL_DB"] = str(Path(_TMP) / "server.db")
+os.environ["CONTROL_TOKEN"] = "test-token"
+os.environ["CONTROL_PROXIES_FILE"] = str(Path(_TMP) / "proxies.txt")
+os.environ["CONTROL_PACKAGES_DIR"] = str(Path(_TMP) / "packages")
+os.environ["CONTROL_PROXY_CHECK_SEC"] = "86400"
+Path(_TMP, "proxies.txt").write_text("", encoding="utf-8")
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+from control_plane.app import app  # noqa: E402
+from control_plane.settings import settings  # noqa: E402
+from pc_macro.hub import HubError, describe, pull, push  # noqa: E402
+from pc_macro.store import MacroStore  # noqa: E402
+
+
+def tearDownModule() -> None:
+    shutil.rmtree(_TMP, ignore_errors=True)
+
+
+class MacroHubPageTests(unittest.TestCase):
+    def setUp(self) -> None:
+        settings.data_dir = Path(_TMP)
+        settings.token = "test-token"
+        settings.page_token = "page-token"
+        self._client_cm = TestClient(app)
+        self.client = self._client_cm.__enter__()
+        self.headers = {"Authorization": "Bearer test-token"}
+        self.page = {"Authorization": "Bearer page-token"}
+        macros = Path(_TMP) / "macros"
+        if macros.exists():
+            shutil.rmtree(macros)
+
+    def tearDown(self) -> None:
+        self._client_cm.__exit__(None, None, None)
+
+    def test_homepage_is_pc_clicker_not_customer_book(self) -> None:
+        home = self.client.get("/")
+        self.assertEqual(home.status_code, 200)
+        self.assertIn("Click tự động trên PC", home.text)
+        self.assertIn("/tai/pc-macro.zip", home.text)
+        self.assertIn("/v1/macros", home.text)
+        self.assertIn("Lên VPS", home.text)
+        self.assertIn('var serverToken = "page-token";', home.text)
+        self.assertNotIn("Kho khách Excel", home.text)
+        self.assertNotIn("Chọn file Excel", home.text)
+        self.assertEqual(home.headers.get("content-language"), "vi")
+        health = self.client.get("/health")
+        self.assertEqual(health.json()["macros"], "/")
+        self.assertEqual(health.json()["customers"], "/khach")
+
+    def test_zip_contains_recorder_and_install_script(self) -> None:
+        response = self.client.get("/tai/pc-macro.zip")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("application/zip", response.headers["content-type"])
+        archive = zipfile.ZipFile(BytesIO(response.content))
+        names = set(archive.namelist())
+        self.assertIn("pc-macro/pc_macro/gui.py", names)
+        self.assertIn("pc-macro/pc_macro/hub.py", names)
+        self.assertIn("pc-macro/Cai-dat.ps1", names)
+        self.assertIn("pc-macro/README.txt", names)
+        readme = archive.read("pc-macro/README.txt").decode("utf-8")
+        self.assertIn("Ghi nhớ thao tác PC", readme)
+        self.assertIn("python -m pc_macro pull", readme)
+
+    def test_save_list_get_delete(self) -> None:
+        empty = self.client.get("/v1/macros", headers=self.headers)
+        self.assertEqual(empty.status_code, 200)
+        self.assertEqual(empty.json()["count"], 0)
+        created = self.client.post(
+            "/v1/macros",
+            headers=self.headers,
+            json={
+                "name": "Gõ hello",
+                "steps": [{"kind": "type", "value": "hello"}, {"kind": "key", "key": "enter"}],
+            },
+        )
+        self.assertEqual(created.status_code, 200, created.text)
+        body = created.json()
+        self.assertTrue(body["ok"])
+        self.assertEqual(body["step_count"], 2)
+        self.assertIn("Gõ hello", body["captions"][0])
+        slug = body["slug"]
+        listed = self.client.get("/v1/macros", headers=self.page)
+        self.assertEqual(listed.json()["count"], 1)
+        loaded = self.client.get(f"/v1/macros/{slug}", headers=self.headers)
+        self.assertEqual(loaded.status_code, 200)
+        self.assertEqual(len(loaded.json()["steps"]), 2)
+        gone = self.client.delete(f"/v1/macros/{slug}", headers=self.headers)
+        self.assertEqual(gone.status_code, 200)
+        missing = self.client.get(f"/v1/macros/{slug}", headers=self.headers)
+        self.assertEqual(missing.status_code, 404)
+
+    def test_rejects_bad_token_and_empty_script(self) -> None:
+        self.assertEqual(self.client.get("/v1/macros").status_code, 401)
+        self.assertEqual(
+            self.client.get("/v1/macros", headers={"Authorization": "Bearer nope"}).status_code,
+            401,
+        )
+        blank = self.client.post("/v1/macros", headers=self.headers, json={"name": "rỗng"})
+        self.assertEqual(blank.status_code, 400)
+
+
+class HubClientTests(unittest.TestCase):
+    def test_describe_without_hub(self) -> None:
+        os.environ.pop("PC_MACRO_HUB", None)
+        os.environ.pop("PC_MACRO_TOKEN", None)
+        self.assertIn("Chưa đặt PC_MACRO_HUB", describe())
+
+    def test_pull_and_push_roundtrip(self) -> None:
+        remote: dict[str, dict] = {}
+
+        def fetch(request: Request, _timeout: float) -> tuple[int, bytes]:
+            url = request.full_url if hasattr(request, "full_url") else request.get_full_url()
+            method = request.get_method()
+            if url.endswith("/v1/macros") and method == "GET":
+                items = [{"name": row["name"], "slug": row["slug"], "step_count": row["step_count"]} for row in remote.values()]
+                return 200, json.dumps({"count": len(items), "items": items}).encode("utf-8")
+            if url.endswith("/v1/macros") and method == "POST":
+                payload = json.loads(request.data.decode("utf-8"))
+                slug = payload.get("slug") or "ban-ghi"
+                remote[slug] = {
+                    "name": payload["name"],
+                    "slug": slug,
+                    "steps": payload.get("steps") or [],
+                    "events": payload.get("events") or [],
+                    "step_count": len(payload.get("steps") or []),
+                }
+                return 200, json.dumps({"ok": True, **remote[slug]}).encode("utf-8")
+            if "/v1/macros/" in url and method == "GET":
+                slug = url.rstrip("/").rsplit("/", 1)[-1]
+                if slug not in remote:
+                    return 404, json.dumps({"detail": "macro not found"}).encode("utf-8")
+                return 200, json.dumps(remote[slug]).encode("utf-8")
+            return 500, b"{}"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["PC_MACRO_HUB"] = "http://vps.test:8088"
+            os.environ["PC_MACRO_TOKEN"] = "page-token"
+            try:
+                store = MacroStore(Path(tmp))
+                store.save("Gõ a", [{"t": 0, "kind": "key", "action": "down", "key": "a"}])
+                uploaded = push(store, fetch=fetch)
+                self.assertEqual(uploaded["count"], 1)
+                other = MacroStore(Path(tmp) / "other")
+                downloaded = pull(other, fetch=fetch)
+                self.assertEqual(downloaded["count"], 1)
+                self.assertEqual(downloaded["items"][0]["name"], "Gõ a")
+            finally:
+                os.environ.pop("PC_MACRO_HUB", None)
+                os.environ.pop("PC_MACRO_TOKEN", None)
+
+    def test_pull_without_hub_raises(self) -> None:
+        os.environ.pop("PC_MACRO_HUB", None)
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(HubError):
+                pull(MacroStore(Path(tmp)))
+
+
+if __name__ == "__main__":
+    unittest.main()

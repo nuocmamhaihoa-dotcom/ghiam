@@ -10,6 +10,7 @@ from typing import Any
 
 from pc_macro.desktop import Desktop, available, install_hint
 from pc_macro.events import default_title
+from pc_macro.hub import HubError, configured, describe, pull, push
 from pc_macro.numbers import NumberQueue, apply_turn, digit_spans, parse_number_list, pick_span
 from pc_macro.script import (
     compile_script,
@@ -111,6 +112,8 @@ class App:
         save.pack(fill="x", **pad)
         ttk.Entry(save, textvariable=self.name).pack(side="left", fill="x", expand=True)
         ttk.Button(save, text="Lưu", command=self.save_current).pack(side="left", padx=4)
+        ttk.Button(save, text="Lên VPS", command=self.push_hub).pack(side="left", padx=2)
+        ttk.Button(save, text="Lấy VPS", command=self.pull_hub).pack(side="left", padx=2)
 
         numbers = ttk.LabelFrame(self.root, text="Dãy số")
         numbers.pack(fill="x", padx=10, pady=6)
@@ -303,6 +306,42 @@ class App:
         self.name.set(saved["name"])
         self.status.set(f"Đã lưu kịch bản «{saved['name']}» — {saved.get('step_count') or len(self.script)} bước.")
         self._refresh_list()
+
+    def push_hub(self) -> None:
+        if self._busy():
+            return
+        if not configured():
+            self.status.set("Chưa đặt PC_MACRO_HUB trên máy. Tải gói từ VPS rồi chạy Cai-dat.ps1.")
+            return
+        self.save_current()
+        if not self.current_slug:
+            return
+        threading.Thread(target=self._push_hub_worker, daemon=True).start()
+
+    def pull_hub(self) -> None:
+        if self._busy():
+            return
+        if not configured():
+            self.status.set("Chưa đặt PC_MACRO_HUB trên máy. Tải gói từ VPS rồi chạy Cai-dat.ps1.")
+            return
+        threading.Thread(target=self._pull_hub_worker, daemon=True).start()
+
+    def _push_hub_worker(self) -> None:
+        try:
+            result = push(self.store, self.current_slug or None)
+        except (HubError, ValueError) as exc:
+            self._set_status(str(exc))
+            return
+        self._set_status(f"Đã đưa {result['count']} kịch bản lên {describe()}.")
+
+    def _pull_hub_worker(self) -> None:
+        try:
+            result = pull(self.store)
+        except (HubError, ValueError) as exc:
+            self._set_status(str(exc))
+            return
+        self.root.after(0, self._refresh_list)
+        self._set_status(f"Đã lấy {result['count']} kịch bản từ {describe()}.")
 
     def delete_selected(self) -> None:
         item = self._selected()

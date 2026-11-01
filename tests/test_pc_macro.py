@@ -434,6 +434,15 @@ class CliTests(unittest.TestCase):
                 with redirect_stdout(shown):
                     self.assertEqual(main(["show", "Gõ a"]), 0)
                 self.assertIn("1. Gõ a", shown.getvalue())
+                os.environ.pop("PC_MACRO_HUB", None)
+                missing = io.StringIO()
+                with redirect_stdout(missing):
+                    self.assertEqual(main(["pull"]), 1)
+                self.assertIn("PC_MACRO_HUB", missing.getvalue())
+                hub = io.StringIO()
+                with redirect_stdout(hub):
+                    self.assertEqual(main(["hub"]), 0)
+                self.assertIn("PC_MACRO_HUB", hub.getvalue())
             finally:
                 os.environ.pop("PC_MACRO_DIR", None)
 

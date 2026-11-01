@@ -9,6 +9,7 @@ from typing import Sequence
 
 from pc_macro.desktop import Desktop, available, install_hint
 from pc_macro.events import default_title
+from pc_macro.hub import HubError, describe, pull, push
 from pc_macro.numbers import NumberQueue, apply_turn, digit_spans
 from pc_macro.script import events_to_steps, script_captions, steps_to_events
 from pc_macro.session import Player
@@ -33,10 +34,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     show = sub.add_parser("show", help="Xem các bước của một bản")
     show.add_argument("name")
 
+    sub.add_parser("hub", help="Xem địa chỉ kho VPS đã đặt")
+
+    remote_pull = sub.add_parser("pull", help="Lấy kịch bản từ VPS về máy")
+    remote_pull.add_argument("name", nargs="?", help="Slug hoặc để trống để lấy hết")
+
+    remote_push = sub.add_parser("push", help="Đưa kịch bản trên máy lên VPS")
+    remote_push.add_argument("name", nargs="?", help="Slug hoặc để trống để đưa hết")
+
     args = parser.parse_args(argv)
     if args.cmd in (None, "gui"):
         return _launch_gui()
     store = MacroStore()
+    if args.cmd == "hub":
+        print(describe())
+        return 0
+    if args.cmd in {"pull", "push"}:
+        return _sync(store, args.cmd, getattr(args, "name", None))
     if args.cmd == "list":
         items = store.list()
         if not items:
@@ -94,6 +108,29 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Đã dừng sau {result['loops']} lần.")
     else:
         print(f"Đã làm xong {result['loops']} lần.")
+    return 0
+
+
+def _sync(store: MacroStore, action: str, name: str | None) -> int:
+    try:
+        if action == "pull":
+            result = pull(store, name)
+            verb = "Đã lấy"
+        elif action == "push":
+            result = push(store, name)
+            verb = "Đã đưa lên"
+        else:
+            print(f"Lệnh kho không rõ: {action}")
+            return 1
+    except HubError as exc:
+        print(str(exc))
+        return 1
+    except ValueError as exc:
+        print(str(exc))
+        return 1
+    print(f"{verb} {result['count']} kịch bản từ {describe()}.")
+    for item in result.get("items") or []:
+        print(f"{item.get('slug')}\t{item.get('name')}")
     return 0
 
 
