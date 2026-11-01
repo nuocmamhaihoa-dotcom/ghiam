@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cài fb-poller hub trên VPS (Ubuntu). Chạy với root.
+# Cài fb-poller hub trên VPS (Ubuntu/Debian hoặc AlmaLinux/RHEL). Chạy với root.
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-/opt/fb-poller}"
@@ -29,10 +29,30 @@ uv venv --python 3.12 .venv
 source .venv/bin/activate
 uv pip install -e ".[control]"
 
-if ! command -v tesseract >/dev/null 2>&1 || ! command -v ffmpeg >/dev/null 2>&1; then
-  apt-get update -y
-  apt-get install -y tesseract-ocr tesseract-ocr-vie ffmpeg
-fi
+_install_ocr() {
+  if command -v tesseract >/dev/null 2>&1 && command -v ffmpeg >/dev/null 2>&1; then
+    return 0
+  fi
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get update -y
+    apt-get install -y tesseract-ocr tesseract-ocr-vie ffmpeg
+    return 0
+  fi
+  if command -v dnf >/dev/null 2>&1; then
+    dnf install -y epel-release
+    # el8 tesseract already ships eng.traineddata — do not install langpack-eng.
+    dnf install -y tesseract tesseract-langpack-vie || true
+    if ! command -v ffmpeg >/dev/null 2>&1; then
+      dnf install -y --nogpgcheck \
+        "https://mirrors.rpmfusion.org/free/el/rpmfusion-free-release-$(rpm -E %rhel).noarch.rpm" || true
+      dnf install -y ffmpeg || true
+    fi
+    return 0
+  fi
+  echo "Không cài được tesseract/ffmpeg trên distro này — hub vẫn chạy, đọc video có thể thiếu."
+}
+
+_install_ocr
 # Bộ chữ lớn đọc số và dấu tiếng Việt đúng hơn bộ chữ đi kèm Ubuntu.
 mkdir -p "$APP_DIR/tessdata_best"
 for lang in eng vie; do
@@ -98,6 +118,10 @@ if command -v ufw >/dev/null 2>&1; then
   ufw allow "${PORT}/tcp" || true
   ufw allow OpenSSH || true
   # Do not force-enable ufw if admin left it inactive
+fi
+if command -v firewall-cmd >/dev/null 2>&1; then
+  firewall-cmd --permanent --add-port="${PORT}/tcp" || true
+  firewall-cmd --reload || true
 fi
 
 sleep 2

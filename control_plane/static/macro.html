@@ -1,0 +1,1396 @@
+<!DOCTYPE html>
+<html lang="vi" translate="no" class="notranslate">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="google" content="notranslate" />
+  <meta http-equiv="content-language" content="vi" />
+  <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate" />
+  <title>Gõ số rồi Enter</title>
+  <style>
+    html, body, button, input, textarea {
+      font-synthesis: none;
+      -webkit-font-smoothing: antialiased;
+    }
+    html, body {
+      margin: 0;
+      color: #17202a;
+      background: #eef1f4;
+      font-family: -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
+      font-size: 17px;
+      line-height: 1.45;
+      word-spacing: 0.22em;
+    }
+    main { max-width: 430px; margin: 0 auto; padding: 14px 12px 36px; }
+    h1 { font-size: 1.45rem; margin: 0 0 8px; }
+    p { margin: 0 0 10px; }
+    .hint { color: #5c6770; }
+    .status { min-height: 2.6em; }
+    .card {
+      background: #fff;
+      border: 1px solid #d5dbe3;
+      border-radius: 12px;
+      padding: 12px;
+      margin: 0 0 12px;
+    }
+    label { display: block; font-weight: 700; margin: 0 0 6px; }
+    input[type="text"], input[type="number"] {
+      width: 100%;
+      font: inherit;
+      padding: 10px;
+      border: 1px solid #c5ccd4;
+      border-radius: 8px;
+      background: #fff;
+      box-sizing: border-box;
+    }
+    input.wide { font-size: 1.35rem; letter-spacing: 0.08em; }
+    .now {
+      font-size: 1.35rem;
+      font-weight: 700;
+      margin: 8px 0 0;
+    }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .pair { display: flex; gap: 8px; }
+    .pair > div { flex: 1; }
+    button, a.btn {
+      font: inherit;
+      font-weight: 700;
+      border: 0;
+      border-radius: 10px;
+      min-height: 48px;
+      padding: 0 14px;
+      cursor: pointer;
+      background: #e8edf2;
+      color: #17202a;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    button.go, a.btn { background: #0b6bcb; color: #fff; }
+    button.warn { background: #c2410c; color: #fff; }
+    .line {
+      min-height: 52px;
+      border: 1.5px dashed #9aa4b0;
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: #f7f9fb;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 1.2rem;
+    }
+    .order {
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      margin: 6px 0 8px;
+      color: #0b6bcb;
+    }
+    .marks {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin: 8px 0;
+    }
+    .mark {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      border: 2px solid #0b6bcb;
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: #f3f8fd;
+    }
+    .mark input {
+      flex: 1;
+      min-width: 140px;
+      font: inherit;
+      padding: 8px;
+      border: 1px solid #c5ccd4;
+      border-radius: 8px;
+    }
+    .mark.empty { border-color: #c5ccd4; background: #f7f9fb; color: #5c6770; }
+    .mark.next { border-color: #c2410c; background: #fff1e8; box-shadow: 0 0 0 3px #ffd166; }
+    .mark.on { border-color: #c2410c; background: #fff1e8; }
+    .mark b {
+      font-size: 1.7rem;
+      line-height: 1;
+      min-width: 1.2em;
+    }
+    .mark em {
+      font-style: normal;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .mark span {
+      margin-left: auto;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.95rem;
+      white-space: nowrap;
+    }
+    .mark .pick {
+      flex: 1 1 100%;
+      display: flex;
+      gap: 8px;
+    }
+    .mark .pick button { flex: 1; min-height: 42px; }
+    .coords { font-family: ui-monospace, Consolas, monospace; font-size: 0.95rem; }
+    #paintModal {
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      background: #101820;
+      display: flex;
+      flex-direction: column;
+    }
+    #paintModal[hidden] { display: none !important; }
+    .paint-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 10px 12px;
+      background: #0b6bcb;
+      color: #fff;
+    }
+    .paint-bar p { flex: 1 1 100%; margin: 0; font-weight: 700; }
+    .paint-bar button, .paint-bar label.btn {
+      min-height: 44px;
+      background: #e8edf2;
+      color: #17202a;
+    }
+    .paint-bar button.go { background: #ffd166; color: #102030; }
+    #paintCanvas {
+      flex: 1;
+      width: 100%;
+      background: #101820;
+      touch-action: none;
+    }
+    .flags { list-style: none; margin: 0; padding: 0; }
+    .flags li {
+      padding: 8px 0;
+      border-top: 1px solid #e4e7ec;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 1.1rem;
+    }
+    .w { display: inline-block; margin-right: 0.28em; }
+    #translateWarn { padding: 8px 10px; background: #fdecec; color: #8a2b2b; border-radius: 8px; }
+    .ok { color: #0d7a46; }
+    .err { color: #b42318; }
+    .lanes { position: relative; }
+    .lanes .line { margin: 0 0 6px; }
+    .lanes .line.on { background: #fff1e8; border-color: #c2410c; }
+    .lanes .line.stop { background: #fdecec; border-color: #b42318; }
+    .lanes .line.run { background: #e8f6ee; border-color: #14804a; }
+    .lanes .pick { position: absolute; border: 2px solid #ff00aa; pointer-events: none; }
+    .pcts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body translate="no" class="notranslate">
+<main translate="no">
+  <p id="translateWarn" hidden></p>
+  <h1><span class="w">Gõ</span><span class="w">số</span><span class="w">rồi</span><span class="w">Enter</span></h1>
+  <p class="status" id="status">Bắt&nbsp;đầu&nbsp;gồm&nbsp;cả&nbsp;hai&nbsp;kịch&nbsp;bản:&nbsp;gõ&nbsp;mã&nbsp;rồi&nbsp;Enter;&nbsp;nếu&nbsp;màn&nbsp;đổi&nbsp;≥&nbsp;80%&nbsp;tự&nbsp;bấm&nbsp;4&nbsp;nút&nbsp;trái.</p>
+
+  <section class="card">
+    <label for="prefix"><span class="w">5</span><span class="w">ký</span><span class="w">tự</span><span class="w">cố</span><span class="w">định</span></label>
+    <p class="hint"><span class="w">Đứng</span><span class="w">trước,</span><span class="w">đổi</span><span class="w">được</span><span class="w">bất</span><span class="w">cứ</span><span class="w">lúc</span><span class="w">nào.</span></p>
+    <input id="prefix" class="wide" type="text" maxlength="5" autocomplete="off" spellcheck="false" placeholder="SPXAB" />
+    <div class="pair">
+      <div>
+        <label for="start"><span class="w">Số</span><span class="w">bắt</span><span class="w">đầu</span></label>
+        <input id="start" class="wide" type="text" inputmode="numeric" maxlength="5" autocomplete="off" value="00001" />
+      </div>
+      <div>
+        <label for="end"><span class="w">Số</span><span class="w">kết</span><span class="w">thúc</span></label>
+        <input id="end" class="wide" type="text" inputmode="numeric" maxlength="5" autocomplete="off" value="00010" />
+      </div>
+    </div>
+    <p class="now" id="current"><span class="w">Sẽ</span><span class="w">gõ:</span> —</p>
+    <div class="pair">
+      <div>
+        <label for="delay"><span class="w">Chờ</span><span class="w">(giây)</span></label>
+        <input id="delay" type="number" value="2" min="0" />
+      </div>
+      <div>
+        <label for="step"><span class="w">Mỗi</span><span class="w">lần</span><span class="w">cộng</span></label>
+        <input id="step" type="number" value="1" />
+      </div>
+    </div>
+    <div class="pair" style="margin-top:10px">
+      <div>
+        <label for="threshold"><span class="w">Đổi</span><span class="w">màn</span><span class="w">≥</span><span class="w">%</span></label>
+        <input id="threshold" type="number" min="1" max="100" value="80" />
+      </div>
+    </div>
+    <p class="hint">Bắt&nbsp;đầu&nbsp;gồm&nbsp;cả&nbsp;hai&nbsp;kịch&nbsp;bản.&nbsp;Sau&nbsp;Enter,&nbsp;nếu&nbsp;màn&nbsp;đổi&nbsp;≥&nbsp;80%&nbsp;tự&nbsp;bấm&nbsp;4&nbsp;nút&nbsp;trái.</p>
+    <div class="row">
+      <button type="button" class="go" id="btnStart">Bắt&nbsp;đầu</button>
+      <button type="button" id="btnStop">Dừng</button>
+      <button type="button" class="warn" id="btnFlag">Giao&nbsp;diện&nbsp;đổi</button>
+    </div>
+  </section>
+
+  <section class="card" id="dir2">
+    <label>Hướng&nbsp;2&nbsp;—&nbsp;4&nbsp;mã&nbsp;Enter&nbsp;đồng&nbsp;loạt,&nbsp;mỗi&nbsp;dãy&nbsp;một&nbsp;trình&nbsp;duyệt</label>
+    <p class="hint">Không&nbsp;đụng&nbsp;hướng&nbsp;1.&nbsp;Gõ&nbsp;4&nbsp;mã&nbsp;rồi&nbsp;Enter&nbsp;đồng&nbsp;loạt.&nbsp;Chỉ&nbsp;lưu&nbsp;mã&nbsp;của&nbsp;trình&nbsp;duyệt&nbsp;có&nbsp;khung&nbsp;5&nbsp;số&nbsp;đổi&nbsp;≥&nbsp;20%;&nbsp;các&nbsp;mã&nbsp;khác&nbsp;vẫn&nbsp;chạy.</p>
+    <label for="prefix2"><span class="w">5</span><span class="w">ký</span><span class="w">tự</span><span class="w">cố</span><span class="w">định</span></label>
+    <input id="prefix2" class="wide" type="text" maxlength="5" autocomplete="off" spellcheck="false" placeholder="SPXAB" />
+    <div class="pair">
+      <div>
+        <label for="start2"><span class="w">Số</span><span class="w">bắt</span><span class="w">đầu</span></label>
+        <input id="start2" class="wide" type="text" inputmode="numeric" maxlength="5" autocomplete="off" value="00001" />
+      </div>
+      <div>
+        <label for="end2"><span class="w">Số</span><span class="w">kết</span><span class="w">thúc</span></label>
+        <input id="end2" class="wide" type="text" inputmode="numeric" maxlength="5" autocomplete="off" value="00010" />
+      </div>
+    </div>
+    <p class="now" id="current2"><span class="w">Sẽ</span><span class="w">gõ</span><span class="w">4</span><span class="w">làn:</span> —</p>
+    <div class="pair">
+      <div>
+        <label for="delay2"><span class="w">Chờ</span><span class="w">(giây)</span></label>
+        <input id="delay2" type="number" value="2" min="0" />
+      </div>
+      <div>
+        <label for="step2"><span class="w">Mỗi</span><span class="w">lần</span><span class="w">cộng</span></label>
+        <input id="step2" type="number" value="1" />
+      </div>
+    </div>
+    <div class="pair">
+      <div>
+        <label for="threshold2"><span class="w">Khung</span><span class="w">đổi</span><span class="w">≥</span><span class="w">%</span></label>
+        <input id="threshold2" type="number" value="20" min="1" max="100" />
+      </div>
+    </div>
+    <p class="hint" id="frame2Label">Chưa&nbsp;chọn&nbsp;khung&nbsp;5&nbsp;số&nbsp;—&nbsp;trên&nbsp;PC&nbsp;kéo&nbsp;4&nbsp;khung,&nbsp;mỗi&nbsp;trình&nbsp;duyệt&nbsp;một&nbsp;khung.</p>
+    <p class="status" id="status2">Bắt&nbsp;đầu&nbsp;2:&nbsp;gõ&nbsp;4&nbsp;mã&nbsp;rồi&nbsp;Enter&nbsp;đồng&nbsp;loạt;&nbsp;chỉ&nbsp;lưu&nbsp;mã&nbsp;của&nbsp;trình&nbsp;duyệt&nbsp;đổi.</p>
+    <div class="lanes" id="lanes2">
+      <div class="line" id="lane0" contenteditable="true"></div>
+      <div class="line" id="lane1" contenteditable="true"></div>
+      <div class="line" id="lane2" contenteditable="true"></div>
+      <div class="line" id="lane3" contenteditable="true"></div>
+    </div>
+    <div class="pcts">
+      <div>
+        <label for="frameChange2_0">Trình&nbsp;1&nbsp;đổi&nbsp;%</label>
+        <input id="frameChange2_0" type="number" value="0" min="0" max="100" />
+      </div>
+      <div>
+        <label for="frameChange2_1">Trình&nbsp;2&nbsp;đổi&nbsp;%</label>
+        <input id="frameChange2_1" type="number" value="0" min="0" max="100" />
+      </div>
+      <div>
+        <label for="frameChange2_2">Trình&nbsp;3&nbsp;đổi&nbsp;%</label>
+        <input id="frameChange2_2" type="number" value="0" min="0" max="100" />
+      </div>
+      <div>
+        <label for="frameChange2_3">Trình&nbsp;4&nbsp;đổi&nbsp;%</label>
+        <input id="frameChange2_3" type="number" value="0" min="0" max="100" />
+      </div>
+    </div>
+    <div class="row">
+      <button type="button" class="go" id="btnStart2">Bắt&nbsp;đầu&nbsp;2</button>
+      <button type="button" id="btnStop2">Dừng&nbsp;2</button>
+      <button type="button" class="go" id="btnContinue2">Tiếp&nbsp;tục</button>
+    </div>
+    <div class="row">
+      <button type="button" id="btnFrame2">Chọn&nbsp;khung&nbsp;5&nbsp;số</button>
+      <button type="button" class="warn" id="btnPause2">Khung&nbsp;đổi</button>
+    </div>
+    <p class="hint">Mã&nbsp;dừng&nbsp;khi&nbsp;khung&nbsp;5&nbsp;số&nbsp;đổi&nbsp;(đủ&nbsp;5&nbsp;ký&nbsp;tự&nbsp;+&nbsp;5&nbsp;số)</p>
+    <ul class="flags" id="flags2"></ul>
+  </section>
+
+  <section class="card">
+    <label>4&nbsp;nút&nbsp;chuột&nbsp;trái</label>
+    <p class="hint">Từng&nbsp;bước:&nbsp;nhập&nbsp;tên,&nbsp;bấm&nbsp;<b>Thêm&nbsp;ảnh</b>&nbsp;rồi&nbsp;<b>Bôi&nbsp;màu</b>&nbsp;chỗ&nbsp;cần&nbsp;ấn,&nbsp;hoặc&nbsp;<b>Chọn&nbsp;vị&nbsp;trí</b>&nbsp;trên&nbsp;ảnh.&nbsp;Máy&nbsp;bấm&nbsp;trái&nbsp;đúng&nbsp;chỗ&nbsp;tô.</p>
+    <p class="order" id="orderStrip">1&nbsp;→&nbsp;2&nbsp;→&nbsp;3&nbsp;→&nbsp;4</p>
+    <p class="hint coords" id="recoverLabel">Thứ&nbsp;tự:&nbsp;chưa&nbsp;ghi</p>
+    <div class="marks" id="marks"></div>
+    <div class="row">
+      <button type="button" id="btnRecordRecover">Ghi&nbsp;4&nbsp;nút</button>
+      <button type="button" class="go" id="btnSaveRecover">Lưu&nbsp;4&nbsp;nút</button>
+      <button type="button" id="btnClearRecover">Xóa&nbsp;4&nbsp;nút</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <label><span class="w">Dòng</span><span class="w">cố</span><span class="w">định</span></label>
+    <p class="hint"><span class="w">Trên</span><span class="w">PC:</span><span class="w">bấm</span><span class="w">vào</span><span class="w">ô</span><span class="w">thật.</span><span class="w">Ở</span><span class="w">đây</span><span class="w">tập</span><span class="w">trên</span><span class="w">dòng</span><span class="w">này.</span></p>
+    <div class="line" id="line" contenteditable="true"></div>
+  </section>
+
+  <section class="card">
+    <label><span class="w">Số</span><span class="w">lúc</span><span class="w">giao</span><span class="w">diện</span><span class="w">đổi</span></label>
+    <p class="hint"><span class="w">Bấm</span><span class="w">Giao</span><span class="w">diện</span><span class="w">đổi</span><span class="w">hoặc</span><span class="w">F9</span><span class="w">để</span><span class="w">giữ</span><span class="w">mã</span><span class="w">đang</span><span class="w">dùng.</span></p>
+    <ul class="flags" id="flags"></ul>
+  </section>
+
+  <section class="card">
+    <p class="hint"><span class="w">1.</span><span class="w">Nhập</span><span class="w">5</span><span class="w">ký</span><span class="w">tự</span><span class="w">cố</span><span class="w">định.</span></p>
+    <p class="hint"><span class="w">2.</span><span class="w">Nhập</span><span class="w">số</span><span class="w">bắt</span><span class="w">đầu</span><span class="w">và</span><span class="w">số</span><span class="w">kết</span><span class="w">thúc</span><span class="w">của</span><span class="w">5</span><span class="w">số</span><span class="w">sau.</span></p>
+    <p class="hint">3.&nbsp;Bắt&nbsp;đầu&nbsp;gồm&nbsp;cả&nbsp;hai&nbsp;kịch&nbsp;bản:&nbsp;gõ&nbsp;mã,&nbsp;Enter,&nbsp;cộng&nbsp;1.</p>
+    <p class="hint">4.&nbsp;Sau&nbsp;Enter,&nbsp;nếu&nbsp;màn&nbsp;đổi&nbsp;≥&nbsp;80%&nbsp;tự&nbsp;bấm&nbsp;4&nbsp;nút&nbsp;trái,&nbsp;lưu&nbsp;số,&nbsp;rồi&nbsp;tăng&nbsp;số&nbsp;tiếp.</p>
+    <p class="hint">5.&nbsp;Hướng&nbsp;2:&nbsp;chọn&nbsp;4&nbsp;ô&nbsp;nhập&nbsp;và&nbsp;4&nbsp;khung.&nbsp;Gõ&nbsp;4&nbsp;mã&nbsp;rồi&nbsp;Enter&nbsp;đồng&nbsp;loạt.&nbsp;Chỉ&nbsp;lưu&nbsp;mã&nbsp;của&nbsp;trình&nbsp;duyệt&nbsp;đổi&nbsp;≥&nbsp;20%;&nbsp;các&nbsp;mã&nbsp;khác&nbsp;vẫn&nbsp;chạy.</p>
+    <div class="row">
+      <button type="button" id="btnSave"><span class="w">Lưu</span></button>
+      <a class="btn" href="/tai/pc-macro.zip"><span class="w">Tải</span><span class="w">phần</span><span class="w">mềm</span><span class="w">PC</span></a>
+    </div>
+  </section>
+</main>
+<div id="paintModal" hidden>
+  <div class="paint-bar">
+    <p id="paintHint">Thêm&nbsp;ảnh,&nbsp;bôi&nbsp;màu&nbsp;hồng&nbsp;chỗ&nbsp;cần&nbsp;bấm,&nbsp;rồi&nbsp;Lưu&nbsp;vị&nbsp;trí.</p>
+    <label class="btn">Thêm&nbsp;ảnh<input id="paintFile" type="file" accept="image/*" hidden /></label>
+    <button type="button" id="paintClear">Xóa&nbsp;màu</button>
+    <button type="button" class="go" id="paintSave">Lưu&nbsp;vị&nbsp;trí</button>
+    <button type="button" id="paintCancel">Hủy</button>
+  </div>
+  <canvas id="paintCanvas"></canvas>
+</div>
+<script>
+  var serverToken = __CONTROL_TOKEN__;
+  var SLUG = "day-so-enter";
+  var SLUG2 = "day-so-enter-2";
+  var LANE_COUNT = 4;
+  var playing = false;
+  var playing2 = false;
+  var timer = 0;
+  var timer2 = 0;
+  var lastUsed2 = [];
+  var currentDigits2 = "00001";
+  var exhausted2 = false;
+  var flagged2 = [];
+  var paused2 = "";
+  var pausedCodes2 = [];
+  var pausedLanes2 = ["", "", "", ""];
+  var waitingLanes2 = [false, false, false, false];
+  var currents2 = ["00001", "00002", "00003", "00004"];
+  var waiting2 = false;
+  var forcePause2 = false;
+  var frame2 = null;
+  var frames2 = [null, null, null, null];
+  var framePick2 = false;
+  var lastUsed = "";
+  var currentDigits = "00001";
+  var exhausted = false;
+  var recoverClicks = [null, null, null, null];
+  var clickNames = ["", "", "", ""];
+  var recordingRecover = false;
+  var forceRecover = false;
+  var paintStep = -1;
+  var paintMode = "paint";
+  var paintImage = null;
+  var paintDirty = false;
+  var PAINT = { r: 255, g: 0, b: 170 };
+
+  function $(id) { return document.getElementById(id); }
+  function headers() {
+    var out = { "Accept": "application/json", "Content-Type": "application/json" };
+    if (serverToken) out.Authorization = "Bearer " + serverToken;
+    return out;
+  }
+  function prefix() {
+    return $("prefix").value.replace(/[^A-Za-z0-9]/g, "").slice(0, 5);
+  }
+  function pad5(raw) {
+    var digits = String(raw == null ? "" : raw).replace(/\D/g, "");
+    if (!digits) return "00000";
+    var n = parseInt(digits, 10);
+    if (n < 0) n = 0;
+    if (n > 99999) n = 99999;
+    return String(n).padStart(5, "0");
+  }
+  function bounds() {
+    var start = pad5($("start").value);
+    var end = pad5($("end").value);
+    if (parseInt(end, 10) < parseInt(start, 10)) {
+      var tmp = start;
+      start = end;
+      end = tmp;
+    }
+    return { start: start, end: end };
+  }
+  function nextCode() {
+    if (exhausted || prefix().length !== 5) return "";
+    var range = bounds();
+    if (parseInt(currentDigits, 10) > parseInt(range.end, 10)) return "";
+    return prefix() + pad5(currentDigits);
+  }
+  function flags() {
+    return Array.prototype.map.call($("flags").querySelectorAll("li"), function (li) { return li.textContent; });
+  }
+  function setStatus(text, kind) {
+    $("status").textContent = text;
+    $("status").className = "status" + (kind ? " " + kind : "");
+  }
+  function showCurrent() {
+    if ($("prefix").value !== prefix()) $("prefix").value = prefix();
+    var now = nextCode() || "—";
+    $("current").textContent = lastUsed ? ("Sẽ gõ: " + now + "   (vừa xong: " + lastUsed + ")") : ("Sẽ gõ: " + now);
+  }
+  function renderFlags(values) {
+    $("flags").innerHTML = "";
+    (values || []).forEach(function (value) {
+      var li = document.createElement("li");
+      li.textContent = value;
+      $("flags").appendChild(li);
+    });
+  }
+  function addFlag(value) {
+    if (!value) return;
+    var have = flags();
+    if (have.indexOf(value) >= 0) return;
+    have.push(value);
+    renderFlags(have);
+  }
+  function persist() {
+    var range = bounds();
+    var sample = nextCode() || lastUsed || (prefix() + pad5(currentDigits)) || "1";
+    var body = {
+      name: "Dãy số rồi Enter",
+      slug: SLUG,
+      steps: [
+        { kind: sample.replace(/\D/g, "").length === sample.length ? "number" : "type", value: sample },
+        { kind: "key", key: "enter", wait: 80 }
+      ],
+      numbers: {
+        range_mode: true,
+        prefix: prefix(),
+        start: range.start,
+        end: range.end,
+        current: pad5(currentDigits),
+        exhausted: exhausted,
+        bump: true,
+        step: parseInt($("step").value || "1", 10) || 1,
+        flagged: flags(),
+        last_used: lastUsed,
+        items: [],
+        recover_clicks: filledClicks(),
+        change_threshold: threshold()
+      }
+    };
+    return fetch("/v1/macros", { method: "POST", headers: headers(), body: JSON.stringify(body) })
+      .then(function (res) { if (!res.ok) throw new Error("Không lưu được."); return res.json(); });
+  }
+  function oneTurn() {
+    if (!playing) return;
+    var value = nextCode();
+    if (!value) { playing = false; setStatus("Hết dãy số."); return; }
+    var step = parseInt($("step").value || "1", 10) || 1;
+    if (step < 1) step = 1;
+    $("line").textContent = value;
+    lastUsed = value;
+    var nxt = parseInt(currentDigits, 10) + step;
+    var endN = parseInt(bounds().end, 10);
+    if (nxt > 99999) {
+      exhausted = true;
+    } else {
+      currentDigits = String(nxt).padStart(5, "0");
+      if (nxt > endN) exhausted = true;
+    }
+    showCurrent();
+    persist().catch(function () {});
+    var wait = Math.max(800, (parseFloat($("delay").value || "1") || 1) * 1000);
+    setStatus("Đã gõ " + value + ", Enter. Đợi đo đổi màn / 4 nút…");
+    timer = window.setTimeout(function () {
+      afterEnter(value, function () {
+        if (!playing) return;
+        setStatus("Đã gõ " + value + ", Enter, cộng " + step + ". Tiếp theo: " + (nextCode() || "—") + ".");
+        timer = window.setTimeout(oneTurn, wait);
+      });
+    }, 800);
+  }
+  function startPlay() {
+    if (playing2) { setStatus("Đang chạy hướng 2. Bấm Dừng 2 rồi hãy bắt đầu hướng 1.", "err"); return; }
+    if (playing) return;
+    var range = bounds();
+    $("start").value = range.start;
+    $("end").value = range.end;
+    $("prefix").value = prefix();
+    if (parseInt(currentDigits, 10) < parseInt(range.start, 10)) currentDigits = range.start;
+    if (parseInt(currentDigits, 10) > parseInt(range.end, 10)) exhausted = true;
+    if (prefix().length !== 5) { setStatus("Nhập đủ 5 ký tự cố định.", "err"); return; }
+    if (exhausted) { setStatus("Đã hết dãy. Đổi số bắt đầu / kết thúc để chạy lại.", "err"); return; }
+    playing = true;
+    var delay = Math.max(0, parseFloat($("delay").value || "0") || 0);
+    var bar = threshold();
+    if (filledCount() >= 4) {
+      setStatus("Bắt đầu cả hai kịch bản: gõ mã + Enter; màn đổi ≥ " + bar + "% thì tự bấm 4 nút trái.");
+    } else {
+      setStatus("Bắt đầu gõ mã + Enter. Chưa đủ 4 nút — khi màn đổi ≥ " + bar + "% sẽ chưa bấm được.");
+    }
+    $("line").textContent = "";
+    if (timer) window.clearTimeout(timer);
+    timer = window.setTimeout(function () {
+      if (!playing) return;
+      oneTurn();
+    }, delay * 1000);
+  }
+  function stopPlay() {
+    playing = false;
+    if (timer) window.clearTimeout(timer);
+    timer = 0;
+    persist().catch(function () {});
+    setStatus("Đã dừng. Số tiếp theo: " + (nextCode() || "—") + ".");
+  }
+  function threshold() {
+    var n = parseInt($("threshold").value || "80", 10);
+    if (!n || n < 1) n = 80;
+    if (n > 100) n = 100;
+    return n;
+  }
+  function emptySlots() { return [null, null, null, null]; }
+  function slotFilled(click) {
+    return !!(click && isFinite(click.x) && isFinite(click.y) && (click.sw > 1 || click.sh > 1 || click.via || click.x > 0 || click.y > 0));
+  }
+  function clickNameAt(index) {
+    var fromSlot = recoverClicks[index] && recoverClicks[index].name ? recoverClicks[index].name : "";
+    return fromSlot || clickNames[index] || "";
+  }
+  function filledClicks() {
+    var out = [];
+    for (var i = 0; i < 4; i++) if (slotFilled(recoverClicks[i])) out.push(recoverClicks[i]);
+    return out;
+  }
+  function filledCount() { return filledClicks().length; }
+  function upsertClick(step, point) {
+    var name = clickNameAt(step);
+    recoverClicks[step] = {
+      x: point.x,
+      y: point.y,
+      sw: point.sw,
+      sh: point.sh,
+      rx: point.rx,
+      ry: point.ry,
+      name: name,
+      step: step,
+      via: point.via || ""
+    };
+  }
+  function isPaint(r, g, b) {
+    return Math.abs(r - PAINT.r) + Math.abs(g - PAINT.g) + Math.abs(b - PAINT.b) <= 70;
+  }
+  function paintCentroid(canvas) {
+    var ctx = canvas.getContext("2d", { willReadFrequently: true });
+    var data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    var sumX = 0, sumY = 0, n = 0, w = canvas.width;
+    for (var i = 0; i < data.length; i += 4) {
+      if (!isPaint(data[i], data[i + 1], data[i + 2])) continue;
+      var p = i / 4;
+      sumX += p % w;
+      sumY += Math.floor(p / w);
+      n += 1;
+    }
+    if (n < 8) return null;
+    return { x: Math.round(sumX / n), y: Math.round(sumY / n), n: n };
+  }
+  function openPaint(step, mode) {
+    paintStep = step;
+    paintMode = mode;
+    paintDirty = false;
+    $("paintHint").textContent = mode === "pick"
+      ? ("Thêm ảnh, rồi ấn đúng chỗ nút " + (step + 1) + ".")
+      : ("Thêm ảnh, bôi màu hồng chỗ nút " + (step + 1) + ", rồi Lưu vị trí.");
+    $("paintModal").hidden = false;
+    if (paintImage) drawPaintImage();
+  }
+  function closePaint() {
+    $("paintModal").hidden = true;
+    paintStep = -1;
+  }
+  function drawPaintImage() {
+    var canvas = $("paintCanvas");
+    if (!paintImage) return;
+    var maxW = Math.max(320, Math.min(paintImage.naturalWidth || paintImage.width, 1600));
+    var scale = maxW / (paintImage.naturalWidth || paintImage.width);
+    canvas.width = Math.round((paintImage.naturalWidth || paintImage.width) * scale);
+    canvas.height = Math.round((paintImage.naturalHeight || paintImage.height) * scale);
+    var ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(paintImage, 0, 0, canvas.width, canvas.height);
+    paintDirty = false;
+  }
+  function canvasPoint(ev) {
+    var canvas = $("paintCanvas");
+    var rect = canvas.getBoundingClientRect();
+    var src = ev.touches && ev.touches[0] ? ev.touches[0] : ev;
+    var x = (src.clientX - rect.left) * (canvas.width / Math.max(1, rect.width));
+    var y = (src.clientY - rect.top) * (canvas.height / Math.max(1, rect.height));
+    return { x: Math.round(x), y: Math.round(y) };
+  }
+  function strokePaint(ev) {
+    if (paintStep < 0 || !paintImage) return;
+    ev.preventDefault();
+    var canvas = $("paintCanvas");
+    var ctx = canvas.getContext("2d", { willReadFrequently: true });
+    var point = canvasPoint(ev);
+    if (paintMode === "pick") {
+      ctx.fillStyle = "#ff00aa";
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 10, 0, Math.PI * 2);
+      ctx.fill();
+      paintDirty = true;
+      savePaintPoint({ x: point.x, y: point.y, sw: canvas.width, sh: canvas.height, via: "point" });
+      return;
+    }
+    ctx.fillStyle = "#ff00aa";
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 16, 0, Math.PI * 2);
+    ctx.fill();
+    paintDirty = true;
+  }
+  function savePaintPoint(point) {
+    var step = paintStep;
+    if (step < 0) return;
+    var sw = point.sw || $("paintCanvas").width;
+    var sh = point.sh || $("paintCanvas").height;
+    if (sw < 2 || sh < 2) return;
+    upsertClick(step, {
+      x: point.x,
+      y: point.y,
+      sw: sw,
+      sh: sh,
+      rx: point.x / sw,
+      ry: point.y / sh,
+      via: point.via || "paint"
+    });
+    closePaint();
+    renderRecover();
+    persist().catch(function () {});
+    setStatus("Đã nhớ nút " + (step + 1) + " tại chỗ bôi màu. Máy bấm trái đúng chỗ đó.", "ok");
+  }
+  function renderRecover() {
+    var box = $("marks");
+    box.innerHTML = "";
+    for (var index = 0; index < 4; index++) {
+      var click = recoverClicks[index];
+      var card = document.createElement("div");
+      card.className = "mark" + (slotFilled(click) ? "" : " empty");
+      card.id = "mark" + index;
+      var title = document.createElement("b");
+      title.textContent = String(index + 1);
+      var name = document.createElement("input");
+      name.type = "text";
+      name.maxLength = 40;
+      name.placeholder = "Tên vị trí bước " + (index + 1);
+      name.value = clickNameAt(index);
+      name.setAttribute("data-index", String(index));
+      name.oninput = function () {
+        var at = parseInt(this.getAttribute("data-index"), 10);
+        var cleaned = this.value.replace(/\s+/g, " ").slice(0, 40);
+        clickNames[at] = cleaned;
+        if (recoverClicks[at]) recoverClicks[at].name = cleaned;
+      };
+      var detail = document.createElement("span");
+      if (!click || click.x == null || (click.x === 0 && click.y === 0 && !click.sw)) {
+        detail.innerHTML = "chưa&nbsp;ghi";
+      } else if (click.rx != null && click.ry != null) {
+        detail.textContent = "trái " + click.x + " , " + click.y + " · " + Math.round(click.rx * 100) + "% × " + Math.round(click.ry * 100) + "%" + (click.via === "paint" ? " · bôi màu" : "");
+      } else {
+        detail.textContent = "trái " + click.x + " , " + click.y;
+      }
+      var pick = document.createElement("div");
+      pick.className = "pick";
+      var paintBtn = document.createElement("button");
+      paintBtn.type = "button";
+      paintBtn.innerHTML = "Bôi&nbsp;màu";
+      paintBtn.setAttribute("data-step", String(index));
+      paintBtn.onclick = function (ev) {
+        ev.stopPropagation();
+        openPaint(parseInt(this.getAttribute("data-step"), 10), "paint");
+      };
+      var chooseBtn = document.createElement("button");
+      chooseBtn.type = "button";
+      chooseBtn.innerHTML = "Chọn&nbsp;vị&nbsp;trí";
+      chooseBtn.setAttribute("data-step", String(index));
+      chooseBtn.onclick = function (ev) {
+        ev.stopPropagation();
+        openPaint(parseInt(this.getAttribute("data-step"), 10), "pick");
+      };
+      pick.appendChild(paintBtn);
+      pick.appendChild(chooseBtn);
+      card.appendChild(title);
+      card.appendChild(name);
+      card.appendChild(detail);
+      card.appendChild(pick);
+      box.appendChild(card);
+    }
+    $("orderStrip").textContent = "1 → 2 → 3 → 4";
+    if (!filledCount()) {
+      $("recoverLabel").textContent = "Thứ tự: chưa ghi";
+      return;
+    }
+    $("recoverLabel").textContent = recoverClicks.map(function (click, index) {
+      if (!click || click.x == null) return "Nút " + (index + 1) + " → chưa ghi";
+      var extra = (click.rx != null) ? (" · " + Math.round(click.rx * 100) + "%") : "";
+      return "Nút " + (index + 1) + " → " + click.x + " , " + click.y + extra;
+    }).join("   |   ");
+  }
+  function afterEnter(value, done) {
+    if (!playing) { done(); return; }
+    var forced = forceRecover;
+    forceRecover = false;
+    var ready = filledCount() >= 4;
+    var changed = forced || ready;
+    if (!changed) {
+      setStatus("Đã Enter " + value + ". Đổi màn dưới " + threshold() + "% — tiếp tục gõ số.");
+      done();
+      return;
+    }
+    addFlag(value);
+    persist().catch(function () {});
+    if (!ready) {
+      setStatus("Đã lưu " + value + " vì giao diện đổi. Chưa đủ 4 nút — tiếp tục gõ số.", "ok");
+      done();
+      return;
+    }
+    setStatus("Đã Enter " + value + ". Màn đổi ≥ " + threshold() + "% — tự bấm 4 nút trái.", "ok");
+    flashDots(0, done, true);
+  }
+  function flashDots(index, done, retry) {
+    if (!playing) { done(); return; }
+    if (index >= 4) {
+      for (var i = 0; i < 4; i++) {
+        var reset = $("mark" + i);
+        if (reset) reset.className = "mark" + (slotFilled(recoverClicks[i]) ? "" : " empty");
+      }
+      done();
+      return;
+    }
+    var card = $("mark" + index);
+    var label = recoverClicks[index] && recoverClicks[index].name;
+    if (label) setStatus("Đang bấm «" + label + "»" + (retry ? " — nếu chưa nhận sẽ bấm lại." : "."));
+    timer = window.setTimeout(function () {
+      if (retry && card) {
+        card.className = "mark next";
+        timer = window.setTimeout(function () {
+          if (card) card.className = "mark on";
+          flashDots(index + 1, done, retry);
+        }, 180);
+        return;
+      }
+      flashDots(index + 1, done, retry);
+    }, 220);
+  }
+  function flagNow() {
+    var value = lastUsed || nextCode();
+    if (!value) { setStatus("Chưa có số để lưu.", "err"); return; }
+    addFlag(value);
+    if (playing) forceRecover = true;
+    persist().then(function () {
+      setStatus("Đã lưu số " + value + " vì giao diện đổi.", "ok");
+    }).catch(function (err) { setStatus(err.message, "err"); });
+  }
+  function loadSaved() {
+    fetch("/v1/macros", { headers: headers() })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (body) {
+        var items = (body && body.items) || [];
+        var found = items.some(function (it) { return it.slug === SLUG; });
+        if (!found) return null;
+        return fetch("/v1/macros/" + SLUG, { headers: headers() }).then(function (res) { return res.ok ? res.json() : null; });
+      })
+      .then(function (item) {
+        if (!item || !item.numbers) return;
+        lastUsed = item.numbers.last_used || "";
+        if (item.numbers.prefix) $("prefix").value = item.numbers.prefix;
+        if (item.numbers.start) $("start").value = item.numbers.start;
+        if (item.numbers.end) $("end").value = item.numbers.end;
+        currentDigits = pad5(item.numbers.current || item.numbers.start || "00001");
+        exhausted = !!item.numbers.exhausted && parseInt(currentDigits, 10) >= parseInt(pad5(item.numbers.end || currentDigits), 10);
+        if (item.numbers.step) $("step").value = item.numbers.step;
+        if (item.numbers.change_threshold) $("threshold").value = item.numbers.change_threshold;
+        recoverClicks = emptySlots();
+        clickNames = ["", "", "", ""];
+        (item.numbers.recover_clicks || []).forEach(function (click, index) {
+          var step = (click.step >= 0 && click.step < 4) ? click.step : index;
+          if (step >= 4) return;
+          recoverClicks[step] = {
+            x: click.x, y: click.y, sw: click.sw, sh: click.sh,
+            rx: click.rx, ry: click.ry, name: click.name || "", step: step, via: click.via || ""
+          };
+          clickNames[step] = recoverClicks[step].name || "";
+        });
+        renderFlags(item.numbers.flagged || []);
+        renderRecover();
+        showCurrent();
+        if (item.numbers.prefix) {
+          setStatus("Đã mở dãy đã lưu. Bấm Bắt đầu, hoặc Giao diện đổi để giữ số.");
+        }
+      })
+      .catch(function () {});
+  }
+
+  function prefix2() {
+    return $("prefix2").value.replace(/[^A-Za-z0-9]/g, "").slice(0, 5);
+  }
+  function bounds2() {
+    var start = pad5($("start2").value);
+    var end = pad5($("end2").value);
+    if (parseInt(end, 10) < parseInt(start, 10)) {
+      var tmp = start;
+      start = end;
+      end = tmp;
+    }
+    return { start: start, end: end };
+  }
+  function step2() {
+    var n = parseInt($("step2").value || "1", 10) || 1;
+    return n < 1 ? 1 : n;
+  }
+  function setStatus2(text, kind) {
+    $("status2").textContent = text;
+    $("status2").className = "status" + (kind ? " " + kind : "");
+  }
+  function threshold2() {
+    var n = parseInt($("threshold2").value || "20", 10);
+    if (isNaN(n) || n < 1) n = 20;
+    if (n > 100) n = 100;
+    return n;
+  }
+  function demoLanePercent(index) {
+    var el = $("frameChange2_" + index);
+    if (!el) return 0;
+    var n = parseFloat(el.value || "0");
+    return isNaN(n) ? 0 : n;
+  }
+  function resetCurrents2() {
+    var range = bounds2();
+    var bump = step2();
+    currents2 = [];
+    for (var i = 0; i < LANE_COUNT; i++) {
+      currents2.push(pad5(parseInt(range.start, 10) + i * bump));
+    }
+    waitingLanes2 = [false, false, false, false];
+    pausedLanes2 = ["", "", "", ""];
+    waiting2 = false;
+    paused2 = "";
+    pausedCodes2 = [];
+    exhausted2 = false;
+  }
+  function renderFlags2() {
+    $("flags2").innerHTML = "";
+    flagged2.forEach(function (value) {
+      var li = document.createElement("li");
+      li.textContent = value;
+      $("flags2").appendChild(li);
+    });
+  }
+  function addFlag2(value) {
+    if (!value) return;
+    if (flagged2.indexOf(value) >= 0) return;
+    flagged2.push(value);
+    renderFlags2();
+  }
+  function showFrame2() {
+    $("frame2Label").textContent = frame2
+      ? ("Đã chọn khung 5 số: " + frame2.w + "×" + frame2.h)
+      : "Chưa chọn khung 5 số — trên PC kéo khung quanh chỗ 5 số tăng.";
+  }
+  function nextActive2() {
+    if (exhausted2 || prefix2().length !== 5) return [];
+    var range = bounds2();
+    var endN = parseInt(range.end, 10);
+    var out = [];
+    for (var i = 0; i < LANE_COUNT; i++) {
+      if (waitingLanes2[i]) continue;
+      var n = parseInt(currents2[i], 10);
+      if (n > endN) continue;
+      out.push({ i: i, code: prefix2() + pad5(n) });
+    }
+    return out;
+  }
+  function nextLanes() {
+    return nextActive2().map(function (item) { return item.code; });
+  }
+  function takeLane2(index) {
+    var nxt = parseInt(currents2[index], 10) + LANE_COUNT * step2();
+    currents2[index] = String(Math.min(nxt, 99999)).padStart(5, "0");
+    currentDigits2 = currents2[0];
+    if (!nextActive2().length && !waitingLanes2.some(Boolean)) exhausted2 = true;
+  }
+  function takeBurst2() {
+    var active = nextActive2();
+    if (!active.length) {
+      if (!waitingLanes2.some(Boolean)) exhausted2 = true;
+      return [];
+    }
+    var codes = active.map(function (item) { return item.code; });
+    lastUsed2 = codes.slice();
+    active.forEach(function (item) { takeLane2(item.i); });
+    return codes;
+  }
+  function codesText2(codes, fallback) {
+    var items = (codes || []).filter(Boolean);
+    return items.length ? items.join(" · ") : (fallback || "—");
+  }
+  function pauseLane2(index, code) {
+    if (!code) return;
+    addFlag2(code);
+    pausedLanes2[index] = code;
+    waitingLanes2[index] = true;
+    currents2[index] = pad5(code.slice(-5));
+    pausedCodes2 = pausedLanes2.filter(Boolean);
+    paused2 = pausedCodes2[0] || "";
+    waiting2 = true;
+    exhausted2 = false;
+    currentDigits2 = currents2[0];
+  }
+  function pauseBatch2(codes, percent) {
+    var items = (codes || []).filter(Boolean);
+    if (!items.length) return;
+    var range = bounds2();
+    items.forEach(function (code) {
+      var digits = pad5(code.slice(-5));
+      var offset = parseInt(digits, 10) - parseInt(range.start, 10);
+      var index = offset >= 0 && offset % step2() === 0 ? (offset / step2()) % LANE_COUNT : -1;
+      if (index < 0) return;
+      pauseLane2(index, code);
+    });
+    forcePause2 = false;
+    showLanes();
+    persist2().catch(function () {});
+    var still = nextLanes();
+    if (still.length) {
+      setStatus2("Đã lưu " + codesText2(items) + " vì trình duyệt đổi " + Math.round(percent || threshold2()) + "%. Các mã khác vẫn chạy: " + codesText2(still) + ".");
+    } else {
+      playing2 = false;
+      if (timer2) window.clearTimeout(timer2);
+      timer2 = 0;
+      setStatus2("Đã lưu " + codesText2(items) + " vì trình duyệt đổi. Bấm Tiếp tục khi xong thao tác tay.");
+    }
+  }
+  function showLanes() {
+    if ($("prefix2").value !== prefix2()) $("prefix2").value = prefix2();
+    var now = nextLanes();
+    var pausedShow = codesText2(pausedCodes2, paused2);
+    if (waiting2 && pausedShow !== "—" && now.length) {
+      $("current2").textContent = "Đã lưu " + pausedShow + " — các trình duyệt khác: " + now.join(" · ");
+    } else if (waiting2 && pausedShow !== "—") {
+      $("current2").textContent = "Đã lưu " + pausedShow + " — bấm Tiếp tục";
+    } else {
+      $("current2").textContent = lastUsed2.length
+        ? ("Sẽ gõ 4 làn: " + (now.join(" · ") || "—") + "   (vừa xong: " + lastUsed2.join(" · ") + ")")
+        : ("Sẽ gõ 4 làn: " + (now.join(" · ") || "—"));
+    }
+    for (var i = 0; i < LANE_COUNT; i++) {
+      var box = $("lane" + i);
+      if (!box) continue;
+      var shown = waitingLanes2[i] ? (pausedLanes2[i] || "") : (prefix2().length === 5 && parseInt(currents2[i], 10) <= parseInt(bounds2().end, 10) ? (prefix2() + pad5(currents2[i])) : (pausedLanes2[i] || lastUsed2[i] || ""));
+      box.textContent = shown;
+      box.className = waitingLanes2[i] ? "line stop" : (playing2 && shown ? "line run" : "line");
+    }
+    showFrame2();
+    renderFlags2();
+  }
+  function persist2() {
+    var range = bounds2();
+    var sampleCodes = nextLanes();
+    if (!sampleCodes.length) sampleCodes = lastUsed2.slice();
+    if (!sampleCodes.length && pausedCodes2.length) sampleCodes = pausedCodes2.slice();
+    if (!sampleCodes.length) sampleCodes = [nextLanes()[0] || lastUsed2[0] || paused2 || (prefix2() + pad5(currentDigits2)) || "1"];
+    var steps = sampleCodes.map(function (code) { return { kind: "type", value: code }; });
+    sampleCodes.forEach(function () { steps.push({ kind: "key", key: "enter", wait: 20 }); });
+    var body = {
+      name: "Hướng 2 — 4 làn Enter",
+      slug: SLUG2,
+      steps: steps,
+      numbers: {
+        lanes: true,
+        lane_count: LANE_COUNT,
+        prefix: prefix2(),
+        start: range.start,
+        end: range.end,
+        current: pad5(currentDigits2),
+        currents: currents2.slice(),
+        exhausted: exhausted2,
+        step: step2(),
+        last_used: lastUsed2.slice(),
+        flagged: flagged2.slice(),
+        paused: paused2,
+        paused_codes: pausedCodes2.slice(),
+        paused_lanes: pausedLanes2.slice(),
+        waiting: waiting2,
+        waiting_lanes: waitingLanes2.slice(),
+        change_threshold: threshold2(),
+        watch_frame: frame2,
+        watch_frames: frames2.slice()
+      }
+    };
+    return fetch("/v1/macros", { method: "POST", headers: headers(), body: JSON.stringify(body) })
+      .then(function (res) { if (!res.ok) throw new Error("Không lưu được hướng 2."); return res.json(); });
+  }
+  function flashAllLanes(active, done) {
+    for (var i = 0; i < LANE_COUNT; i++) {
+      var box = $("lane" + i);
+      if (!box) continue;
+      if (waitingLanes2[i]) {
+        box.className = "line stop";
+        continue;
+      }
+      var hit = active.filter(function (item) { return item.i === i; })[0];
+      box.textContent = hit ? hit.code : box.textContent;
+      box.className = hit ? "line on" : "line";
+    }
+    timer2 = window.setTimeout(function () {
+      for (var i = 0; i < LANE_COUNT; i++) {
+        var reset = $("lane" + i);
+        if (!reset) continue;
+        reset.className = waitingLanes2[i] ? "line stop" : "line";
+      }
+      done();
+    }, 420);
+  }
+  function oneTurn2() {
+    if (!playing2) return;
+    var active = nextActive2();
+    if (!active.length) {
+      playing2 = false;
+      setStatus2(waiting2 ? ("Đã lưu " + codesText2(pausedCodes2, paused2) + ". Bấm Tiếp tục cho trình duyệt đã dừng.") : "Hướng 2 hết dãy.");
+      showLanes();
+      return;
+    }
+    var codes = active.map(function (item) { return item.code; });
+    showLanes();
+    setStatus2("Hướng 2 đang gõ " + codesText2(codes) + " rồi Enter đồng loạt. Chỉ lưu mã của trình duyệt đổi ≥" + threshold2() + "%.");
+    flashAllLanes(active, function () {
+      if (!playing2) return;
+      var paused = [];
+      var kept = [];
+      active.forEach(function (item) {
+        var percent = demoLanePercent(item.i);
+        if (forcePause2 && item.i === active[0].i) percent = threshold2();
+        if (percent >= threshold2()) {
+          pauseLane2(item.i, item.code);
+          paused.push(item.code);
+        } else {
+          takeLane2(item.i);
+          kept.push(item.code);
+        }
+      });
+      forcePause2 = false;
+      lastUsed2 = codes.slice();
+      currentDigits2 = currents2[0];
+      showLanes();
+      persist2().catch(function () {});
+      if (paused.length && kept.length) {
+        setStatus2("Đã lưu " + codesText2(paused) + " vì trình duyệt đổi. Các mã khác vẫn chạy: " + codesText2(kept) + ".");
+      } else if (paused.length) {
+        setStatus2("Đã lưu " + codesText2(paused) + " vì trình duyệt đổi. Bấm Tiếp tục khi xong thao tác tay.");
+      } else {
+        setStatus2("Đã Enter " + codesText2(kept) + ". Không cửa sổ nào đổi — tiếp các trình duyệt còn lại.");
+      }
+      if (!nextActive2().length) {
+        playing2 = false;
+        return;
+      }
+      var wait = Math.max(400, (parseFloat($("delay2").value || "1") || 1) * 1000);
+      timer2 = window.setTimeout(oneTurn2, wait);
+    });
+  }
+  function startPlay2() {
+    if (playing) { setStatus2("Đang chạy hướng 1. Bấm Dừng rồi hãy bắt đầu hướng 2.", "err"); return; }
+    if (playing2) return;
+    var range = bounds2();
+    $("start2").value = range.start;
+    $("end2").value = range.end;
+    $("prefix2").value = prefix2();
+    if (currents2.length !== LANE_COUNT) resetCurrents2();
+    if (prefix2().length !== 5) { setStatus2("Hướng 2: nhập đủ 5 ký tự cố định.", "err"); return; }
+    if (!nextActive2().length) {
+      if (waiting2) { setStatus2("Hướng 2 đã lưu " + codesText2(pausedCodes2, paused2) + ". Bấm Tiếp tục cho trình duyệt đã dừng.", "err"); return; }
+      setStatus2("Hướng 2 đã hết dãy. Đổi số bắt đầu / kết thúc để chạy lại.", "err");
+      return;
+    }
+    playing2 = true;
+    var delay = Math.max(0, parseFloat($("delay2").value || "0") || 0);
+    setStatus2("Hướng 2: gõ 4 mã rồi Enter đồng loạt. Khung ≥" + threshold2() + "% thì chỉ lưu mã của trình duyệt đổi.");
+    if (timer2) window.clearTimeout(timer2);
+    timer2 = window.setTimeout(function () {
+      if (!playing2) return;
+      oneTurn2();
+    }, delay * 1000);
+  }
+  function resumePaused2() {
+    var unlocked = pausedLanes2.filter(Boolean);
+    for (var i = 0; i < LANE_COUNT; i++) {
+      if (waitingLanes2[i] && pausedLanes2[i]) currents2[i] = pad5(pausedLanes2[i].slice(-5));
+      waitingLanes2[i] = false;
+      pausedLanes2[i] = "";
+    }
+    waiting2 = false;
+    paused2 = "";
+    pausedCodes2 = [];
+    exhausted2 = false;
+    currentDigits2 = currents2[0];
+    forcePause2 = false;
+    return unlocked.join(" · ");
+  }
+  function continuePlay2() {
+    if (playing) { setStatus2("Đang chạy hướng 1. Bấm Dừng rồi hãy tiếp tục hướng 2.", "err"); return; }
+    if (playing2) {
+      if (!waiting2) { setStatus2("Hướng 2 đang chạy. Không có trình duyệt nào đang dừng."); return; }
+      var joined = resumePaused2();
+      showLanes();
+      persist2().catch(function () {});
+      setStatus2("Tiếp tục trình duyệt đã dừng: " + (joined || "—") + ". Các mã khác vẫn chạy.");
+      return;
+    }
+    if (!waiting2 && !paused2) { startPlay2(); return; }
+    var nxt = resumePaused2();
+    showLanes();
+    persist2().catch(function () {});
+    playing2 = true;
+    setStatus2("Tiếp tục hướng 2 từ " + (nxt || nextLanes()[0] || "—") + ".");
+    if (timer2) window.clearTimeout(timer2);
+    timer2 = window.setTimeout(function () {
+      if (!playing2) return;
+      oneTurn2();
+    }, 0);
+  }
+  function stopPlay2() {
+    playing2 = false;
+    forcePause2 = false;
+    if (timer2) window.clearTimeout(timer2);
+    timer2 = 0;
+    persist2().catch(function () {});
+    setStatus2(waiting2
+      ? ("Đã dừng hướng 2. Chờ Tiếp tục tại " + codesText2(pausedCodes2, paused2) + ".")
+      : ("Đã dừng hướng 2. Tiếp theo: " + (nextLanes().join(" · ") || "—") + "."));
+  }
+  function loadSaved2() {
+    fetch("/v1/macros", { headers: headers() })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (body) {
+        var items = (body && body.items) || [];
+        var found = items.some(function (it) { return it.slug === SLUG2; });
+        if (!found) return null;
+        return fetch("/v1/macros/" + SLUG2, { headers: headers() }).then(function (res) { return res.ok ? res.json() : null; });
+      })
+      .then(function (item) {
+        if (!item || !item.numbers) return;
+        if (item.numbers.prefix) $("prefix2").value = item.numbers.prefix;
+        if (item.numbers.start) $("start2").value = item.numbers.start;
+        if (item.numbers.end) $("end2").value = item.numbers.end;
+        if (item.numbers.step) $("step2").value = item.numbers.step;
+        currentDigits2 = pad5(item.numbers.current || item.numbers.start || "00001");
+        if (Array.isArray(item.numbers.currents) && item.numbers.currents.length) {
+          currents2 = item.numbers.currents.map(function (item) { return pad5(item); });
+          while (currents2.length < LANE_COUNT) currents2.push(pad5(parseInt(currents2[currents2.length - 1], 10) + step2()));
+        } else {
+          resetCurrents2();
+          var shared = parseInt(currentDigits2, 10);
+          for (var i = 0; i < LANE_COUNT; i++) currents2[i] = pad5(shared + i * step2());
+        }
+        exhausted2 = !!item.numbers.exhausted && !nextActive2().length;
+        lastUsed2 = Array.isArray(item.numbers.last_used) ? item.numbers.last_used.slice() : [];
+        flagged2 = Array.isArray(item.numbers.flagged) ? item.numbers.flagged.slice() : [];
+        pausedLanes2 = Array.isArray(item.numbers.paused_lanes) ? item.numbers.paused_lanes.slice() : ["", "", "", ""];
+        while (pausedLanes2.length < LANE_COUNT) pausedLanes2.push("");
+        pausedCodes2 = Array.isArray(item.numbers.paused_codes) ? item.numbers.paused_codes.slice() : (item.numbers.paused ? [item.numbers.paused] : []);
+        if (!pausedLanes2.some(Boolean) && pausedCodes2.length) {
+          pausedCodes2.forEach(function (code) {
+            var offset = parseInt(pad5(code.slice(-5)), 10) - parseInt(pad5(item.numbers.start || "00001"), 10);
+            var idx = offset >= 0 ? (offset / (item.numbers.step || 1)) % LANE_COUNT : -1;
+            if (idx >= 0) pausedLanes2[idx] = code;
+          });
+        }
+        paused2 = pausedCodes2[0] || item.numbers.paused || "";
+        waitingLanes2 = Array.isArray(item.numbers.waiting_lanes) ? item.numbers.waiting_lanes.map(Boolean) : pausedLanes2.map(Boolean);
+        waiting2 = waitingLanes2.some(Boolean);
+        frame2 = item.numbers.watch_frame || item.numbers.frame || null;
+        frames2 = Array.isArray(item.numbers.watch_frames) ? item.numbers.watch_frames.slice() : [frame2, null, null, null];
+        while (frames2.length < LANE_COUNT) frames2.push(null);
+        if (item.numbers.change_threshold) $("threshold2").value = item.numbers.change_threshold;
+        showLanes();
+        if (waiting2) setStatus2("Đã mở hướng 2. Đang chờ Tiếp tục tại " + codesText2(pausedCodes2, paused2) + ".");
+        else if (item.numbers.prefix) setStatus2("Đã mở hướng 2 đã lưu. Bấm Bắt đầu 2.");
+      })
+      .catch(function () {});
+  }
+
+  $("btnStart").onclick = startPlay;
+  $("btnStart2").onclick = startPlay2;
+  $("btnStop2").onclick = stopPlay2;
+  $("btnContinue2").onclick = continuePlay2;
+  $("btnPause2").onclick = function () {
+    var codes = nextLanes();
+    if (!codes.length && pausedCodes2.length) codes = pausedCodes2.slice();
+    if (!codes.length && paused2) codes = [paused2];
+    if (!codes.length && lastUsed2.length) codes = lastUsed2.slice();
+    if (!codes.length) { setStatus2("Chưa có mã để lưu.", "err"); return; }
+    if (playing2) {
+      forcePause2 = true;
+      setStatus2("Sẽ lưu mã của trình duyệt đổi; các mã khác vẫn chạy.");
+      return;
+    }
+    var active = nextActive2();
+    if (active.length) {
+      pauseLane2(active[0].i, active[0].code);
+      showLanes();
+      persist2().catch(function () {});
+      setStatus2("Đã lưu " + active[0].code + " vì trình duyệt đổi. Các mã khác vẫn chạy.");
+      return;
+    }
+    pauseBatch2(codes, threshold2());
+  };
+  $("btnFrame2").onclick = function () {
+    framePick2 = !framePick2;
+    $("lanes2").style.outline = framePick2 ? "2px dashed #ff00aa" : "";
+    setStatus2(framePick2
+      ? "Kéo một khung trên 4 làn để nhớ chỗ 5 số (trên PC kéo trực tiếp màn hình)."
+      : "Đã tắt chọn khung.");
+  };
+  $("lanes2").onmousedown = function (ev) {
+    if (!framePick2) return;
+    var box = $("lanes2").getBoundingClientRect();
+    var x0 = ev.clientX - box.left;
+    var y0 = ev.clientY - box.top;
+    function move(ev2) {
+      var x1 = ev2.clientX - box.left;
+      var y1 = ev2.clientY - box.top;
+      var mark = $("frameMark2");
+      if (!mark) {
+        mark = document.createElement("div");
+        mark.id = "frameMark2";
+        mark.className = "pick";
+        $("lanes2").appendChild(mark);
+      }
+      mark.style.left = Math.min(x0, x1) + "px";
+      mark.style.top = Math.min(y0, y1) + "px";
+      mark.style.width = Math.abs(x1 - x0) + "px";
+      mark.style.height = Math.abs(y1 - y0) + "px";
+    }
+    function up(ev2) {
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+      var x1 = ev2.clientX - box.left;
+      var y1 = ev2.clientY - box.top;
+      var w = Math.abs(x1 - x0);
+      var h = Math.abs(y1 - y0);
+      if (w < 16 || h < 16) { setStatus2("Khung quá nhỏ. Kéo rộng hơn.", "err"); return; }
+      frame2 = {
+        x: Math.round(Math.min(x0, x1)),
+        y: Math.round(Math.min(y0, y1)),
+        w: Math.round(w),
+        h: Math.round(h),
+        sw: Math.round(box.width),
+        sh: Math.round(box.height)
+      };
+      framePick2 = false;
+      $("lanes2").style.outline = "";
+      showFrame2();
+      persist2().catch(function () {});
+      setStatus2("Đã chọn khung 5 số " + frame2.w + "×" + frame2.h + ". Trên PC máy so đúng khung này.");
+    }
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  };
+  $("btnStop").onclick = stopPlay;
+  $("btnFlag").onclick = flagNow;
+  $("btnRecordRecover").onclick = function () {
+    recordingRecover = false;
+    renderRecover();
+    setStatus("Từng bước: Thêm ảnh, Bôi màu chỗ cần bấm, hoặc Chọn vị trí trên ảnh, rồi Lưu vị trí.");
+  };
+  $("btnSaveRecover").onclick = function () {
+    if (filledCount() < 4) {
+      setStatus("Chưa đủ 4 nút. Bôi màu hoặc chọn vị trí từng bước trên ảnh, rồi Lưu.", "err");
+      return;
+    }
+    persist().then(function () {
+      setStatus("Đã lưu 4 nút. Trên PC máy bấm trái đúng chỗ bôi màu, theo tỷ lệ màn hình.", "ok");
+    }).catch(function (err) { setStatus(err.message, "err"); });
+  };
+  $("btnClearRecover").onclick = function () {
+    recoverClicks = emptySlots();
+    clickNames = ["", "", "", ""];
+    recordingRecover = false;
+    renderRecover();
+    persist().catch(function () {});
+    setStatus("Đã xóa 4 nút.");
+  };
+  $("paintFile").onchange = function () {
+    var file = this.files && this.files[0];
+    this.value = "";
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      var img = new Image();
+      img.onload = function () {
+        paintImage = img;
+        drawPaintImage();
+        $("paintHint").textContent = paintMode === "pick"
+          ? "Ấn đúng chỗ nút trên ảnh."
+          : "Bôi màu hồng chỗ cần bấm, rồi Lưu vị trí.";
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  };
+  $("paintClear").onclick = function () { drawPaintImage(); };
+  $("paintCancel").onclick = closePaint;
+  $("paintSave").onclick = function () {
+    if (!paintImage) { setStatus("Thêm ảnh trước khi lưu vị trí.", "err"); return; }
+    if (paintMode === "pick") { setStatus("Ấn vào chỗ cần bấm trên ảnh.", "err"); return; }
+    var hit = paintCentroid($("paintCanvas"));
+    if (!hit) { setStatus("Bôi màu hồng lên chỗ cần bấm, rồi Lưu vị trí.", "err"); return; }
+    savePaintPoint({ x: hit.x, y: hit.y, sw: $("paintCanvas").width, sh: $("paintCanvas").height, via: "paint" });
+  };
+  $("paintCanvas").onmousedown = strokePaint;
+  $("paintCanvas").onmousemove = function (ev) { if (ev.buttons) strokePaint(ev); };
+  $("paintCanvas").ontouchstart = strokePaint;
+  $("paintCanvas").ontouchmove = strokePaint;
+  $("btnSave").onclick = function () {
+    if (prefix().length !== 5) { setStatus("Nhập đủ 5 ký tự cố định rồi lưu.", "err"); return; }
+    persist().then(function () { setStatus("Đã lưu dãy và các số lúc giao diện đổi.", "ok"); showCurrent(); })
+      .catch(function (err) { setStatus(err.message, "err"); });
+  };
+  $("prefix").oninput = showCurrent;
+  $("start").oninput = function () {
+    var range = bounds();
+    if (!playing) {
+      currentDigits = range.start;
+      exhausted = false;
+    } else if (parseInt(currentDigits, 10) < parseInt(range.start, 10)) {
+      currentDigits = range.start;
+    }
+    if (parseInt(currentDigits, 10) <= parseInt(range.end, 10)) exhausted = false;
+    showCurrent();
+  };
+  $("end").oninput = function () {
+    var range = bounds();
+    if (parseInt(currentDigits, 10) <= parseInt(range.end, 10)) exhausted = false;
+    else exhausted = true;
+    showCurrent();
+  };
+  $("prefix2").oninput = showLanes;
+  $("start2").oninput = function () {
+    var range = bounds2();
+    if (!playing2) {
+      resetCurrents2();
+      currentDigits2 = range.start;
+    } else if (parseInt(currentDigits2, 10) < parseInt(range.start, 10)) {
+      currentDigits2 = range.start;
+    }
+    if (parseInt(currentDigits2, 10) <= parseInt(range.end, 10)) exhausted2 = false;
+    showLanes();
+  };
+  $("end2").oninput = function () {
+    var range = bounds2();
+    if (parseInt(currentDigits2, 10) <= parseInt(range.end, 10)) exhausted2 = false;
+    else exhausted2 = true;
+    showLanes();
+  };
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "F8") { ev.preventDefault(); stopPlay(); stopPlay2(); }
+    if (ev.key === "F9") { ev.preventDefault(); flagNow(); }
+  });
+  renderRecover();
+  showCurrent();
+  showLanes();
+  loadSaved();
+  loadSaved2();
+</script>
+</body>
+</html>

@@ -20,6 +20,34 @@ Chi tiết vận hành 2 PC: [`deploy/PA1_RUNBOOK.md`](deploy/PA1_RUNBOOK.md).
 
 > Hot 100 @ 30s là biên cứng với ~20 browser. Hệ thống mặc định `HOT_INTERVAL_SEC=45`. Hạ xuống 30 chỉ khi KPI đạt.
 
+## Ghi nhớ phím và chuột trên máy, rồi làm lại
+
+Phần mềm nhỏ **chạy trên máy tính của bạn**: nhập **5 ký tự cố định** (đổi được), **số bắt đầu** và **số kết thúc** của 5 số phía sau, rồi chỉ 4 nút trái nếu sau Enter màn hình có thể đổi. Từng bước: nhập **tên vị trí**, bấm **Bôi màu** (chụp màn hoặc thêm ảnh, tô hồng chỗ cần ấn) hoặc **Chọn vị trí** trên màn hình, rồi **Lưu vị trí**. Máy tìm tâm vùng bôi màu và bấm trái đúng chỗ đó, nhớ theo **tỷ lệ màn hình**. Nếu máy không nhận lần bấm, phần mềm bấm lại đúng vị trí có tên đó. **Bắt đầu** gồm cả hai kịch bản: máy gõ mã (ví dụ `SPXAB00001`), Enter, đo % đổi màn. Đủ ngưỡng (mặc định 80%): tự bấm 4 nút trái đã chỉ, lưu mã vừa gõ, rồi gõ số tiếp. F9 cũng lưu số vừa Enter. F8 dừng. VPS `http://VPS:8088/` hiện cùng 4 thẻ; Gõ/Enter/bấm thật trên máy Windows.
+
+```bash
+pip install pynput          # hoặc: pip install -e ".[macro]"
+python -m pc_macro          # cửa sổ Ghi / Dừng / Làm lại
+python -m pc_macro list
+python -m pc_macro play "tên bản ghi" --repeat 3 --delay 2
+python -m pc_macro push     # đưa kịch bản local lên VPS (cần PC_MACRO_HUB)
+python -m pc_macro pull     # lấy kịch bản từ VPS về máy
+```
+
+Windows (đã có venv của agent):
+
+```powershell
+.\.venv\Scripts\pip install pynput
+.\.venv\Scripts\python -m pc_macro
+```
+
+Đặt số lần lặp = `0` để làm mãi đến khi bấm Dừng. Ô **Chờ** cho bạn vài giây chuyển sang cửa sổ cần thao tác trước khi máy tự gõ / bấm.
+
+**Kịch bản từng bước:** sau khi Dừng, bản ghi tách thành bước (gõ chữ, gõ số, phím, bấm, cuộn, chờ). Sửa / xoá / lên / xuống / thêm từng bước, hoặc **Ghi thêm** để nối thao tác mới. **Chèn vào kịch bản** ghép một bản đã lưu vào kịch bản đang sửa. Lưu rồi lần sau **Mở** lại đúng thứ tự đã chỉnh.
+
+**Dãy số:** mỗi mã gồm **5 ký tự cố định** đứng trước + **5 số** tăng dần. Ví dụ tiền tố `SPXAB`, bắt đầu `00001`, kết thúc `00100` → máy gõ `SPXAB00001` rồi Enter, sau đó `SPXAB00002` … đến `SPXAB00100`. Sau Enter máy so sánh ảnh màn hình; đổi ≥ ngưỡng (mặc định 80%) thì lưu mã vừa gõ và bấm 4 vị trí đã ghi, rồi tiếp tục tăng số. Đổi 5 ký tự cố định bất cứ lúc nào. F9 lưu mã khi bạn thấy đổi.
+
+**Hướng 2** (độc lập, không đụng 4 nút / 80% của hướng 1): cùng 5 ký tự + 5 số. Mỗi dãy số chạy **một trình duyệt**. **Chọn 4 ô nhập** rồi **Chọn 4 khung** (mỗi cửa sổ một khung; thiếu thì so vùng quanh ô nhập). **Bắt đầu 2** gõ 4 mã rồi Enter đồng loạt. Sau Enter, chỉ lưu mã của trình duyệt có khung đổi ≥20%; các mã / trình duyệt khác vẫn chạy. **Tiếp tục** chỉ mở lại cửa sổ đã dừng. Ví dụ `00001`–`00010` → nhịp 1: `…00001 …00002 …00003 …00004`; nếu chỉ `…00002` đổi thì lần sau gõ `…00005 …00002(chờ) …00007 …00008`. F8 dừng cả hai hướng.
+
 ## Cài đặt trên PC (dùng tài nguyên máy local)
 
 - Linux: [`docs/CAI_DAT_PC.md`](docs/CAI_DAT_PC.md)
