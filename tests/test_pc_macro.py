@@ -12,6 +12,8 @@ from pathlib import Path
 from pc_macro.desktop import key_name
 from pc_macro.events import default_title, point_in_box, sanitize_events, schedule, script_lines
 from pc_macro.numbers import (
+    FourLaneQueue,
+    LANE_COUNT,
     NumberQueue,
     apply_turn,
     bump_number,
@@ -30,6 +32,7 @@ from pc_macro.script import (
     merge_recording,
     move_step,
     new_step,
+    four_lane_enter_steps,
     number_enter_steps,
     replace_step,
     script_captions,
@@ -358,6 +361,48 @@ class PrefixRangeTests(unittest.TestCase):
         self.assertEqual(result["loops"], 2)
         self.assertEqual(sent[:11], ["S", "P", "X", "A", "B", "0", "0", "0", "0", "1", "enter"])
         self.assertEqual(sent[11:22], ["S", "P", "X", "A", "B", "0", "0", "0", "0", "2", "enter"])
+
+
+class FourLaneTests(unittest.TestCase):
+    def test_four_lanes_take_distinct_codes_then_enter_together(self) -> None:
+        self.assertEqual(LANE_COUNT, 4)
+        queue = FourLaneQueue(prefix="SPXAB", start="00001", end="00010", step=1)
+        first = queue.peek()
+        self.assertEqual(first, ["SPXAB00001", "SPXAB00002", "SPXAB00003", "SPXAB00004"])
+        self.assertEqual(queue.take(), first)
+        self.assertEqual(queue.take(), ["SPXAB00005", "SPXAB00006", "SPXAB00007", "SPXAB00008"])
+        self.assertEqual(queue.take(), ["SPXAB00009", "SPXAB00010"])
+        self.assertEqual(queue.take(), [])
+        self.assertTrue(queue.exhausted)
+        again = FourLaneQueue.from_dict(queue.to_dict())
+        self.assertTrue(again.exhausted)
+        self.assertEqual(again.last_used, ["SPXAB00009", "SPXAB00010"])
+        self.assertNotIn("recover_clicks", again.to_dict())
+        short = FourLaneQueue(prefix="AB", start="00001", end="00010")
+        self.assertEqual(short.peek(), [])
+        self.assertEqual(short.take(), [])
+
+    def test_player_types_four_codes_and_four_enters_in_one_turn(self) -> None:
+        queue = FourLaneQueue(prefix="SPXAB", start="00001", end="00004")
+        sent: list[str] = []
+
+        def prepare(_loop: int) -> list:
+            codes = queue.take()
+            if not codes:
+                return []
+            _script, batch = compile_script(four_lane_enter_steps(codes))
+            return batch
+
+        player = Player(
+            lambda event: sent.append(str(event["key"])) if event.get("action") == "down" else None,
+            lambda _s: None,
+        )
+        result = player.play([], times=0, gap_ms=0, prepare=prepare)
+        self.assertEqual(result["loops"], 1)
+        self.assertEqual(sent.count("enter"), 4)
+        self.assertEqual(sent[:11], ["S", "P", "X", "A", "B", "0", "0", "0", "0", "1", "enter"])
+        self.assertEqual(sent[11:22], ["S", "P", "X", "A", "B", "0", "0", "0", "0", "2", "enter"])
+        self.assertTrue(queue.exhausted)
 
     def test_screen_change_and_four_clicks_then_continue(self) -> None:
         same = make_grid((10, 10, 10))

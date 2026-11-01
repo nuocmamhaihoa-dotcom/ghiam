@@ -54,6 +54,12 @@ class MacroHubPageTests(unittest.TestCase):
         self.assertEqual(home.status_code, 200)
         self.assertIn("Gõ số rồi Enter", home.text)
         self.assertIn('id="btnStart"', home.text)
+        self.assertIn('id="btnStart2"', home.text)
+        self.assertIn('id="prefix2"', home.text)
+        self.assertIn('id="dir2"', home.text)
+        self.assertIn("Hướng&nbsp;2", home.text)
+        self.assertIn("4&nbsp;làn", home.text)
+        self.assertIn("day-so-enter-2", home.text)
         self.assertIn('id="btnFlag"', home.text)
         self.assertIn('id="prefix"', home.text)
         self.assertIn('id="start"', home.text)
@@ -106,6 +112,7 @@ class MacroHubPageTests(unittest.TestCase):
         readme = archive.read("pc-macro/README.txt").decode("utf-8")
         self.assertIn("Ghi nhớ thao tác PC", readme)
         self.assertIn("python -m pc_macro pull", readme)
+        self.assertIn("Hướng 2", readme)
 
     def test_save_list_get_delete(self) -> None:
         empty = self.client.get("/v1/macros", headers=self.headers)

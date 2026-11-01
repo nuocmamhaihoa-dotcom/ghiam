@@ -12,6 +12,7 @@ _MAX_ITEMS = 500
 _MAX_DIGITS = 40
 PREFIX_LEN = 5
 DIGIT_LEN = 5
+LANE_COUNT = 4
 
 
 def normalize_prefix(raw: str) -> str:
@@ -293,6 +294,100 @@ class NumberQueue:
             if len(self.flagged) > _MAX_ITEMS:
                 self.flagged = self.flagged[-_MAX_ITEMS:]
         return chosen
+
+
+class FourLaneQueue:
+    """Hướng 2: four parallel codes from one prefix+range. Leaves NumberQueue alone."""
+
+    def __init__(
+        self,
+        *,
+        prefix: str = "",
+        start: str = "00001",
+        end: str = "00010",
+        current: str = "",
+        step: int = 1,
+        exhausted: bool = False,
+        last_used: Any = None,
+    ) -> None:
+        self.prefix = normalize_prefix(prefix)
+        start_digits = normalize_digits(start or "00001")
+        end_digits = normalize_digits(end or start_digits)
+        if int(end_digits) < int(start_digits):
+            start_digits, end_digits = end_digits, start_digits
+        self.start = start_digits
+        self.end = end_digits
+        try:
+            self.step = int(step)
+        except (TypeError, ValueError):
+            self.step = 1
+        if self.step < 1:
+            self.step = 1
+        now = normalize_digits(current or start_digits)
+        if int(now) < int(self.start):
+            now = self.start
+        self.current = now
+        self.last_used = _clean_codes(last_used if isinstance(last_used, (list, tuple)) else [last_used] if last_used else [])
+        self.exhausted = False
+        if int(self.current) > int(self.end):
+            self.exhausted = True
+        elif bool(exhausted) and not self.peek():
+            self.exhausted = True
+
+    @classmethod
+    def from_dict(cls, raw: Any) -> FourLaneQueue:
+        data = raw if isinstance(raw, dict) else {}
+        return cls(
+            prefix=str(data.get("prefix") or ""),
+            start=str(data.get("start") or "00001"),
+            end=str(data.get("end") or "00010"),
+            current=str(data.get("current") or ""),
+            step=data.get("step") if data.get("step") is not None else 1,
+            exhausted=bool(data.get("exhausted")),
+            last_used=data.get("last_used") or data.get("last_used_lanes") or [],
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "lanes": True,
+            "lane_count": LANE_COUNT,
+            "prefix": self.prefix,
+            "start": self.start,
+            "end": self.end,
+            "current": self.current,
+            "step": self.step,
+            "exhausted": self.exhausted,
+            "last_used": list(self.last_used),
+        }
+
+    def peek(self) -> list[str]:
+        """Up to four unused codes, starting at `current`, spaced by `step`."""
+        if self.exhausted or len(self.prefix) != PREFIX_LEN:
+            return []
+        out: list[str] = []
+        cursor = int(self.current)
+        end = int(self.end)
+        for _index in range(LANE_COUNT):
+            if cursor > end:
+                break
+            out.append(make_code(self.prefix, str(cursor).zfill(DIGIT_LEN)))
+            cursor += self.step
+        return out
+
+    def take(self) -> list[str]:
+        codes = self.peek()
+        if not codes:
+            self.exhausted = True
+            return []
+        self.last_used = list(codes)
+        nxt = int(self.current) + LANE_COUNT * self.step
+        if nxt > 10**DIGIT_LEN - 1:
+            self.exhausted = True
+            return codes
+        self.current = str(nxt).zfill(DIGIT_LEN)
+        if nxt > int(self.end):
+            self.exhausted = True
+        return codes
 
 
 def _clean_code(raw: Any) -> str:

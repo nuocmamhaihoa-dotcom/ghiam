@@ -10,7 +10,7 @@ from typing import Any
 
 from pc_macro.desktop import Desktop, available, install_hint
 from pc_macro.hub import HubError, configured, describe, pull, push
-from pc_macro.numbers import NumberQueue, make_code, normalize_digits, normalize_prefix
+from pc_macro.numbers import FourLaneQueue, NumberQueue, make_code, normalize_digits, normalize_prefix
 from pc_macro.overlay import ClickOverlay, show_click_overlay
 from pc_macro.painter import PaintPicker, show_paint_picker
 from pc_macro.screen import (
@@ -28,7 +28,7 @@ from pc_macro.screen import (
     scale_clicks,
     start_both_scripts_status,
 )
-from pc_macro.script import compile_script, number_enter_steps
+from pc_macro.script import compile_script, four_lane_enter_steps, number_enter_steps
 from pc_macro.session import Player, Recorder, ignore_window
 from pc_macro.store import MacroStore
 
@@ -45,8 +45,8 @@ class App:
         self.store = MacroStore()
         self.root = tk.Tk()
         self.root.title("Gõ số rồi Enter")
-        self.root.geometry("430x1080")
-        self.root.minsize(400, 900)
+        self.root.geometry("430x1280")
+        self.root.minsize(400, 980)
         self.root.attributes("-topmost", True)
         self.status = tk.StringVar(
             value="Bắt đầu gồm cả hai kịch bản: gõ mã + Enter; màn đổi ≥80% thì tự bấm 4 nút trái."
@@ -59,13 +59,24 @@ class App:
         self.delay = tk.StringVar(value="2")
         self.step = tk.StringVar(value="1")
         self.threshold = tk.StringVar(value="80")
+        self.prefix2 = tk.StringVar(value="")
+        self.start2 = tk.StringVar(value="00001")
+        self.end2 = tk.StringVar(value="00010")
+        self.delay2 = tk.StringVar(value="2")
+        self.step2 = tk.StringVar(value="1")
+        self.lanes_label = tk.StringVar(value="Hướng 2 — 4 làn: —")
         self.recorder = Recorder(ignore_point=ignore_window(self._window_box))
         self.player: Player | None = None
+        self.player2: Player | None = None
         self.click: dict[str, Any] | None = None
         self.current_slug = "day-so-enter"
+        self.slug2 = "day-so-enter-2"
         self.queue = NumberQueue(range_mode=True, prefix="", start="00001", end="00010", step=1)
+        self.lanes = FourLaneQueue(prefix="", start="00001", end="00010", step=1)
         self.desktop = Desktop(self._on_desktop, _now_ms)
         self._play_thread: threading.Thread | None = None
+        self._play_thread2: threading.Thread | None = None
+        self._loading_lanes = False
         self._record_recover = False
         self._recover_draft: list[dict[str, Any]] = []
         self._force_recover = False
@@ -79,6 +90,10 @@ class App:
         self.start.trace_add("write", self._on_fields)
         self.end.trace_add("write", self._on_fields)
         self.step.trace_add("write", self._on_fields)
+        self.prefix2.trace_add("write", self._on_lanes)
+        self.start2.trace_add("write", self._on_lanes)
+        self.end2.trace_add("write", self._on_lanes)
+        self.step2.trace_add("write", self._on_lanes)
         self.root.protocol("WM_DELETE_WINDOW", self._close)
 
     def run(self) -> None:
@@ -163,6 +178,42 @@ class App:
             self.root,
             text="Bắt đầu = gõ Enter + nếu màn đổi ≥80% tự bấm 4 nút. F8 dừng. Bôi màu / Chọn vị trí từng bước.",
         ).pack(anchor="w", padx=12, pady=(0, 8))
+
+        ttk.Separator(self.root).pack(fill="x", padx=12, pady=8)
+        ttk.Label(self.root, text="Hướng 2 — 4 làn Enter đồng loạt (không đụng hướng 1)", font=("Segoe UI", 11, "bold")).pack(
+            anchor="w", padx=12
+        )
+        ttk.Label(
+            self.root,
+            text="Cùng 5 ký tự + 5 số. Mỗi nhịp lấy 4 mã khác nhau, Enter cả 4, rồi cả 4 tiến tiếp (không trùng).",
+            wraplength=390,
+        ).pack(anchor="w", padx=12, pady=(2, 4))
+        ttk.Label(self.root, text="5 ký tự cố định hướng 2").pack(anchor="w", padx=12)
+        ttk.Entry(self.root, textvariable=self.prefix2, width=8, font=("Segoe UI", 18)).pack(anchor="w", padx=12, pady=4)
+        row2 = ttk.Frame(self.root)
+        row2.pack(fill="x", **pad)
+        left2 = ttk.Frame(row2)
+        left2.pack(side="left", fill="x", expand=True)
+        ttk.Label(left2, text="Số bắt đầu").pack(anchor="w")
+        ttk.Entry(left2, textvariable=self.start2, width=8, font=("Segoe UI", 16)).pack(anchor="w", pady=2)
+        right2 = ttk.Frame(row2)
+        right2.pack(side="left", fill="x", expand=True, padx=(12, 0))
+        ttk.Label(right2, text="Số kết thúc").pack(anchor="w")
+        ttk.Entry(right2, textvariable=self.end2, width=8, font=("Segoe UI", 16)).pack(anchor="w", pady=2)
+        ttk.Label(self.root, textvariable=self.lanes_label, wraplength=390, font=("Segoe UI", 12, "bold")).pack(
+            anchor="w", padx=12, pady=6
+        )
+        opts2 = ttk.Frame(self.root)
+        opts2.pack(fill="x", **pad)
+        ttk.Label(opts2, text="Chờ (giây)").pack(side="left")
+        ttk.Entry(opts2, textvariable=self.delay2, width=5).pack(side="left", padx=(6, 14))
+        ttk.Label(opts2, text="Mỗi lần cộng").pack(side="left")
+        ttk.Entry(opts2, textvariable=self.step2, width=5).pack(side="left", padx=6)
+        buttons2 = ttk.Frame(self.root)
+        buttons2.pack(fill="x", **pad)
+        ttk.Button(buttons2, text="Bắt đầu 2", command=self.start_play2).pack(side="left", padx=2)
+        ttk.Button(buttons2, text="Dừng 2", command=self.stop_play2).pack(side="left", padx=2)
+        ttk.Button(buttons2, text="Lưu hướng 2", command=self.save_lanes).pack(side="left", padx=2)
 
     def start_record(self) -> None:
         if self.recorder.on or self._playing() or self._record_recover:
@@ -271,6 +322,9 @@ class App:
         if self.recorder.on:
             self.status.set("Dừng ghi chỗ nhập rồi hãy bắt đầu.")
             return
+        if self._playing2():
+            self.status.set("Đang chạy hướng 2. Bấm Dừng 2 rồi hãy bắt đầu hướng 1.")
+            return
         if self._playing():
             return
         self._sync_queue(write_back=True)
@@ -293,6 +347,8 @@ class App:
     def stop_all(self) -> None:
         if self.player is not None:
             self.player.cancel()
+        if self.player2 is not None:
+            self.player2.cancel()
         if self._record_recover or self._overlay is not None:
             self._finish_recover(keep=False)
         if self._painter is not None:
@@ -425,6 +481,8 @@ class App:
         if raw.get("kind") == "key" and raw.get("action") == "down" and key == "f8":
             if self.player is not None:
                 self.player.cancel()
+            if self.player2 is not None:
+                self.player2.cancel()
             if self._record_recover:
                 self.root.after(0, lambda: self._finish_recover(keep=False))
             if self._painter is not None:
@@ -717,6 +775,7 @@ class App:
             self.queue.bump = True
             self.click = _click_from_steps(item.get("steps") or [])
         self._refresh_number_view()
+        self._load_lanes()
         if self.queue.prefix or self.queue.last_used:
             self.status.set("Đã mở dãy đã lưu. Bấm vào ô cần nhập, rồi Bắt đầu.")
 
@@ -763,14 +822,184 @@ class App:
             return True
         return self._play_thread is not None and self._play_thread.is_alive()
 
+    def _playing2(self) -> bool:
+        if self.player2 is not None and not self.player2.cancelled:
+            return True
+        return self._play_thread2 is not None and self._play_thread2.is_alive()
+
     def _busy(self) -> bool:
-        return self.recorder.on or self._playing() or self._record_recover or self._painter is not None
+        return self.recorder.on or self._playing() or self._playing2() or self._record_recover or self._painter is not None
+
+    def start_play2(self) -> None:
+        if self.recorder.on:
+            self.status.set("Dừng ghi chỗ nhập rồi hãy bắt đầu hướng 2.")
+            return
+        if self._playing():
+            self.status.set("Đang chạy hướng 1. Bấm Dừng rồi hãy bắt đầu hướng 2.")
+            return
+        if self._playing2():
+            return
+        self._sync_lanes(write_back=True)
+        if not self.lanes.peek():
+            self.status.set("Hướng 2: nhập đủ 5 ký tự cố định, số bắt đầu và số kết thúc.")
+            return
+        try:
+            delay = float(self.delay2.get().strip() or "0")
+        except ValueError:
+            self.status.set("Hướng 2: chờ phải là số giây.")
+            return
+        if delay < 0:
+            self.status.set("Hướng 2: chờ không được âm.")
+            return
+        self.player2 = Player(self.desktop.send, time.sleep)
+        self.status.set("Hướng 2: mỗi nhịp gõ 4 mã khác nhau rồi Enter đồng loạt.")
+        self._play_thread2 = threading.Thread(target=self._run_play2, args=(delay,), daemon=True)
+        self._play_thread2.start()
+
+    def stop_play2(self) -> None:
+        if self.player2 is not None:
+            self.player2.cancel()
+        self.status.set(f"Đã dừng hướng 2. Tiếp theo: {' · '.join(self.lanes.peek()) or '—'}.")
+
+    def save_lanes(self) -> None:
+        self._persist_lanes(silent=False)
+
+    def _run_play2(self, delay: float) -> None:
+        remaining = delay
+        while remaining > 0 and self.player2 is not None and not self.player2.cancelled:
+            self._set_status(f"Hướng 2 bắt đầu sau {int(remaining)} giây…")
+            time.sleep(min(1.0, remaining))
+            remaining -= 1
+        if self.player2 is None or self.player2.cancelled:
+            self._set_status("Đã dừng hướng 2.")
+            self.player2 = None
+            return
+
+        def prepare(_loop: int) -> list[dict[str, Any]]:
+            codes = self.lanes.take()
+            if not codes:
+                return []
+            self._set_status("Hướng 2 đang gõ: " + " · ".join(codes) + " rồi Enter đồng loạt.")
+            self.root.after(0, self._refresh_lanes)
+            self.root.after(0, lambda: self._persist_lanes(silent=True))
+            _script, batch = compile_script(four_lane_enter_steps(codes))
+            return batch
+
+        try:
+            result = self.player2.play([], times=0, prepare=prepare)
+        except Exception as exc:
+            result = {"loops": 0, "played": 0, "stopped": True}
+            self._set_status(f"Hướng 2 dừng vì lỗi: {exc}.")
+        finally:
+            self.player2 = None
+        self.root.after(0, self._refresh_lanes)
+        self.root.after(0, lambda: self._persist_lanes(silent=True))
+        if result["stopped"]:
+            self._set_status(f"Đã dừng hướng 2 sau {result['loops']} nhịp. Tiếp theo: {' · '.join(self.lanes.peek()) or '—'}.")
+        else:
+            self._set_status(f"Hướng 2 xong {result['loops']} nhịp.")
+
+    def _on_lanes(self, *_args: Any) -> None:
+        if self._loading_lanes:
+            return
+        cleaned = normalize_prefix(self.prefix2.get())
+        if cleaned != self.prefix2.get():
+            self.prefix2.set(cleaned)
+            return
+        self._sync_lanes(write_back=False)
+
+    def _sync_lanes(self, *, write_back: bool = False) -> None:
+        try:
+            step = int(self.step2.get().strip() or "1")
+        except ValueError:
+            step = 1
+            self.step2.set("1")
+        if step < 1:
+            step = 1
+            self.step2.set("1")
+        prefix = normalize_prefix(self.prefix2.get())
+        start = normalize_digits(self.start2.get() or "00001")
+        end = normalize_digits(self.end2.get() or start)
+        current = self.lanes.current
+        exhausted = self.lanes.exhausted
+        if start != self.lanes.start and not self._playing2():
+            current = start
+            exhausted = False
+        self.lanes = FourLaneQueue(
+            prefix=prefix,
+            start=start,
+            end=end,
+            current=current,
+            step=step,
+            exhausted=exhausted,
+            last_used=self.lanes.last_used,
+        )
+        if write_back:
+            if self.prefix2.get() != self.lanes.prefix:
+                self.prefix2.set(self.lanes.prefix)
+            if self.start2.get() != self.lanes.start:
+                self.start2.set(self.lanes.start)
+            if self.end2.get() != self.lanes.end:
+                self.end2.set(self.lanes.end)
+            if self.step2.get() != str(self.lanes.step):
+                self.step2.set(str(self.lanes.step))
+        self._refresh_lanes()
+
+    def _refresh_lanes(self) -> None:
+        nxt = self.lanes.peek()
+        last = self.lanes.last_used
+        if nxt and last:
+            self.lanes_label.set("Hướng 2 sẽ gõ: " + " · ".join(nxt) + "   (vừa xong: " + " · ".join(last) + ")")
+        elif nxt:
+            self.lanes_label.set("Hướng 2 sẽ gõ: " + " · ".join(nxt))
+        else:
+            self.lanes_label.set("Hướng 2 — 4 làn: —")
+
+    def _persist_lanes(self, *, silent: bool) -> None:
+        self._sync_lanes()
+        if not self.lanes.prefix and not self.lanes.last_used:
+            if not silent:
+                self.status.set("Hướng 2: nhập 5 ký tự cố định rồi lưu.")
+            return
+        sample = " ".join(self.lanes.peek() or self.lanes.last_used or ["1"])
+        try:
+            saved = self.store.save(
+                "Hướng 2 — 4 làn Enter",
+                [],
+                slug=self.slug2,
+                numbers=self.lanes.to_dict(),
+                steps=four_lane_enter_steps(self.lanes.peek() or self.lanes.last_used or [sample]),
+            )
+        except ValueError:
+            if not silent:
+                self.status.set("Hướng 2: chưa có số để lưu.")
+            return
+        self.slug2 = str(saved["slug"])
+        if not silent:
+            nxt = self.lanes.peek()
+            self.status.set("Đã lưu hướng 2. Tiếp theo: " + (" · ".join(nxt) if nxt else "—") + ".")
+
+    def _load_lanes(self) -> None:
+        item = self.store.get(self.slug2)
+        if item is None:
+            self._refresh_lanes()
+            return
+        loaded = FourLaneQueue.from_dict(item.get("numbers"))
+        self.lanes = loaded
+        self._loading_lanes = True
+        self.prefix2.set(self.lanes.prefix)
+        self.start2.set(self.lanes.start)
+        self.end2.set(self.lanes.end)
+        self.step2.set(str(self.lanes.step))
+        self._loading_lanes = False
+        self._refresh_lanes()
 
     def _close(self) -> None:
         self.stop_all()
         self._close_overlay()
         self._close_painter()
         self._persist(silent=True)
+        self._persist_lanes(silent=True)
         self.desktop.stop()
         self.root.destroy()
 

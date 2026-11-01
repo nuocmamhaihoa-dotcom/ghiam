@@ -143,6 +143,19 @@ def number_enter_steps(sample: str = "1") -> list[dict[str, Any]]:
     return [step for step in (typed, enter) if step]
 
 
+def four_lane_enter_steps(codes: list[str] | tuple[str, ...]) -> list[dict[str, Any]]:
+    """Hướng 2: type each of the four codes and Enter them in one burst."""
+    steps: list[dict[str, Any]] = []
+    for index, raw in enumerate(codes or []):
+        batch = number_enter_steps(str(raw))
+        if index and batch:
+            first = dict(batch[0])
+            first["wait"] = max(int(first.get("wait") or 0), 40)
+            batch = [first, *batch[1:]]
+        steps.extend(batch)
+    return steps
+
+
 def new_step(kind: str, **fields: Any) -> dict[str, Any] | None:
     """Build one valid step, filling defaults so the editor can insert a blank row."""
     base = dict(_DEFAULTS.get(kind) or {})

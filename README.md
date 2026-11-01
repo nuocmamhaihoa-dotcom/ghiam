@@ -46,6 +46,8 @@ Windows (đã có venv của agent):
 
 **Dãy số:** mỗi mã gồm **5 ký tự cố định** đứng trước + **5 số** tăng dần. Ví dụ tiền tố `SPXAB`, bắt đầu `00001`, kết thúc `00100` → máy gõ `SPXAB00001` rồi Enter, sau đó `SPXAB00002` … đến `SPXAB00100`. Sau Enter máy so sánh ảnh màn hình; đổi ≥ ngưỡng (mặc định 80%) thì lưu mã vừa gõ và bấm 4 vị trí đã ghi, rồi tiếp tục tăng số. Đổi 5 ký tự cố định bất cứ lúc nào. F9 lưu mã khi bạn thấy đổi.
 
+**Hướng 2** (độc lập, không đụng 4 nút / 80% của hướng 1): cùng 5 ký tự + 5 số. **Bắt đầu 2** chia dãy thành 4 làn không trùng — mỗi nhịp gõ 4 mã rồi Enter đồng loạt, nhịp sau cả 4 tiến tiếp. Ví dụ `00001`–`00010` → nhịp 1: `…00001 …00002 …00003 …00004`, nhịp 2: `…00005 …00006 …00007 …00008`. F8 dừng cả hai hướng.
+
 ## Cài đặt trên PC (dùng tài nguyên máy local)
 
 - Linux: [`docs/CAI_DAT_PC.md`](docs/CAI_DAT_PC.md)
