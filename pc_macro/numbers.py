@@ -121,12 +121,16 @@ class NumberQueue:
         step: int = 1,
         bump: bool = True,
         span: int | None = None,
+        flagged: list[str] | None = None,
+        last_used: str = "",
     ) -> None:
         self.items = [item for item in (items or []) if item][:_MAX_ITEMS]
         self.index = index if self.items and 0 <= index < len(self.items) else 0
         self.step = step
         self.bump = bump
         self.span = span
+        self.flagged = _clean_numbers(flagged)
+        self.last_used = "".join(ch for ch in last_used if ch.isdigit())[:_MAX_DIGITS]
 
     @classmethod
     def from_dict(cls, raw: Any) -> NumberQueue:
@@ -155,6 +159,8 @@ class NumberQueue:
             step=step,
             bump=bool(data.get("bump", True)),
             span=span_index,
+            flagged=data.get("flagged") or [],
+            last_used=str(data.get("last_used") or ""),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -163,6 +169,8 @@ class NumberQueue:
             "index": self.index,
             "step": self.step,
             "bump": self.bump,
+            "flagged": list(self.flagged),
+            "last_used": self.last_used,
         }
         if self.span is not None:
             payload["span"] = self.span
@@ -184,10 +192,33 @@ class NumberQueue:
             self.items = [seed]
             self.index = 0
         value = self.items[self.index]
+        self.last_used = value
         if self.bump:
             self.items[self.index] = bump_number(value, self.step)
         self.index = (self.index + 1) % len(self.items)
         return value
+
+    def flag(self, value: str | None = None) -> str | None:
+        """Keep the number that was on screen when the layout changed."""
+        chosen = "".join(ch for ch in str(value or self.last_used or self.peek()) if ch.isdigit())[:_MAX_DIGITS]
+        if not chosen:
+            return None
+        if chosen not in self.flagged:
+            self.flagged.append(chosen)
+            if len(self.flagged) > _MAX_ITEMS:
+                self.flagged = self.flagged[-_MAX_ITEMS:]
+        return chosen
+
+
+def _clean_numbers(raw: Any) -> list[str]:
+    items: list[str] = []
+    for item in raw or []:
+        digits = "".join(ch for ch in str(item) if ch.isdigit())[:_MAX_DIGITS]
+        if digits and digits not in items:
+            items.append(digits)
+        if len(items) >= _MAX_ITEMS:
+            break
+    return items
 
 
 def _digit_event(event: dict[str, Any]) -> bool:

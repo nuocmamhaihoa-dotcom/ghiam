@@ -135,6 +135,14 @@ def compile_script(steps: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], l
     return cleaned, steps_to_events(cleaned)
 
 
+def number_enter_steps(sample: str = "1") -> list[dict[str, Any]]:
+    """Default job: type one number into the focused field, then Enter."""
+    digits = "".join(ch for ch in sample if ch.isdigit()) or "1"
+    typed = new_step("number", value=digits)
+    enter = new_step("key", key="enter", wait=80)
+    return [step for step in (typed, enter) if step]
+
+
 def new_step(kind: str, **fields: Any) -> dict[str, Any] | None:
     """Build one valid step, filling defaults so the editor can insert a blank row."""
     base = dict(_DEFAULTS.get(kind) or {})

@@ -20,6 +20,7 @@ from pc_macro.script import (
     merge_recording,
     move_step,
     new_step,
+    number_enter_steps,
     replace_step,
     script_captions,
     steps_to_events,
@@ -156,6 +157,12 @@ class NumberListTests(unittest.TestCase):
         self.assertEqual(queue.take("1001"), "1001")
         self.assertEqual(queue.items, ["1002"])
         self.assertEqual(queue.take("1001"), "1002")
+        self.assertEqual(queue.last_used, "1002")
+        self.assertEqual(queue.flag("1042"), "1042")
+        self.assertEqual(queue.flagged, ["1042"])
+        again = NumberQueue.from_dict(queue.to_dict())
+        self.assertEqual(again.flagged, ["1042"])
+        self.assertEqual(again.last_used, "1002")
 
     def test_player_types_next_number_each_loop(self) -> None:
         events = sanitize_events(
@@ -182,6 +189,14 @@ class NumberListTests(unittest.TestCase):
 
 
 class ScriptStepTests(unittest.TestCase):
+    def test_number_then_enter_is_the_default_job(self) -> None:
+        steps, events = compile_script(number_enter_steps("1001"))
+        self.assertEqual([step["kind"] for step in steps], ["number", "key"])
+        self.assertEqual(steps[0]["value"], "1001")
+        self.assertEqual(steps[1]["key"], "enter")
+        keys = [event["key"] for event in events if event.get("action") == "down"]
+        self.assertEqual(keys, ["1", "0", "0", "1", "enter"])
+
     def test_collapses_and_compiles_back(self) -> None:
         events = sanitize_events(
             [
