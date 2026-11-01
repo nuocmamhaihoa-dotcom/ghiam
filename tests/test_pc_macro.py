@@ -50,9 +50,11 @@ from pc_macro.screen import (
     make_grid,
     overlay_banner,
     play_named_clicks,
+    recover_after_enter,
     sanitize_clicks,
     scale_clicks,
     should_recover,
+    start_both_scripts_status,
     upsert_slot,
 )
 from pc_macro.session import Player, Recorder
@@ -406,6 +408,24 @@ class PrefixRangeTests(unittest.TestCase):
         self.assertIn("click:11", sent)
         self.assertIn("click:77", sent)
         self.assertLess(sent.index("key:enter"), sent.index("click:11"))
+        same = make_grid((10, 10, 10))
+        flipped = make_grid((10, 10, 10), flip=int(0.85 * 48 * 27))
+        four = [{"x": 1, "y": 2}, {"x": 3, "y": 4}, {"x": 5, "y": 6}, {"x": 7, "y": 8}]
+        hit, percent, clicks = recover_after_enter(same, flipped, 80, four)
+        self.assertTrue(hit)
+        self.assertGreaterEqual(percent, 80)
+        self.assertEqual(len(clicks), 4)
+        miss, _percent, none = recover_after_enter(same, same, 80, four)
+        self.assertFalse(miss)
+        self.assertEqual(none, [])
+        forced, _percent, clicks = recover_after_enter(same, same, 80, four, forced=True)
+        self.assertTrue(forced)
+        self.assertEqual(len(clicks), 4)
+        changed, _percent, empty = recover_after_enter(same, flipped, 80, [{"x": 1, "y": 2}])
+        self.assertTrue(changed)
+        self.assertEqual(empty, [])
+        self.assertIn("cả hai kịch bản", start_both_scripts_status(four, 80))
+        self.assertIn("Chưa đủ 4 nút", start_both_scripts_status([], 80))
 
     def test_paint_centroid_and_upsert_keep_step_order(self) -> None:
         image = Image.new("RGB", (100, 80), (12, 12, 12))

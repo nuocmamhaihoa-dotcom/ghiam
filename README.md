@@ -22,7 +22,7 @@ Chi tiết vận hành 2 PC: [`deploy/PA1_RUNBOOK.md`](deploy/PA1_RUNBOOK.md).
 
 ## Ghi nhớ phím và chuột trên máy, rồi làm lại
 
-Phần mềm nhỏ **chạy trên máy tính của bạn**: nhập **5 ký tự cố định** (đổi được), **số bắt đầu** và **số kết thúc** của 5 số phía sau, rồi chỉ 4 nút trái nếu sau Enter màn hình có thể đổi. Từng bước: nhập **tên vị trí**, bấm **Bôi màu** (chụp màn hoặc thêm ảnh, tô hồng chỗ cần ấn) hoặc **Chọn vị trí** trên màn hình, rồi **Lưu vị trí**. Máy tìm tâm vùng bôi màu và bấm trái đúng chỗ đó, nhớ theo **tỷ lệ màn hình**. Nếu máy không nhận lần bấm, phần mềm bấm lại đúng vị trí có tên đó. **Bắt đầu**: máy gõ mã (ví dụ `SPXAB00001`), Enter, đo % đổi màn. Đủ ngưỡng (mặc định 80%): lưu mã vừa gõ vào danh sách, bấm 4 nút trái đã chỉ, rồi gõ số tiếp. F9 cũng lưu số vừa Enter. F8 dừng. VPS `http://VPS:8088/` hiện cùng 4 thẻ; Gõ/Enter/bấm thật trên máy Windows.
+Phần mềm nhỏ **chạy trên máy tính của bạn**: nhập **5 ký tự cố định** (đổi được), **số bắt đầu** và **số kết thúc** của 5 số phía sau, rồi chỉ 4 nút trái nếu sau Enter màn hình có thể đổi. Từng bước: nhập **tên vị trí**, bấm **Bôi màu** (chụp màn hoặc thêm ảnh, tô hồng chỗ cần ấn) hoặc **Chọn vị trí** trên màn hình, rồi **Lưu vị trí**. Máy tìm tâm vùng bôi màu và bấm trái đúng chỗ đó, nhớ theo **tỷ lệ màn hình**. Nếu máy không nhận lần bấm, phần mềm bấm lại đúng vị trí có tên đó. **Bắt đầu** gồm cả hai kịch bản: máy gõ mã (ví dụ `SPXAB00001`), Enter, đo % đổi màn. Đủ ngưỡng (mặc định 80%): tự bấm 4 nút trái đã chỉ, lưu mã vừa gõ, rồi gõ số tiếp. F9 cũng lưu số vừa Enter. F8 dừng. VPS `http://VPS:8088/` hiện cùng 4 thẻ; Gõ/Enter/bấm thật trên máy Windows.
 
 ```bash
 pip install pynput          # hoặc: pip install -e ".[macro]"

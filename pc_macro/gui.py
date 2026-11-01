@@ -23,9 +23,10 @@ from pc_macro.screen import (
     normalize_click_name,
     normalize_threshold,
     play_named_clicks,
+    recover_after_enter,
     sanitize_clicks,
     scale_clicks,
-    should_recover,
+    start_both_scripts_status,
 )
 from pc_macro.script import compile_script, number_enter_steps
 from pc_macro.session import Player, Recorder, ignore_window
@@ -47,7 +48,9 @@ class App:
         self.root.geometry("430x1080")
         self.root.minsize(400, 900)
         self.root.attributes("-topmost", True)
-        self.status = tk.StringVar(value="Nhập 5 ký tự cố định, số bắt đầu / kết thúc, rồi ghi 4 nút nếu cần.")
+        self.status = tk.StringVar(
+            value="Bắt đầu gồm cả hai kịch bản: gõ mã + Enter; màn đổi ≥80% thì tự bấm 4 nút trái."
+        )
         self.current_label = tk.StringVar(value="Sẽ gõ: —")
         self.recover_label = tk.StringVar(value="4 nút: chưa ghi")
         self.prefix = tk.StringVar(value="")
@@ -156,7 +159,10 @@ class App:
         ttk.Label(self.root, text="Số lúc giao diện đổi ≥ ngưỡng — F9 cũng lưu số vừa Enter.").pack(anchor="w", padx=12, pady=(8, 2))
         self.flag_box = tk.Listbox(self.root, height=4, font=("Segoe UI", 12))
         self.flag_box.pack(fill="both", expand=True, padx=12, pady=4)
-        ttk.Label(self.root, text="F8 dừng. Từng bước: Bôi màu trên ảnh hoặc Chọn vị trí trên màn, rồi Lưu.").pack(anchor="w", padx=12, pady=(0, 8))
+        ttk.Label(
+            self.root,
+            text="Bắt đầu = gõ Enter + nếu màn đổi ≥80% tự bấm 4 nút. F8 dừng. Bôi màu / Chọn vị trí từng bước.",
+        ).pack(anchor="w", padx=12, pady=(0, 8))
 
     def start_record(self) -> None:
         if self.recorder.on or self._playing() or self._record_recover:
@@ -280,7 +286,7 @@ class App:
             self.status.set("Chờ không được âm.")
             return
         self.player = Player(self.desktop.send, time.sleep)
-        self.status.set("Chuẩn bị… chuyển sang ô cần nhập.")
+        self.status.set(start_both_scripts_status(self.queue.recover_clicks, self.queue.change_threshold))
         self._play_thread = threading.Thread(target=self._run_play, args=(delay,), daemon=True)
         self._play_thread.start()
 
@@ -379,13 +385,18 @@ class App:
             time.sleep(0.5)
             if self.player is None or self.player.cancelled:
                 return []
-            if self._force_recover:
-                return self._consume_recover("F9")
-            changed, percent = should_recover(self._before_grid, capture_grid(), self.queue.change_threshold)
+            forced = self._force_recover
+            changed, percent, _clicks = recover_after_enter(
+                self._before_grid,
+                capture_grid(),
+                self.queue.change_threshold,
+                self.queue.recover_clicks,
+                forced=forced,
+            )
             if not changed:
-                self._set_status(f"Đã Enter {self.queue.last_used}. Đổi màn {percent:.0f}% — tiếp tục.")
+                self._set_status(f"Đã Enter {self.queue.last_used}. Đổi màn {percent:.0f}% — tiếp tục gõ số.")
                 return []
-            return self._consume_recover(f"{percent:.0f}%")
+            return self._consume_recover("F9" if forced else f"{percent:.0f}%")
 
         result = self.player.play([], times=0, prepare=prepare, after=after)
         self.root.after(0, self._refresh_number_view)

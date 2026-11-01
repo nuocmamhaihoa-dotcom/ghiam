@@ -381,6 +381,33 @@ def should_recover(before: Grid | None, after: Grid | None, threshold: int) -> t
     return percent >= normalize_threshold(threshold), percent
 
 
+def recover_after_enter(
+    before: Grid | None,
+    after: Grid | None,
+    threshold: int,
+    clicks: Any,
+    *,
+    forced: bool = False,
+) -> tuple[bool, float, list[dict[str, Any]]]:
+    """Start's second script: after Enter, run the four left-clicks if the screen changed enough."""
+    percent = change_percent(before, after)
+    changed = bool(forced) or percent >= normalize_threshold(threshold)
+    if not changed:
+        return False, percent, []
+    ready = sanitize_clicks(clicks)
+    if len(ready) < RECOVER_CLICKS:
+        return True, percent, []
+    return True, percent, ready
+
+
+def start_both_scripts_status(clicks: Any, threshold: int = DEFAULT_THRESHOLD) -> str:
+    """What Start will do: type+Enter, and auto 4 clicks when the screen flips."""
+    bar = normalize_threshold(threshold)
+    if len(sanitize_clicks(clicks)) >= RECOVER_CLICKS:
+        return f"Bắt đầu cả hai kịch bản: gõ mã + Enter; màn đổi ≥{bar}% thì tự bấm 4 nút trái."
+    return f"Bắt đầu gõ mã + Enter. Chưa đủ 4 nút — khi màn đổi ≥{bar}% sẽ chưa bấm được."
+
+
 def capture_patch(x: int, y: int, size: int = PATCH_SIZE) -> Grid | None:
     """Small crop around a click, used to see whether the press landed."""
     left = max(0, int(x) - size // 2)

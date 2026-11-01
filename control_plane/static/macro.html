@@ -182,7 +182,7 @@
 <main translate="no">
   <p id="translateWarn" hidden></p>
   <h1><span class="w">Gõ</span><span class="w">số</span><span class="w">rồi</span><span class="w">Enter</span></h1>
-  <p class="status" id="status"><span class="w">Nhập</span><span class="w">5</span><span class="w">ký</span><span class="w">tự</span><span class="w">cố</span><span class="w">định,</span><span class="w">số</span><span class="w">bắt</span><span class="w">đầu</span><span class="w">và</span><span class="w">số</span><span class="w">kết</span><span class="w">thúc.</span><span class="w">Bắt</span><span class="w">đầu:</span><span class="w">gõ</span><span class="w">mã,</span><span class="w">Enter,</span><span class="w">cộng</span><span class="w">1.</span></p>
+  <p class="status" id="status">Bắt&nbsp;đầu&nbsp;gồm&nbsp;cả&nbsp;hai&nbsp;kịch&nbsp;bản:&nbsp;gõ&nbsp;mã&nbsp;rồi&nbsp;Enter;&nbsp;nếu&nbsp;màn&nbsp;đổi&nbsp;≥&nbsp;80%&nbsp;tự&nbsp;bấm&nbsp;4&nbsp;nút&nbsp;trái.</p>
 
   <section class="card">
     <label for="prefix"><span class="w">5</span><span class="w">ký</span><span class="w">tự</span><span class="w">cố</span><span class="w">định</span></label>
@@ -215,6 +215,7 @@
         <input id="threshold" type="number" min="1" max="100" value="80" />
       </div>
     </div>
+    <p class="hint">Bắt&nbsp;đầu&nbsp;gồm&nbsp;cả&nbsp;hai&nbsp;kịch&nbsp;bản.&nbsp;Sau&nbsp;Enter,&nbsp;nếu&nbsp;màn&nbsp;đổi&nbsp;≥&nbsp;80%&nbsp;tự&nbsp;bấm&nbsp;4&nbsp;nút&nbsp;trái.</p>
     <div class="row">
       <button type="button" class="go" id="btnStart">Bắt&nbsp;đầu</button>
       <button type="button" id="btnStop">Dừng</button>
@@ -250,8 +251,8 @@
   <section class="card">
     <p class="hint"><span class="w">1.</span><span class="w">Nhập</span><span class="w">5</span><span class="w">ký</span><span class="w">tự</span><span class="w">cố</span><span class="w">định.</span></p>
     <p class="hint"><span class="w">2.</span><span class="w">Nhập</span><span class="w">số</span><span class="w">bắt</span><span class="w">đầu</span><span class="w">và</span><span class="w">số</span><span class="w">kết</span><span class="w">thúc</span><span class="w">của</span><span class="w">5</span><span class="w">số</span><span class="w">sau.</span></p>
-    <p class="hint"><span class="w">3.</span><span class="w">Bắt</span><span class="w">đầu:</span><span class="w">gõ</span><span class="w">mã,</span><span class="w">Enter,</span><span class="w">cộng</span><span class="w">1,</span><span class="w">lặp</span><span class="w">đến</span><span class="w">số</span><span class="w">kết</span><span class="w">thúc.</span></p>
-    <p class="hint"><span class="w">4.</span><span class="w">Sau</span><span class="w">Enter,</span><span class="w">PC</span><span class="w">đo</span><span class="w">%</span><span class="w">đổi</span><span class="w">màn.</span><span class="w">Đủ</span><span class="w">ngưỡng:</span><span class="w">lưu</span><span class="w">số</span><span class="w">vừa</span><span class="w">gõ,</span><span class="w">bấm</span><span class="w">4</span><span class="w">nút,</span><span class="w">rồi</span><span class="w">gõ</span><span class="w">số</span><span class="w">tiếp.</span></p>
+    <p class="hint">3.&nbsp;Bắt&nbsp;đầu&nbsp;gồm&nbsp;cả&nbsp;hai&nbsp;kịch&nbsp;bản:&nbsp;gõ&nbsp;mã,&nbsp;Enter,&nbsp;cộng&nbsp;1.</p>
+    <p class="hint">4.&nbsp;Sau&nbsp;Enter,&nbsp;nếu&nbsp;màn&nbsp;đổi&nbsp;≥&nbsp;80%&nbsp;tự&nbsp;bấm&nbsp;4&nbsp;nút&nbsp;trái,&nbsp;lưu&nbsp;số,&nbsp;rồi&nbsp;tăng&nbsp;số&nbsp;tiếp.</p>
     <div class="row">
       <button type="button" id="btnSave"><span class="w">Lưu</span></button>
       <a class="btn" href="/tai/pc-macro.zip"><span class="w">Tải</span><span class="w">phần</span><span class="w">mềm</span><span class="w">PC</span></a>
@@ -414,7 +415,12 @@
     if (exhausted) { setStatus("Đã hết dãy. Đổi số bắt đầu / kết thúc để chạy lại.", "err"); return; }
     playing = true;
     var delay = Math.max(0, parseFloat($("delay").value || "0") || 0);
-    setStatus("Bắt đầu sau " + delay + " giây. Trên PC hãy bấm vào dòng cố định.");
+    var bar = threshold();
+    if (filledCount() >= 4) {
+      setStatus("Bắt đầu cả hai kịch bản: gõ mã + Enter; màn đổi ≥ " + bar + "% thì tự bấm 4 nút trái.");
+    } else {
+      setStatus("Bắt đầu gõ mã + Enter. Chưa đủ 4 nút — khi màn đổi ≥ " + bar + "% sẽ chưa bấm được.");
+    }
     $("line").textContent = "";
     window.setTimeout(function () {
       if (!playing) return;
@@ -613,20 +619,23 @@
   }
   function afterEnter(value, done) {
     if (!playing) { done(); return; }
-    if (!forceRecover) {
-      setStatus("Đã Enter " + value + ". Đổi màn dưới ngưỡng — tiếp tục.");
+    var forced = forceRecover;
+    forceRecover = false;
+    var ready = filledCount() >= 4;
+    var changed = forced || ready;
+    if (!changed) {
+      setStatus("Đã Enter " + value + ". Đổi màn dưới " + threshold() + "% — tiếp tục gõ số.");
       done();
       return;
     }
-    forceRecover = false;
     addFlag(value);
     persist().catch(function () {});
-    if (filledCount() < 4) {
-      setStatus("Đã lưu " + value + ". Chưa đủ 4 nút — tiếp tục gõ số.", "ok");
+    if (!ready) {
+      setStatus("Đã lưu " + value + " vì giao diện đổi. Chưa đủ 4 nút — tiếp tục gõ số.", "ok");
       done();
       return;
     }
-    setStatus("Đã lưu " + value + ". Đang bấm 4 nút; nếu chưa nhận sẽ bấm lại đúng tên.", "ok");
+    setStatus("Đã Enter " + value + ". Màn đổi ≥ " + threshold() + "% — tự bấm 4 nút trái.", "ok");
     flashDots(0, done, true);
   }
   function flashDots(index, done, retry) {

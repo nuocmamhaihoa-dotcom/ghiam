@@ -11,7 +11,7 @@ from pc_macro.desktop import Desktop, available, install_hint
 from pc_macro.events import default_title
 from pc_macro.hub import HubError, describe, pull, push
 from pc_macro.numbers import NumberQueue, apply_turn, digit_spans
-from pc_macro.screen import RECOVER_CLICKS, capture_grid, current_screen_size, play_named_clicks, scale_clicks, should_recover
+from pc_macro.screen import RECOVER_CLICKS, capture_grid, current_screen_size, play_named_clicks, recover_after_enter, scale_clicks
 from pc_macro.script import compile_script, events_to_steps, number_enter_steps, script_captions, steps_to_events
 from pc_macro.session import Player
 from pc_macro.store import MacroStore
@@ -108,16 +108,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not queue.range_mode or not queue.last_used:
             return []
         time.sleep(0.5)
-        changed, percent = should_recover(before_grid[0], capture_grid(), queue.change_threshold)
+        changed, percent, clicks = recover_after_enter(
+            before_grid[0],
+            capture_grid(),
+            queue.change_threshold,
+            queue.recover_clicks,
+        )
         if not changed:
             return []
         queue.flag(queue.last_used)
         print(f"Đổi màn {percent:.0f}% — lưu {queue.last_used}")
-        if len(queue.recover_clicks) < RECOVER_CLICKS:
+        if len(clicks) < RECOVER_CLICKS:
             return []
         sw, sh = current_screen_size()
-        clicks = scale_clicks(queue.recover_clicks, sw, sh) if sw and sh else list(queue.recover_clicks)
-        play_named_clicks(clicks, desktop.send, time.sleep)
+        mapped = scale_clicks(clicks, sw, sh) if sw and sh else list(clicks)
+        play_named_clicks(mapped, desktop.send, time.sleep)
         return []
 
     print(f"Đang làm lại «{item['name']}»…")

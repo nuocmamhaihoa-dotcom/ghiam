@@ -137,7 +137,7 @@ VPS chỉ giữ kịch bản. Ghi phím/chuột và bấm Làm lại phải làm
 3. Cửa sổ hiện ra. Nhập 5 ký tự cố định, số bắt đầu và số kết thúc (5 số).
    Từng bước: Bôi màu trên ảnh (hoặc Chụp màn) chỗ cần bấm, hoặc Chọn vị trí trên màn.
    Máy tìm tâm vùng tô rồi bấm trái đúng chỗ đó. Nhớ tỷ lệ màn hình. Chưa nhận thì bấm lại.
-   Bắt đầu: máy gõ mã rồi Enter; đổi ≥ 80% thì lưu số vừa gõ, bấm 4 nút, rồi tăng số tiếp.
+   Bắt đầu gồm cả hai kịch bản: gõ mã rồi Enter; màn đổi ≥ 80% thì tự bấm 4 nút trái, lưu số, rồi tăng số tiếp.
 
 Đồng bộ với VPS (sau khi đặt địa chỉ):
   python -m pc_macro pull
