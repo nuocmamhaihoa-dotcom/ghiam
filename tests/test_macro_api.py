@@ -61,6 +61,7 @@ class MacroHubPageTests(unittest.TestCase):
         self.assertIn('id="threshold"', home.text)
         self.assertIn('id="btnRecordRecover"', home.text)
         self.assertIn('id="btnSaveRecover"', home.text)
+        self.assertIn("tên&nbsp;từng&nbsp;vị&nbsp;trí", home.text)
         self.assertIn('id="marks"', home.text)
         self.assertIn('id="orderStrip"', home.text)
         self.assertIn("1&nbsp;→&nbsp;2&nbsp;→&nbsp;3&nbsp;→&nbsp;4", home.text)

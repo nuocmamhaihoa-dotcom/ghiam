@@ -7,6 +7,8 @@ from typing import Any
 
 from PIL import Image, ImageGrab
 
+from pc_macro.script import compile_script
+
 try:
     import ctypes
 except ImportError:  # pragma: no cover
@@ -17,6 +19,11 @@ GRID_H = 27
 CELL_DELTA = 28
 RECOVER_CLICKS = 4
 DEFAULT_THRESHOLD = 80
+CLICK_RETRIES = 2
+CLICK_LAND_PERCENT = 3
+PATCH_SIZE = 64
+PATCH_GRID = 12
+NAME_MAX = 40
 _MAX_COORD = 100_000
 
 Grid = tuple[tuple[int, int, int], ...]
@@ -53,9 +60,10 @@ def click_order_cards(clicks: Any) -> list[dict[str, str]]:
             cards.append(
                 {
                     "step": str(index + 1),
-                    "title": f"Bước {index + 1}",
+                    "title": click_name(item, index),
                     "detail": _click_detail(item),
                     "empty": "",
+                    "name": normalize_click_name(item.get("name")),
                 }
             )
         else:
@@ -65,14 +73,40 @@ def click_order_cards(clicks: Any) -> list[dict[str, str]]:
                     "title": f"Bước {index + 1}",
                     "detail": "chưa ghi",
                     "empty": "1",
+                    "name": "",
                 }
             )
     return cards
 
 
-def append_screen_click(clicks: Any, x: Any, y: Any, sw: Any = 0, sh: Any = 0) -> list[dict[str, Any]]:
+def normalize_click_name(raw: Any) -> str:
+    """Short label the user types for one recover click."""
+    return " ".join(str(raw or "").split())[:NAME_MAX]
+
+
+def click_name(click: Any, index: int = 0) -> str:
+    name = normalize_click_name(click.get("name") if isinstance(click, dict) else "")
+    return name or f"Bước {index + 1}"
+
+
+def apply_click_names(clicks: Any, names: Any) -> list[dict[str, Any]]:
+    """Write the four typed names onto the saved points."""
+    clean = sanitize_clicks(clicks)
+    labels = list(names or [])
+    for index, click in enumerate(clean):
+        if index >= len(labels):
+            break
+        name = normalize_click_name(labels[index])
+        if name:
+            click["name"] = name
+        else:
+            click.pop("name", None)
+    return clean
+
+
+def append_screen_click(clicks: Any, x: Any, y: Any, sw: Any = 0, sh: Any = 0, name: Any = "") -> list[dict[str, Any]]:
     """Remember the next left-click in order (max four), with the screen it was on."""
-    return sanitize_clicks([*sanitize_clicks(clicks), {"x": x, "y": y, "sw": sw, "sh": sh}])
+    return sanitize_clicks([*sanitize_clicks(clicks), {"x": x, "y": y, "sw": sw, "sh": sh, "name": name}])
 
 
 def overlay_banner(count: int, *, recording: bool, total: int = RECOVER_CLICKS, awaiting_save: bool = False) -> str:
@@ -120,7 +154,16 @@ def scale_clicks(clicks: Any, sw: int, sh: int) -> list[dict[str, Any]]:
         else:
             x = max(0, min(sw - 1, int(round(ratio[0] * sw))))
             y = max(0, min(sh - 1, int(round(ratio[1] * sh))))
-        out.append(_click_record(x, y, sw, sh, wait=int(item.get("wait") or 120)))
+        out.append(
+            _click_record(
+                x,
+                y,
+                sw,
+                sh,
+                wait=int(item.get("wait") or 120),
+                name=item.get("name"),
+            )
+        )
     return out
 
 
@@ -149,8 +192,11 @@ def _ratio(item: dict[str, Any]) -> tuple[float, float] | None:
     return None
 
 
-def _click_record(x: int, y: int, sw: int, sh: int, *, wait: int = 120) -> dict[str, Any]:
+def _click_record(x: int, y: int, sw: int, sh: int, *, wait: int = 120, name: Any = "") -> dict[str, Any]:
     record: dict[str, Any] = {"kind": "click", "x": x, "y": y, "button": "left", "wait": wait}
+    label = normalize_click_name(name)
+    if label:
+        record["name"] = label
     if sw > 0 and sh > 0:
         record["sw"] = sw
         record["sh"] = sh
@@ -183,7 +229,7 @@ def sanitize_clicks(raw: Any) -> list[dict[str, Any]]:
             wait = int(item.get("wait") or 120)
         except (TypeError, ValueError):
             wait = 120
-        record = _click_record(x, y, sw, sh, wait=max(0, min(2000, wait)))
+        record = _click_record(x, y, sw, sh, wait=max(0, min(2000, wait)), name=item.get("name"))
         ratio = _ratio(item)
         if ratio is not None and sw > 0 and sh > 0:
             record["rx"], record["ry"] = ratio
@@ -223,6 +269,103 @@ def should_recover(before: Grid | None, after: Grid | None, threshold: int) -> t
     """True when the screen changed at least `threshold` percent."""
     percent = change_percent(before, after)
     return percent >= normalize_threshold(threshold), percent
+
+
+def capture_patch(x: int, y: int, size: int = PATCH_SIZE) -> Grid | None:
+    """Small crop around a click, used to see whether the press landed."""
+    left = max(0, int(x) - size // 2)
+    top = max(0, int(y) - size // 2)
+    box = (left, top, left + size, top + size)
+    try:
+        image = ImageGrab.grab(bbox=box)
+    except Exception:
+        try:
+            full = ImageGrab.grab()
+        except Exception:
+            return None
+        image = full.crop((left, top, min(full.size[0], left + size), min(full.size[1], top + size)))
+    if image.size[0] < 2 or image.size[1] < 2:
+        return None
+    if image.mode != "RGB":
+        image = image.convert("RGB")
+    small = image.resize((PATCH_GRID, PATCH_GRID), Image.Resampling.BOX)
+    pixels = tuple((int(r), int(g), int(b)) for r, g, b in small.getdata())
+    if len(pixels) != PATCH_GRID * PATCH_GRID:
+        return None
+    return pixels
+
+
+def click_landed(before: Grid | None, after: Grid | None, threshold: int = CLICK_LAND_PERCENT) -> tuple[bool, float]:
+    """True when the patch around the click changed enough to count as received."""
+    if before is None or after is None:
+        return True, 0.0
+    percent = change_percent(before, after)
+    return percent >= max(1, threshold), percent
+
+
+def play_click_until_landed(
+    send: Any,
+    sleep: Any,
+    click: dict[str, Any],
+    *,
+    retries: int = CLICK_RETRIES,
+    index: int = 0,
+    cancelled: Any = None,
+    capture: Any = None,
+    compile_events: Any = None,
+) -> dict[str, Any]:
+    """Click a named point; if the computer did not take it, click that same name again."""
+    take = capture or capture_patch
+    to_events = compile_events or (lambda step: compile_script([step])[1])
+    name = click_name(click, index)
+    attempts = 0
+    limit = max(0, int(retries))
+    last_percent = 0.0
+    while attempts <= limit:
+        if cancelled and cancelled():
+            return {"landed": False, "attempts": attempts, "name": name, "percent": last_percent}
+        before = take(int(click["x"]), int(click["y"]))
+        for event in to_events(click):
+            if cancelled and cancelled():
+                return {"landed": False, "attempts": attempts, "name": name, "percent": last_percent}
+            send(event)
+        sleep(0.28)
+        after = take(int(click["x"]), int(click["y"]))
+        attempts += 1
+        landed, last_percent = click_landed(before, after)
+        if landed:
+            return {"landed": True, "attempts": attempts, "name": name, "percent": last_percent}
+    return {"landed": False, "attempts": attempts, "name": name, "percent": last_percent}
+
+
+def play_named_clicks(
+    clicks: Any,
+    send: Any,
+    sleep: Any,
+    *,
+    retries: int = CLICK_RETRIES,
+    cancelled: Any = None,
+    capture: Any = None,
+    compile_events: Any = None,
+) -> list[dict[str, Any]]:
+    """Play the four recover clicks, retrying any named point that did not land."""
+    results: list[dict[str, Any]] = []
+    for index, click in enumerate(sanitize_clicks(clicks)):
+        results.append(
+            play_click_until_landed(
+                send,
+                sleep,
+                click,
+                retries=retries,
+                index=index,
+                cancelled=cancelled,
+                capture=capture,
+                compile_events=compile_events,
+            )
+        )
+        if cancelled and cancelled():
+            break
+    return results
 
 
 def make_grid(fill: tuple[int, int, int], *, flip: int = 0, color: tuple[int, int, int] = (255, 0, 0)) -> Grid:

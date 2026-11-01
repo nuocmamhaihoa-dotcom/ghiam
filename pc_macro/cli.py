@@ -11,7 +11,7 @@ from pc_macro.desktop import Desktop, available, install_hint
 from pc_macro.events import default_title
 from pc_macro.hub import HubError, describe, pull, push
 from pc_macro.numbers import NumberQueue, apply_turn, digit_spans
-from pc_macro.screen import RECOVER_CLICKS, capture_grid, current_screen_size, scale_clicks, should_recover
+from pc_macro.screen import RECOVER_CLICKS, capture_grid, current_screen_size, play_named_clicks, scale_clicks, should_recover
 from pc_macro.script import compile_script, events_to_steps, number_enter_steps, script_captions, steps_to_events
 from pc_macro.session import Player
 from pc_macro.store import MacroStore
@@ -116,8 +116,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if len(queue.recover_clicks) < RECOVER_CLICKS:
             return []
         sw, sh = current_screen_size()
-        _script, extra = compile_script(scale_clicks(queue.recover_clicks, sw, sh) if sw and sh else list(queue.recover_clicks))
-        return extra
+        clicks = scale_clicks(queue.recover_clicks, sw, sh) if sw and sh else list(queue.recover_clicks)
+        play_named_clicks(clicks, desktop.send, time.sleep)
+        return []
 
     print(f"Đang làm lại «{item['name']}»…")
     result = player.play(events, times=args.repeat, prepare=prepare, after=after)

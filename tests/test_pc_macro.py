@@ -37,11 +37,14 @@ from pc_macro.script import (
 )
 from pc_macro.screen import (
     append_screen_click,
+    apply_click_names,
     change_percent,
+    click_landed,
     click_order_cards,
     click_order_labels,
     make_grid,
     overlay_banner,
+    play_named_clicks,
     sanitize_clicks,
     scale_clicks,
     should_recover,
@@ -323,10 +326,38 @@ class PrefixRangeTests(unittest.TestCase):
                 prefix="SPXAB",
                 start="00001",
                 end="00002",
-                recover_clicks=[{"x": 960, "y": 540, "sw": 1920, "sh": 1080}],
+                recover_clicks=[{"x": 960, "y": 540, "sw": 1920, "sh": 1080, "name": "Nút OK"}],
             ).to_dict()
         )
         self.assertAlmostEqual(again_ratio.recover_clicks[0]["rx"], 0.5)
+        self.assertEqual(again_ratio.recover_clicks[0]["name"], "Nút OK")
+        named = apply_click_names([{"x": 10, "y": 20}], ["Xác nhận"])
+        self.assertEqual(named[0]["name"], "Xác nhận")
+        same_patch = make_grid((10, 10, 10))
+        changed_patch = make_grid((10, 10, 10), flip=80)
+        self.assertFalse(click_landed(same_patch, same_patch)[0])
+        self.assertTrue(click_landed(same_patch, changed_patch)[0])
+        patches = [same_patch, same_patch, same_patch, changed_patch]
+        sent: list[str] = []
+
+        def capture(_x: int, _y: int):
+            return patches.pop(0)
+
+        def send(event):
+            if event.get("action") == "down":
+                sent.append(str(event.get("x")))
+
+        results = play_named_clicks(
+            [{"x": 11, "y": 22, "name": "Đóng"}],
+            send,
+            lambda _s: None,
+            capture=capture,
+            compile_events=lambda step: [{"kind": "click", "action": "down", "x": step["x"], "y": step["y"]}],
+        )
+        self.assertEqual(results[0]["name"], "Đóng")
+        self.assertEqual(results[0]["attempts"], 2)
+        self.assertTrue(results[0]["landed"])
+        self.assertEqual(sent, ["11", "11"])
         queue = NumberQueue(
             range_mode=True,
             prefix="SPXAB",

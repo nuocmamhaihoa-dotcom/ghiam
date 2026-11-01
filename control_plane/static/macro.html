@@ -92,12 +92,21 @@
     }
     .mark {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       border: 2px solid #0b6bcb;
       border-radius: 12px;
       padding: 10px 12px;
       background: #f3f8fd;
+    }
+    .mark input {
+      flex: 1;
+      min-width: 140px;
+      font: inherit;
+      padding: 8px;
+      border: 1px solid #c5ccd4;
+      border-radius: 8px;
     }
     .mark.empty { border-color: #c5ccd4; background: #f7f9fb; color: #5c6770; }
     .mark.next { border-color: #c2410c; background: #fff1e8; box-shadow: 0 0 0 3px #ffd166; }
@@ -179,7 +188,7 @@
 
   <section class="card">
     <label>4&nbsp;nút&nbsp;chuột&nbsp;trái</label>
-    <p class="hint">Trên&nbsp;máy&nbsp;tính:&nbsp;bấm&nbsp;<b>Ghi&nbsp;4&nbsp;nút</b>,&nbsp;bấm&nbsp;4&nbsp;chỗ&nbsp;trên&nbsp;màn&nbsp;hình&nbsp;thật,&nbsp;rồi&nbsp;bấm&nbsp;<b>Lưu&nbsp;4&nbsp;nút</b>.&nbsp;Đổi&nbsp;cỡ&nbsp;màn:&nbsp;máy&nbsp;tính&nbsp;tỷ&nbsp;lệ.</p>
+    <p class="hint">Trên&nbsp;máy&nbsp;tính:&nbsp;bấm&nbsp;<b>Ghi&nbsp;4&nbsp;nút</b>,&nbsp;nhập&nbsp;tên&nbsp;từng&nbsp;vị&nbsp;trí,&nbsp;rồi&nbsp;<b>Lưu</b>.&nbsp;Máy&nbsp;không&nbsp;nhận&nbsp;lần&nbsp;bấm&nbsp;thì&nbsp;bấm&nbsp;lại&nbsp;đúng&nbsp;tên&nbsp;đó.</p>
     <p class="order" id="orderStrip">1&nbsp;→&nbsp;2&nbsp;→&nbsp;3&nbsp;→&nbsp;4</p>
     <p class="hint coords" id="recoverLabel">Thứ&nbsp;tự:&nbsp;chưa&nbsp;ghi</p>
     <div class="marks" id="marks"></div>
@@ -384,8 +393,17 @@
       card.id = "mark" + index;
       var title = document.createElement("b");
       title.textContent = String(index + 1);
-      var step = document.createElement("em");
-      step.textContent = "Bước " + (index + 1);
+      var name = document.createElement("input");
+      name.type = "text";
+      name.maxLength = 40;
+      name.placeholder = "Tên vị trí bước " + (index + 1);
+      name.value = click && click.name ? click.name : "";
+      name.setAttribute("data-index", String(index));
+      name.oninput = function () {
+        var at = parseInt(this.getAttribute("data-index"), 10);
+        if (!recoverClicks[at]) return;
+        recoverClicks[at].name = this.value.replace(/\s+/g, " ").slice(0, 40);
+      };
       var detail = document.createElement("span");
       if (!click) {
         detail.innerHTML = "chưa&nbsp;ghi";
@@ -395,7 +413,7 @@
         detail.textContent = "trái " + click.x + " , " + click.y;
       }
       card.appendChild(title);
-      card.appendChild(step);
+      card.appendChild(name);
       card.appendChild(detail);
       box.appendChild(card);
     }
@@ -424,10 +442,10 @@
       done();
       return;
     }
-    setStatus("Đã lưu " + value + ". Đang bấm 4 nút rồi gõ số tiếp.", "ok");
-    flashDots(0, done);
+    setStatus("Đã lưu " + value + ". Đang bấm 4 nút; nếu chưa nhận sẽ bấm lại đúng tên.", "ok");
+    flashDots(0, done, true);
   }
-  function flashDots(index, done) {
+  function flashDots(index, done, retry) {
     if (!playing) { done(); return; }
     if (index >= recoverClicks.length) {
       renderRecover();
@@ -437,7 +455,19 @@
     renderRecover();
     var card = $("mark" + index);
     if (card) card.className = "mark on";
-    timer = window.setTimeout(function () { flashDots(index + 1, done); }, 220);
+    var label = recoverClicks[index] && recoverClicks[index].name;
+    if (label) setStatus("Đang bấm «" + label + "»" + (retry ? " — nếu chưa nhận sẽ bấm lại." : "."));
+    timer = window.setTimeout(function () {
+      if (retry && card) {
+        card.className = "mark next";
+        timer = window.setTimeout(function () {
+          if (card) card.className = "mark on";
+          flashDots(index + 1, done, retry);
+        }, 180);
+        return;
+      }
+      flashDots(index + 1, done, retry);
+    }, 220);
   }
   function flagNow() {
     var value = lastUsed || nextCode();
@@ -462,7 +492,7 @@
         if (item.numbers.step) $("step").value = item.numbers.step;
         if (item.numbers.change_threshold) $("threshold").value = item.numbers.change_threshold;
         recoverClicks = (item.numbers.recover_clicks || []).map(function (click) {
-          return { x: click.x, y: click.y, sw: click.sw, sh: click.sh, rx: click.rx, ry: click.ry };
+          return { x: click.x, y: click.y, sw: click.sw, sh: click.sh, rx: click.rx, ry: click.ry, name: click.name || "" };
         }).slice(0, 4);
         renderFlags(item.numbers.flagged || []);
         renderRecover();
@@ -500,10 +530,11 @@
     persist().catch(function () {});
     setStatus("Đã xóa 4 nút.");
   };
-  $("marks").onclick = function () {
+  $("marks").onclick = function (ev) {
+    if (ev.target && ev.target.tagName === "INPUT") return;
     if (!recordingRecover && recoverClicks.length >= 4) return;
     if (!recordingRecover) recordingRecover = true;
-    recoverClicks.push({ x: (recoverClicks.length + 1) * 100, y: 100 });
+    recoverClicks.push({ x: (recoverClicks.length + 1) * 100, y: 100, name: "" });
     if (recoverClicks.length >= 4) {
       recordingRecover = false;
       setStatus("Đã chọn 4 thẻ. Bấm Lưu 4 nút. Vị trí thật phải Ghi trên màn hình máy tính.", "ok");

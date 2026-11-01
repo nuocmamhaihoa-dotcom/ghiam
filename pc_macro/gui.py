@@ -15,10 +15,13 @@ from pc_macro.overlay import ClickOverlay, show_click_overlay
 from pc_macro.screen import (
     RECOVER_CLICKS,
     append_screen_click,
+    apply_click_names,
     capture_grid,
     click_order_cards,
     current_screen_size,
+    normalize_click_name,
     normalize_threshold,
+    play_named_clicks,
     sanitize_clicks,
     scale_clicks,
     should_recover,
@@ -40,8 +43,8 @@ class App:
         self.store = MacroStore()
         self.root = tk.Tk()
         self.root.title("Gõ số rồi Enter")
-        self.root.geometry("430x860")
-        self.root.minsize(400, 780)
+        self.root.geometry("430x940")
+        self.root.minsize(400, 820)
         self.root.attributes("-topmost", True)
         self.status = tk.StringVar(value="Nhập 5 ký tự cố định, số bắt đầu / kết thúc, rồi ghi 4 nút nếu cần.")
         self.current_label = tk.StringVar(value="Sẽ gõ: —")
@@ -120,22 +123,24 @@ class App:
         ttk.Button(extra, text="Lên VPS", command=self.push_hub).pack(side="left", padx=2)
         ttk.Button(extra, text="Lấy VPS", command=self.pull_hub).pack(side="left", padx=2)
 
-        ttk.Label(self.root, text="4 nút chuột trái — thứ tự 1 → 2 → 3 → 4").pack(anchor="w", padx=12, pady=(8, 2))
+        ttk.Label(self.root, text="4 nút chuột trái — nhập tên vị trí, máy bấm lại nếu chưa nhận").pack(anchor="w", padx=12, pady=(8, 2))
+        self._name_vars: list[tk.StringVar] = []
         self._mark_cards: list[tuple[tk.Frame, tk.Label, tk.Label]] = []
-        strip = tk.Frame(self.root)
-        strip.pack(fill="x", padx=10, pady=2)
+        self._loading_names = False
         for index in range(RECOVER_CLICKS):
-            card = tk.Frame(strip, bd=2, relief="solid", bg="#f3f8fd", highlightthickness=0)
-            card.pack(side="left", expand=True, fill="both", padx=3)
-            num = tk.Label(card, text=str(index + 1), font=("Segoe UI", 22, "bold"), fg="#0b6bcb", bg="#f3f8fd")
-            num.pack(pady=(6, 0))
-            title = tk.Label(card, text=f"Bước {index + 1}", font=("Segoe UI", 10, "bold"), bg="#f3f8fd")
-            title.pack()
-            detail = tk.Label(card, text="chưa ghi", font=("Segoe UI", 10), bg="#f3f8fd", wraplength=88)
-            detail.pack(pady=(0, 8))
+            card = tk.Frame(self.root, bd=1, relief="solid", bg="#f3f8fd")
+            card.pack(fill="x", padx=12, pady=3)
+            head = tk.Frame(card, bg="#f3f8fd")
+            head.pack(fill="x")
+            num = tk.Label(head, text=str(index + 1), font=("Segoe UI", 18, "bold"), fg="#0b6bcb", bg="#f3f8fd", width=2)
+            num.pack(side="left", padx=4)
+            name = tk.StringVar()
+            ttk.Entry(head, textvariable=name).pack(side="left", fill="x", expand=True, padx=4, pady=4)
+            detail = tk.Label(card, text="chưa ghi", font=("Segoe UI", 10), bg="#f3f8fd", anchor="w")
+            detail.pack(fill="x", padx=8, pady=(0, 6))
+            name.trace_add("write", self._on_click_name)
+            self._name_vars.append(name)
             self._mark_cards.append((card, num, detail))
-            if index < RECOVER_CLICKS - 1:
-                tk.Label(strip, text="→", font=("Segoe UI", 16, "bold"), fg="#0b6bcb").pack(side="left")
         marks = ttk.Frame(self.root)
         marks.pack(fill="x", **pad)
         ttk.Button(marks, text="Lưu 4 nút", command=self.save_recover).pack(side="left", padx=2)
@@ -145,7 +150,7 @@ class App:
         ttk.Label(self.root, text="Số lúc giao diện đổi ≥ ngưỡng — F9 cũng lưu số vừa Enter.").pack(anchor="w", padx=12, pady=(8, 2))
         self.flag_box = tk.Listbox(self.root, height=4, font=("Segoe UI", 12))
         self.flag_box.pack(fill="both", expand=True, padx=12, pady=4)
-        ttk.Label(self.root, text="F8 dừng. Ghi 4 nút trên màn thật, rồi Lưu. Đổi cỡ màn: máy quy tỷ lệ.").pack(anchor="w", padx=12, pady=(0, 8))
+        ttk.Label(self.root, text="F8 dừng. Ghi 4 nút trên màn, đặt tên, Lưu. Chưa nhận thì bấm lại đúng tên.").pack(anchor="w", padx=12, pady=(0, 8))
 
     def start_record(self) -> None:
         if self.recorder.on or self._playing() or self._record_recover:
@@ -192,9 +197,9 @@ class App:
     def save_recover(self) -> None:
         if self._busy():
             return
-        clicks = sanitize_clicks(self.queue.recover_clicks)
+        clicks = self._named_clicks(self.queue.recover_clicks)
         if len(clicks) < RECOVER_CLICKS:
-            self.status.set("Chưa đủ 4 nút. Bấm Ghi 4 nút, chọn 4 chỗ trên màn, rồi Lưu.")
+            self.status.set("Chưa đủ 4 nút. Bấm Ghi 4 nút, chọn 4 chỗ trên màn, nhập tên, rồi Lưu.")
             return
         self.queue.recover_clicks = clicks
         self._persist(silent=True)
@@ -421,9 +426,9 @@ class App:
         self._record_recover = False
         self._close_overlay()
         if keep and len(self._recover_draft) >= RECOVER_CLICKS:
-            self.queue.recover_clicks = sanitize_clicks(self._recover_draft)
+            self.queue.recover_clicks = self._named_clicks(self._recover_draft)
             self._persist(silent=True)
-            self.status.set("Đã lưu 4 nút trái theo tỷ lệ màn hình. Hiện 4 nút trên màn để kiểm tra.")
+            self.status.set("Đã lưu 4 nút. Nhập tên từng vị trí — máy bấm lại nếu chưa nhận.")
         elif keep:
             self.status.set("Chưa đủ 4 nút. Bấm Ghi 4 nút rồi bấm 4 chỗ trên màn hình.")
         else:
@@ -441,25 +446,63 @@ class App:
         if len(self.queue.recover_clicks) < RECOVER_CLICKS:
             self._set_status(f"Đã lưu {value} ({reason}). Chưa đủ 4 nút — tiếp tục gõ số.")
             return []
-        self._set_status(f"Đã lưu {value} ({reason}). Đang bấm 4 nút rồi gõ số tiếp.")
-        return self._recover_events()
+        self._set_status(f"Đã lưu {value} ({reason}). Đang bấm 4 nút (bấm lại nếu chưa nhận).")
+        self._play_named_clicks()
+        return []
 
     def _screen_size(self) -> tuple[int, int]:
         return current_screen_size(fallback=(int(self.root.winfo_screenwidth()), int(self.root.winfo_screenheight())))
 
-    def _recover_events(self) -> list[dict[str, Any]]:
-        sw, sh = self._screen_size()
-        steps = scale_clicks(self.queue.recover_clicks, sw, sh)
-        if self.click:
-            scaled = scale_clicks([self.click], sw, sh)
-            if scaled:
-                steps.append(scaled[0])
-        _script, events = compile_script(steps)
-        return events
+    def _named_clicks(self, clicks: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+        raw = clicks if clicks is not None else self.queue.recover_clicks
+        typed = [normalize_click_name(item.get()) for item in self._name_vars]
+        if any(typed):
+            return apply_click_names(raw, typed)
+        return sanitize_clicks(raw)
 
-    def _refresh_recover(self) -> None:
+    def _play_named_clicks(self) -> None:
+        sw, sh = self._screen_size()
+        clicks = scale_clicks(self._named_clicks(), sw, sh)
+        if not clicks:
+            return
+
+        def cancelled() -> bool:
+            return self.player is None or self.player.cancelled
+
+        results = play_named_clicks(clicks, self.desktop.send, time.sleep, cancelled=cancelled)
+        if self.click and not cancelled():
+            extra = scale_clicks([self.click], sw, sh)
+            if extra:
+                play_named_clicks(extra, self.desktop.send, time.sleep, cancelled=cancelled, retries=0)
+        retried = [item for item in results if item["attempts"] > 1]
+        if retried:
+            names = ", ".join(item["name"] for item in retried)
+            self._set_status(f"Đã bấm lại: {names}.")
+
+    def _on_click_name(self, *_args: Any) -> None:
+        if self._loading_names:
+            return
+        cleaned = [normalize_click_name(item.get()) for item in self._name_vars]
+        changed = False
+        for index, value in enumerate(cleaned):
+            if value != self._name_vars[index].get():
+                self._name_vars[index].set(value)
+                changed = True
+        if changed:
+            return
+        if self.queue.recover_clicks:
+            self.queue.recover_clicks = self._named_clicks()
+
+    def _refresh_recover(self, *, load_names: bool = False) -> None:
         clicks = self._recover_draft if self._record_recover else self.queue.recover_clicks
         cards = click_order_cards(clicks)
+        if load_names:
+            self._loading_names = True
+            for index, var in enumerate(self._name_vars):
+                name = cards[index].get("name") or ""
+                if var.get() != name:
+                    var.set(name)
+            self._loading_names = False
         for index, (card, num, detail) in enumerate(self._mark_cards):
             item = cards[index]
             detail.configure(text=item["detail"])
@@ -467,16 +510,15 @@ class App:
             bg = "#f7f9fb" if empty else "#e8f3ff"
             fg = "#5c6770" if empty else "#0b6bcb"
             card.configure(bg=bg)
-            for child in card.winfo_children():
-                child.configure(bg=bg)
-            num.configure(fg=fg)
+            num.configure(fg=fg, bg=bg)
+            detail.configure(bg=bg)
         done = sum(1 for item in sanitize_clicks(clicks))
         if done >= RECOVER_CLICKS:
-            self.recover_label.set("Đã chọn 4 nút. Lưu để giữ. Đổi cỡ màn: máy bấm theo tỷ lệ.")
+            self.recover_label.set("Đã chọn 4 nút. Đặt tên từng vị trí. Chưa nhận lệnh thì máy bấm lại đúng tên.")
         elif done:
-            self.recover_label.set(f"Đã ghi {done}/4. Bấm Ghi 4 nút, chọn đủ 4 chỗ, rồi Lưu.")
+            self.recover_label.set(f"Đã ghi {done}/4. Bấm Ghi 4 nút, nhập tên, rồi Lưu.")
         else:
-            self.recover_label.set("Chưa ghi. Bấm Ghi 4 nút trên màn hình máy tính, rồi Lưu.")
+            self.recover_label.set("Chưa ghi. Bấm Ghi 4 nút trên màn, nhập tên vị trí, rồi Lưu.")
 
     def _on_fields(self, *_args: Any) -> None:
         cleaned = normalize_prefix(self.prefix.get())
@@ -512,7 +554,7 @@ class App:
             flagged=list(self.queue.flagged),
             last_used=self.queue.last_used,
             exhausted=exhausted,
-            recover_clicks=list(self.queue.recover_clicks),
+            recover_clicks=self._named_clicks(),
             change_threshold=normalize_threshold(self.threshold.get()),
         )
         if write_back:
@@ -535,7 +577,7 @@ class App:
         self._write_fields()
         self._refresh_current()
         self._refresh_flags()
-        self._refresh_recover()
+        self._refresh_recover(load_names=True)
 
     def _refresh_current(self) -> None:
         nxt = self.queue.peek()
@@ -572,6 +614,7 @@ class App:
 
     def _persist(self, *, silent: bool) -> None:
         self._sync_queue()
+        self.queue.recover_clicks = self._named_clicks()
         if not self.queue.prefix and not self.queue.flagged and not self.queue.last_used and not self.queue.recover_clicks:
             if not silent:
                 self.status.set("Nhập 5 ký tự cố định rồi lưu.")
