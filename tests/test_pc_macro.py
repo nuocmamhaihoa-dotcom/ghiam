@@ -43,6 +43,7 @@ from pc_macro.screen import (
     make_grid,
     overlay_banner,
     sanitize_clicks,
+    scale_clicks,
     should_recover,
 )
 from pc_macro.session import Player, Recorder
@@ -296,12 +297,36 @@ class PrefixRangeTests(unittest.TestCase):
         self.assertEqual(cards[0]["title"], "Bước 1")
         self.assertIn("10 , 20", cards[0]["detail"])
         self.assertEqual(cards[3]["detail"], "chưa ghi")
-        first = append_screen_click([], 11, 22)
-        second = append_screen_click(first, 33, 44)
+        first = append_screen_click([], 11, 22, 1920, 1080)
+        second = append_screen_click(first, 33, 44, 1920, 1080)
         self.assertEqual([item["x"] for item in second], [11, 33])
+        self.assertEqual(second[0]["sw"], 1920)
+        self.assertAlmostEqual(second[0]["rx"], 11 / 1920)
         self.assertEqual(overlay_banner(0, recording=True), "Bấm trái nút 1/4 trên màn hình. Esc hủy.")
         self.assertEqual(overlay_banner(3, recording=True), "Bấm trái nút 4/4 trên màn hình. Esc hủy.")
+        self.assertIn("Lưu", overlay_banner(4, recording=False, awaiting_save=True))
         self.assertIn("1 → 2 → 3 → 4", overlay_banner(4, recording=False))
+        scaled = scale_clicks(
+            [{"x": 960, "y": 540, "sw": 1920, "sh": 1080, "rx": 0.5, "ry": 0.5}],
+            1280,
+            720,
+        )
+        self.assertEqual(len(scaled), 1)
+        self.assertEqual(scaled[0]["x"], 640)
+        self.assertEqual(scaled[0]["y"], 360)
+        self.assertEqual(scaled[0]["sw"], 1280)
+        keep = scale_clicks([{"x": 11, "y": 22}], 1920, 1080)
+        self.assertEqual((keep[0]["x"], keep[0]["y"]), (11, 22))
+        again_ratio = NumberQueue.from_dict(
+            NumberQueue(
+                range_mode=True,
+                prefix="SPXAB",
+                start="00001",
+                end="00002",
+                recover_clicks=[{"x": 960, "y": 540, "sw": 1920, "sh": 1080}],
+            ).to_dict()
+        )
+        self.assertAlmostEqual(again_ratio.recover_clicks[0]["rx"], 0.5)
         queue = NumberQueue(
             range_mode=True,
             prefix="SPXAB",

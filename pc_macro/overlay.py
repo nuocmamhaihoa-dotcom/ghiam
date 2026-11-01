@@ -17,7 +17,7 @@ CancelFn = Callable[[], None]
 
 
 class ClickOverlay:
-    """Cover the screen, catch four left clicks, draw 1–4 at those points."""
+    """Cover the screen, catch four left clicks, then wait for Lưu."""
 
     def __init__(
         self,
@@ -31,46 +31,113 @@ class ClickOverlay:
         self._on_done = on_done
         self._on_cancel = on_cancel
         self._recording = recording
+        self._awaiting_save = False
+        self.screen_w = max(1, int(root.winfo_screenwidth()))
+        self.screen_h = max(1, int(root.winfo_screenheight()))
         self.clicks = sanitize_clicks(clicks or [])
         self.win = tk.Toplevel(root)
         self.win.overrideredirect(True)
         self.win.attributes("-topmost", True)
-        width = int(root.winfo_screenwidth())
-        height = int(root.winfo_screenheight())
-        self.win.geometry(f"{width}x{height}+0+0")
+        self.win.geometry(f"{self.screen_w}x{self.screen_h}+0+0")
         self.win.configure(bg=_BG)
         try:
             self.win.attributes("-alpha", 0.46 if recording else 0.36)
         except tk.TclError:
             pass
+        self.bar = tk.Frame(self.win, bg="#0b6bcb")
+        self.bar.pack(side="bottom", fill="x")
+        self.hint = tk.Label(self.bar, text="", fg=_TEXT, bg="#0b6bcb", font=("Segoe UI", 12, "bold"))
+        self.hint.pack(side="left", padx=12, pady=10)
+        self.btn_save = tk.Button(
+            self.bar,
+            text="Lưu 4 nút",
+            command=self._save,
+            font=("Segoe UI", 12, "bold"),
+            bg="#ffd166",
+            fg="#102030",
+            activebackground="#ffe08a",
+            relief="flat",
+            padx=16,
+            pady=8,
+        )
+        self.btn_redo = tk.Button(
+            self.bar,
+            text="Ghi lại",
+            command=self._redo,
+            font=("Segoe UI", 12, "bold"),
+            bg="#e8edf2",
+            fg="#17202a",
+            relief="flat",
+            padx=12,
+            pady=8,
+        )
+        self.btn_cancel = tk.Button(
+            self.bar,
+            text="Hủy",
+            command=self.cancel,
+            font=("Segoe UI", 12, "bold"),
+            bg="#c2410c",
+            fg=_TEXT,
+            relief="flat",
+            padx=12,
+            pady=8,
+        )
+        self.btn_cancel.pack(side="right", padx=8, pady=8)
+        self.btn_redo.pack(side="right", padx=4, pady=8)
+        self.btn_save.pack(side="right", padx=4, pady=8)
         self.canvas = tk.Canvas(self.win, bg=_BG, highlightthickness=0, cursor="crosshair")
         self.canvas.pack(fill="both", expand=True)
         self.canvas.bind("<Button-1>", self._on_click)
         self.win.bind("<Escape>", lambda _e: self.cancel())
         self.win.bind("<F8>", lambda _e: self.cancel())
+        self.win.bind("<Return>", lambda _e: self._save())
         try:
             self.win.grab_set()
         except tk.TclError:
             pass
         self.win.focus_force()
+        if recording and len(self.clicks) >= RECOVER_CLICKS:
+            self._recording = False
+            self._awaiting_save = True
+        self._sync_bar()
         self._redraw()
         if not recording:
+            self.btn_save.pack_forget()
+            self.btn_redo.pack_forget()
+            self.hint.configure(text="Xem 4 nút đã lưu. Bấm màn hoặc đợi để đóng.")
             self.win.after(4500, self.close)
 
     def _on_click(self, event: tk.Event) -> None:
         if not self._recording:
-            self.close()
+            if not self._awaiting_save:
+                self.close()
             return
         x = int(event.x_root)
         y = int(event.y_root)
         if x < 0 or y < 0:
             return
-        self.clicks = append_screen_click(self.clicks, x, y)
-        self._redraw()
+        self.clicks = append_screen_click(self.clicks, x, y, self.screen_w, self.screen_h)
         if len(self.clicks) >= RECOVER_CLICKS:
             self._recording = False
-            clicks = list(self.clicks)
-            self.win.after(450, lambda: self._finish(clicks))
+            self._awaiting_save = True
+        self._sync_bar()
+        self._redraw()
+
+    def _save(self) -> None:
+        if not self._awaiting_save or len(self.clicks) < RECOVER_CLICKS:
+            return
+        clicks = list(self.clicks)
+        self.close()
+        self._on_done(clicks)
+
+    def _redo(self) -> None:
+        if not self._recording and not self._awaiting_save:
+            return
+        self.clicks = []
+        self._recording = True
+        self._awaiting_save = False
+        self._sync_bar()
+        self._redraw()
 
     def _finish(self, clicks: list[dict[str, Any]]) -> None:
         self.close()
@@ -88,16 +155,31 @@ class ClickOverlay:
         if self.win.winfo_exists():
             self.win.destroy()
 
+    def _sync_bar(self) -> None:
+        if self._awaiting_save:
+            self.btn_save.configure(state="normal")
+            self.hint.configure(text="Đã chọn 4 nút. Bấm Lưu để giữ, hoặc Ghi lại.")
+            return
+        self.btn_save.configure(state="disabled")
+        if self._recording:
+            self.hint.configure(text=f"Bấm trái trên màn hình · nút {len(self.clicks) + 1}/{RECOVER_CLICKS}")
+        else:
+            self.hint.configure(text="")
+
     def _redraw(self) -> None:
         self.canvas.delete("all")
-        width = max(int(self.canvas.winfo_screenwidth()), 320)
-        banner = overlay_banner(len(self.clicks), recording=self._recording)
+        width = max(int(self.canvas.winfo_width() or self.screen_w), 320)
+        banner = overlay_banner(
+            len(self.clicks),
+            recording=self._recording,
+            awaiting_save=self._awaiting_save,
+        )
         self.canvas.create_rectangle(0, 0, width, 72, fill="#0b6bcb", outline="")
         self.canvas.create_text(20, 24, text=banner, fill=_TEXT, font=("Segoe UI", 16, "bold"), anchor="w")
         self.canvas.create_text(
             20,
             52,
-            text="Thứ tự bấm:  1  →  2  →  3  →  4",
+            text=f"Thứ tự bấm:  1  →  2  →  3  →  4     Màn {self.screen_w}×{self.screen_h}",
             fill="#ffd166",
             font=("Segoe UI", 13, "bold"),
             anchor="w",

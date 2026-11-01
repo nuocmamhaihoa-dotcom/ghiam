@@ -86,42 +86,37 @@
     }
     .marks {
       display: flex;
-      align-items: stretch;
-      gap: 4px;
+      flex-direction: column;
+      gap: 8px;
       margin: 8px 0;
     }
     .mark {
-      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 10px;
       border: 2px solid #0b6bcb;
       border-radius: 12px;
-      padding: 8px 4px;
-      text-align: center;
+      padding: 10px 12px;
       background: #f3f8fd;
-      min-width: 0;
     }
     .mark.empty { border-color: #c5ccd4; background: #f7f9fb; color: #5c6770; }
     .mark.next { border-color: #c2410c; background: #fff1e8; box-shadow: 0 0 0 3px #ffd166; }
     .mark.on { border-color: #c2410c; background: #fff1e8; }
     .mark b {
-      display: block;
       font-size: 1.7rem;
-      line-height: 1.1;
-      margin: 0 0 2px;
+      line-height: 1;
+      min-width: 1.2em;
     }
     .mark em {
-      display: block;
       font-style: normal;
       font-weight: 700;
-      font-size: 0.78rem;
-      margin: 0 0 4px;
+      white-space: nowrap;
     }
-    .mark span { display: block; font-family: ui-monospace, Consolas, monospace; font-size: 0.78rem; word-break: break-all; }
-    .arrow {
-      align-self: center;
-      font-weight: 800;
-      color: #0b6bcb;
-      font-size: 1.15rem;
-      padding: 0 1px;
+    .mark span {
+      margin-left: auto;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.95rem;
+      white-space: nowrap;
     }
     .coords { font-family: ui-monospace, Consolas, monospace; font-size: 0.95rem; }
     .flags { list-style: none; margin: 0; padding: 0; }
@@ -184,12 +179,13 @@
 
   <section class="card">
     <label>4&nbsp;nút&nbsp;chuột&nbsp;trái</label>
-    <p class="hint">Trên&nbsp;máy&nbsp;tính:&nbsp;bấm&nbsp;<b>Ghi&nbsp;4&nbsp;nút</b>.&nbsp;Màn&nbsp;hình&nbsp;phủ&nbsp;lên,&nbsp;bấm&nbsp;4&nbsp;chỗ&nbsp;thật.&nbsp;Mỗi&nbsp;chỗ&nbsp;hiện&nbsp;số&nbsp;1&nbsp;→&nbsp;2&nbsp;→&nbsp;3&nbsp;→&nbsp;4.</p>
+    <p class="hint">Trên&nbsp;máy&nbsp;tính:&nbsp;bấm&nbsp;<b>Ghi&nbsp;4&nbsp;nút</b>,&nbsp;bấm&nbsp;4&nbsp;chỗ&nbsp;trên&nbsp;màn&nbsp;hình&nbsp;thật,&nbsp;rồi&nbsp;bấm&nbsp;<b>Lưu&nbsp;4&nbsp;nút</b>.&nbsp;Đổi&nbsp;cỡ&nbsp;màn:&nbsp;máy&nbsp;tính&nbsp;tỷ&nbsp;lệ.</p>
     <p class="order" id="orderStrip">1&nbsp;→&nbsp;2&nbsp;→&nbsp;3&nbsp;→&nbsp;4</p>
     <p class="hint coords" id="recoverLabel">Thứ&nbsp;tự:&nbsp;chưa&nbsp;ghi</p>
     <div class="marks" id="marks"></div>
     <div class="row">
       <button type="button" id="btnRecordRecover">Ghi&nbsp;4&nbsp;nút</button>
+      <button type="button" class="go" id="btnSaveRecover">Lưu&nbsp;4&nbsp;nút</button>
       <button type="button" id="btnClearRecover">Xóa&nbsp;4&nbsp;nút</button>
     </div>
   </section>
@@ -381,12 +377,6 @@
     var box = $("marks");
     box.innerHTML = "";
     for (var index = 0; index < 4; index++) {
-      if (index) {
-        var arrow = document.createElement("div");
-        arrow.className = "arrow";
-        arrow.textContent = "→";
-        box.appendChild(arrow);
-      }
       var click = recoverClicks[index];
       var card = document.createElement("div");
       var waiting = recordingRecover && index === recoverClicks.length;
@@ -397,7 +387,13 @@
       var step = document.createElement("em");
       step.textContent = "Bước " + (index + 1);
       var detail = document.createElement("span");
-      detail.textContent = click ? ("trái " + click.x + "," + click.y) : "chưa ghi";
+      if (!click) {
+        detail.innerHTML = "chưa&nbsp;ghi";
+      } else if (click.rx != null && click.ry != null) {
+        detail.textContent = "trái " + click.x + " , " + click.y + " · " + Math.round(click.rx * 100) + "% × " + Math.round(click.ry * 100) + "%";
+      } else {
+        detail.textContent = "trái " + click.x + " , " + click.y;
+      }
       card.appendChild(title);
       card.appendChild(step);
       card.appendChild(detail);
@@ -409,7 +405,8 @@
       return;
     }
     $("recoverLabel").textContent = recoverClicks.map(function (click, index) {
-      return "Nút " + (index + 1) + " → " + click.x + " , " + click.y;
+      var extra = (click.rx != null) ? (" · " + Math.round(click.rx * 100) + "%") : "";
+      return "Nút " + (index + 1) + " → " + click.x + " , " + click.y + extra;
     }).join("   |   ");
   }
   function afterEnter(value, done) {
@@ -465,7 +462,7 @@
         if (item.numbers.step) $("step").value = item.numbers.step;
         if (item.numbers.change_threshold) $("threshold").value = item.numbers.change_threshold;
         recoverClicks = (item.numbers.recover_clicks || []).map(function (click) {
-          return { x: click.x, y: click.y, sx: click.sx, sy: click.sy };
+          return { x: click.x, y: click.y, sw: click.sw, sh: click.sh, rx: click.rx, ry: click.ry };
         }).slice(0, 4);
         renderFlags(item.numbers.flagged || []);
         renderRecover();
@@ -484,7 +481,17 @@
     recoverClicks = [];
     recordingRecover = true;
     renderRecover();
-    setStatus("Trên máy tính hãy dùng Ghi 4 nút để bấm 4 chỗ trên màn hình. Ở đây bấm 4 thẻ theo thứ tự.");
+    setStatus("Trên máy tính: Ghi 4 nút, bấm 4 chỗ trên màn hình, rồi Lưu 4 nút. Ở đây bấm 4 thẻ theo thứ tự.");
+  };
+  $("btnSaveRecover").onclick = function () {
+    if (recoverClicks.length < 4) {
+      setStatus("Chưa đủ 4 nút. Trên PC hãy Ghi 4 nút trên màn hình rồi Lưu.", "err");
+      return;
+    }
+    recordingRecover = false;
+    persist().then(function () {
+      setStatus("Đã lưu 4 nút. Trên PC máy sẽ bấm theo tỷ lệ khi đổi cỡ màn.", "ok");
+    }).catch(function (err) { setStatus(err.message, "err"); });
   };
   $("btnClearRecover").onclick = function () {
     recoverClicks = [];
@@ -493,18 +500,15 @@
     persist().catch(function () {});
     setStatus("Đã xóa 4 nút.");
   };
-  $("marks").onclick = function (ev) {
+  $("marks").onclick = function () {
     if (!recordingRecover && recoverClicks.length >= 4) return;
     if (!recordingRecover) recordingRecover = true;
-    var box = $("marks").getBoundingClientRect();
-    var x = Math.round(ev.clientX - box.left);
-    var y = Math.round(ev.clientY - box.top);
-    recoverClicks.push({ x: x, y: y, sx: x, sy: y });
+    recoverClicks.push({ x: (recoverClicks.length + 1) * 100, y: 100 });
     if (recoverClicks.length >= 4) {
       recordingRecover = false;
-      setStatus("Đã nhớ 4 nút tập theo thứ tự 1 → 2 → 3 → 4. Trên PC hãy Ghi 4 nút trên màn hình thật.", "ok");
+      setStatus("Đã chọn 4 thẻ. Bấm Lưu 4 nút. Vị trí thật phải Ghi trên màn hình máy tính.", "ok");
     } else {
-      setStatus("Đã ghi nút " + recoverClicks.length + "/4.");
+      setStatus("Đã chọn nút " + recoverClicks.length + "/4. Chọn đủ rồi Lưu.");
     }
     renderRecover();
   };

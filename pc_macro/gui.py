@@ -12,7 +12,17 @@ from pc_macro.desktop import Desktop, available, install_hint
 from pc_macro.hub import HubError, configured, describe, pull, push
 from pc_macro.numbers import NumberQueue, make_code, normalize_digits, normalize_prefix
 from pc_macro.overlay import ClickOverlay, show_click_overlay
-from pc_macro.screen import RECOVER_CLICKS, capture_grid, click_order_cards, normalize_threshold, sanitize_clicks, should_recover
+from pc_macro.screen import (
+    RECOVER_CLICKS,
+    append_screen_click,
+    capture_grid,
+    click_order_cards,
+    current_screen_size,
+    normalize_threshold,
+    sanitize_clicks,
+    scale_clicks,
+    should_recover,
+)
 from pc_macro.script import compile_script, number_enter_steps
 from pc_macro.session import Player, Recorder, ignore_window
 from pc_macro.store import MacroStore
@@ -128,13 +138,14 @@ class App:
                 tk.Label(strip, text="→", font=("Segoe UI", 16, "bold"), fg="#0b6bcb").pack(side="left")
         marks = ttk.Frame(self.root)
         marks.pack(fill="x", **pad)
+        ttk.Button(marks, text="Lưu 4 nút", command=self.save_recover).pack(side="left", padx=2)
         ttk.Button(marks, text="Hiện 4 nút trên màn", command=self.preview_recover).pack(side="left", padx=2)
         ttk.Button(marks, text="Xóa 4 nút", command=self.clear_recover).pack(side="left", padx=2)
         ttk.Label(self.root, textvariable=self.recover_label, wraplength=390).pack(anchor="w", padx=12, pady=(2, 6))
         ttk.Label(self.root, text="Số lúc giao diện đổi ≥ ngưỡng — F9 cũng lưu số vừa Enter.").pack(anchor="w", padx=12, pady=(8, 2))
         self.flag_box = tk.Listbox(self.root, height=4, font=("Segoe UI", 12))
         self.flag_box.pack(fill="both", expand=True, padx=12, pady=4)
-        ttk.Label(self.root, text="F8 dừng. Ghi 4 nút: bấm thẳng trên màn hình, mỗi chỗ hiện số thứ tự.").pack(anchor="w", padx=12, pady=(0, 8))
+        ttk.Label(self.root, text="F8 dừng. Ghi 4 nút trên màn thật, rồi Lưu. Đổi cỡ màn: máy quy tỷ lệ.").pack(anchor="w", padx=12, pady=(0, 8))
 
     def start_record(self) -> None:
         if self.recorder.on or self._playing() or self._record_recover:
@@ -148,7 +159,7 @@ class App:
         self._recover_draft = []
         self._record_recover = True
         self._refresh_recover()
-        self.status.set("Màn hình phủ lên — bấm trái 4 chỗ. Mỗi chỗ hiện số 1, 2, 3, 4.")
+        self.status.set("Màn hình phủ lên — bấm trái 4 chỗ, rồi bấm Lưu 4 nút.")
         self.root.withdraw()
         try:
             self._overlay = show_click_overlay(
@@ -177,6 +188,18 @@ class App:
             recording=False,
         )
         self.status.set("Đang hiện 4 nút trên màn hình, đúng thứ tự 1 → 2 → 3 → 4.")
+
+    def save_recover(self) -> None:
+        if self._busy():
+            return
+        clicks = sanitize_clicks(self.queue.recover_clicks)
+        if len(clicks) < RECOVER_CLICKS:
+            self.status.set("Chưa đủ 4 nút. Bấm Ghi 4 nút, chọn 4 chỗ trên màn, rồi Lưu.")
+            return
+        self.queue.recover_clicks = clicks
+        self._persist(silent=True)
+        self._refresh_recover()
+        self.status.set("Đã lưu 4 nút trái. Đổi cỡ màn hình máy sẽ quy tỷ lệ khi bấm lại.")
 
     def clear_recover(self) -> None:
         if self._busy():
@@ -349,9 +372,13 @@ class App:
     def _after_record(self, recorded: list[dict[str, Any]] | None = None) -> None:
         events = recorded if recorded is not None else self.recorder.events
         click = None
+        sw, sh = self._screen_size()
         for event in events:
             if event.get("kind") == "click":
-                click = {"kind": "click", "x": event.get("x"), "y": event.get("y"), "button": event.get("button") or "left", "wait": 80}
+                saved = append_screen_click([], event.get("x"), event.get("y"), sw, sh)
+                if saved:
+                    click = saved[0]
+                    click["wait"] = 80
         self.click = click
         if click:
             self.status.set(f"Đã nhớ chỗ nhập tại {click['x']},{click['y']}. Bắt đầu sẽ bấm đó rồi gõ số.")
@@ -396,7 +423,7 @@ class App:
         if keep and len(self._recover_draft) >= RECOVER_CLICKS:
             self.queue.recover_clicks = sanitize_clicks(self._recover_draft)
             self._persist(silent=True)
-            self.status.set("Đã nhớ 4 nút trái theo thứ tự 1 → 2 → 3 → 4. Hiện 4 nút trên màn để kiểm tra.")
+            self.status.set("Đã lưu 4 nút trái theo tỷ lệ màn hình. Hiện 4 nút trên màn để kiểm tra.")
         elif keep:
             self.status.set("Chưa đủ 4 nút. Bấm Ghi 4 nút rồi bấm 4 chỗ trên màn hình.")
         else:
@@ -417,10 +444,16 @@ class App:
         self._set_status(f"Đã lưu {value} ({reason}). Đang bấm 4 nút rồi gõ số tiếp.")
         return self._recover_events()
 
+    def _screen_size(self) -> tuple[int, int]:
+        return current_screen_size(fallback=(int(self.root.winfo_screenwidth()), int(self.root.winfo_screenheight())))
+
     def _recover_events(self) -> list[dict[str, Any]]:
-        steps = list(self.queue.recover_clicks)
+        sw, sh = self._screen_size()
+        steps = scale_clicks(self.queue.recover_clicks, sw, sh)
         if self.click:
-            steps.append(self.click)
+            scaled = scale_clicks([self.click], sw, sh)
+            if scaled:
+                steps.append(scaled[0])
         _script, events = compile_script(steps)
         return events
 
@@ -439,11 +472,11 @@ class App:
             num.configure(fg=fg)
         done = sum(1 for item in sanitize_clicks(clicks))
         if done >= RECOVER_CLICKS:
-            self.recover_label.set("Đủ 4 nút trái. Thứ tự bấm: 1 rồi 2 rồi 3 rồi 4.")
+            self.recover_label.set("Đã chọn 4 nút. Lưu để giữ. Đổi cỡ màn: máy bấm theo tỷ lệ.")
         elif done:
-            self.recover_label.set(f"Đã ghi {done}/4. Bấm Ghi 4 nút để ghi lại từ đầu.")
+            self.recover_label.set(f"Đã ghi {done}/4. Bấm Ghi 4 nút, chọn đủ 4 chỗ, rồi Lưu.")
         else:
-            self.recover_label.set("Chưa ghi. Bấm Ghi 4 nút, rồi bấm 4 chỗ trên màn hình máy tính.")
+            self.recover_label.set("Chưa ghi. Bấm Ghi 4 nút trên màn hình máy tính, rồi Lưu.")
 
     def _on_fields(self, *_args: Any) -> None:
         cleaned = normalize_prefix(self.prefix.get())
