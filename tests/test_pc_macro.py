@@ -32,8 +32,10 @@ from pc_macro.script import (
     merge_recording,
     move_step,
     new_step,
+    enter_key_steps,
     four_lane_enter_steps,
     number_enter_steps,
+    number_type_steps,
     replace_step,
     script_captions,
     steps_to_events,
@@ -45,6 +47,10 @@ from pc_macro.screen import (
     append_screen_click,
     apply_click_names,
     change_percent,
+    frame_label,
+    scale_frame,
+    sanitize_frame,
+    watch_changed,
     click_from_paint,
     click_landed,
     click_order_cards,
@@ -403,6 +409,43 @@ class FourLaneTests(unittest.TestCase):
         self.assertEqual(sent[:11], ["S", "P", "X", "A", "B", "0", "0", "0", "0", "1", "enter"])
         self.assertEqual(sent[11:22], ["S", "P", "X", "A", "B", "0", "0", "0", "0", "2", "enter"])
         self.assertTrue(queue.exhausted)
+
+    def test_pause_full_code_when_frame_changes_then_continue(self) -> None:
+        queue = FourLaneQueue(prefix="SPXAB", start="00001", end="00020", step=1)
+        self.assertEqual(queue.peek_one(), "SPXAB00001")
+        self.assertEqual(queue.take_one(), "SPXAB00001")
+        self.assertEqual(queue.peek_one(), "SPXAB00002")
+        typed = number_type_steps("SPXAB00002")
+        self.assertEqual(typed[0]["value"], "SPXAB00002")
+        self.assertEqual(enter_key_steps()[0]["key"], "enter")
+        paused = queue.pause_at("SPXAB00002")
+        self.assertEqual(paused, "SPXAB00002")
+        self.assertTrue(queue.waiting)
+        self.assertEqual(queue.flagged, ["SPXAB00002"])
+        self.assertEqual(queue.peek_one(), "SPXAB00002")
+        self.assertEqual(queue.resume(), "SPXAB00002")
+        self.assertFalse(queue.waiting)
+        self.assertEqual(queue.peek_one(), "SPXAB00002")
+        again = FourLaneQueue.from_dict(queue.to_dict())
+        self.assertEqual(again.paused, "SPXAB00002")
+        self.assertEqual(again.flagged, ["SPXAB00002"])
+        self.assertEqual(again.change_threshold, 20)
+        same = make_grid((10, 10, 10))
+        hit, percent = watch_changed(same, make_grid((10, 10, 10), flip=int(0.25 * 48 * 27)), 20)
+        self.assertTrue(hit)
+        self.assertGreaterEqual(percent, 20)
+        miss, _percent = watch_changed(same, make_grid((10, 10, 10), flip=10), 20)
+        self.assertFalse(miss)
+        frame = sanitize_frame({"x": 100, "y": 200, "w": 300, "h": 80, "sw": 1000, "sh": 800})
+        self.assertIsNotNone(frame)
+        self.assertAlmostEqual(frame["rx"], 0.1)
+        scaled = scale_frame(frame, 2000, 1600)
+        self.assertEqual(scaled["x"], 200)
+        self.assertEqual(scaled["y"], 400)
+        self.assertEqual(scaled["w"], 600)
+        self.assertEqual(scaled["h"], 160)
+        self.assertIn("100,200", frame_label(frame))
+        self.assertIsNone(sanitize_frame({"x": 1, "y": 1, "w": 4, "h": 4}))
 
     def test_screen_change_and_four_clicks_then_continue(self) -> None:
         same = make_grid((10, 10, 10))

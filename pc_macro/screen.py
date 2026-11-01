@@ -17,9 +17,13 @@ except ImportError:  # pragma: no cover
 
 GRID_W = 48
 GRID_H = 27
+FRAME_GRID_W = 24
+FRAME_GRID_H = 14
 CELL_DELTA = 28
 RECOVER_CLICKS = 4
 DEFAULT_THRESHOLD = 80
+LANE_PAUSE_THRESHOLD = 20
+_MIN_FRAME = 16
 CLICK_RETRIES = 2
 CLICK_LAND_PERCENT = 3
 PATCH_SIZE = 64
@@ -349,17 +353,136 @@ def sanitize_clicks(raw: Any) -> list[dict[str, Any]]:
     return [item for item in click_slots(raw) if item is not None]
 
 
+def sanitize_frame(raw: Any) -> dict[str, Any] | None:
+    """One rectangle the user dragged around the 5-digit area."""
+    if not isinstance(raw, dict):
+        return None
+    try:
+        x = int(round(float(raw.get("x"))))
+        y = int(round(float(raw.get("y"))))
+        width = int(round(float(raw.get("w") or raw.get("width") or 0)))
+        height = int(round(float(raw.get("h") or raw.get("height") or 0)))
+    except (TypeError, ValueError):
+        return None
+    if width < 0:
+        x += width
+        width = -width
+    if height < 0:
+        y += height
+        height = -height
+    if width < _MIN_FRAME or height < _MIN_FRAME:
+        return None
+    if not (0 <= x <= _MAX_COORD and 0 <= y <= _MAX_COORD):
+        return None
+    if width > _MAX_COORD or height > _MAX_COORD:
+        return None
+    try:
+        sw = int(round(float(raw.get("sw") or 0)))
+        sh = int(round(float(raw.get("sh") or 0)))
+    except (TypeError, ValueError):
+        sw, sh = 0, 0
+    if not (2 <= sw <= _MAX_COORD and 2 <= sh <= _MAX_COORD):
+        sw, sh = 0, 0
+    record: dict[str, Any] = {"x": x, "y": y, "w": width, "h": height}
+    if sw > 0 and sh > 0:
+        record["sw"] = sw
+        record["sh"] = sh
+        record["rx"] = max(0.0, min(1.0, x / sw))
+        record["ry"] = max(0.0, min(1.0, y / sh))
+        record["rw"] = max(0.0, min(1.0, width / sw))
+        record["rh"] = max(0.0, min(1.0, height / sh))
+    for key in ("rx", "ry", "rw", "rh"):
+        try:
+            value = float(raw.get(key))
+        except (TypeError, ValueError):
+            continue
+        if 0 <= value <= 1:
+            record[key] = value
+    return record
+
+
+def scale_frame(frame: Any, sw: int, sh: int) -> dict[str, Any] | None:
+    """Map a saved number-frame onto the current screen size."""
+    item = sanitize_frame(frame)
+    if item is None:
+        return None
+    if sw <= 0 or sh <= 0:
+        return item
+    if "rw" in item and "rh" in item and "rx" in item and "ry" in item:
+        x = max(0, min(sw - _MIN_FRAME, int(round(float(item["rx"]) * sw))))
+        y = max(0, min(sh - _MIN_FRAME, int(round(float(item["ry"]) * sh))))
+        width = max(_MIN_FRAME, min(sw - x, int(round(float(item["rw"]) * sw))))
+        height = max(_MIN_FRAME, min(sh - y, int(round(float(item["rh"]) * sh))))
+        return sanitize_frame({"x": x, "y": y, "w": width, "h": height, "sw": sw, "sh": sh})
+    return sanitize_frame(
+        {
+            "x": max(0, min(sw - _MIN_FRAME, int(item["x"]))),
+            "y": max(0, min(sh - _MIN_FRAME, int(item["y"]))),
+            "w": max(_MIN_FRAME, min(sw, int(item["w"]))),
+            "h": max(_MIN_FRAME, min(sh, int(item["h"]))),
+            "sw": sw,
+            "sh": sh,
+        }
+    )
+
+
+def frame_label(frame: Any) -> str:
+    item = sanitize_frame(frame)
+    if item is None:
+        return "Chưa chọn khung 5 số — sẽ so cả màn (≥20% dễ lệch)."
+    return f"Khung 5 số: {item['x']},{item['y']}  {item['w']}×{item['h']}"
+
+
 def capture_grid() -> Grid | None:
     """Downsample the screen so a later compare is cheap."""
     try:
         image = ImageGrab.grab()
     except Exception:
         return None
+    return _grid_from_image(image, GRID_W, GRID_H)
+
+
+def capture_region(frame: Any) -> Grid | None:
+    """Downsample only the number frame. Falls back to the full screen."""
+    size = current_screen_size()
+    box = scale_frame(frame, size[0], size[1])
+    if box is None:
+        return capture_grid()
+    left = int(box["x"])
+    top = int(box["y"])
+    right = left + int(box["w"])
+    bottom = top + int(box["h"])
+    try:
+        image = ImageGrab.grab(bbox=(left, top, right, bottom))
+    except Exception:
+        try:
+            full = ImageGrab.grab()
+        except Exception:
+            return None
+        image = full.crop((left, top, min(full.size[0], right), min(full.size[1], bottom)))
+    return _grid_from_image(image, FRAME_GRID_W, FRAME_GRID_H)
+
+
+def capture_watch(frame: Any = None) -> Grid | None:
+    """Prefer the 5-digit frame; otherwise the whole screen."""
+    if sanitize_frame(frame) is None:
+        return capture_grid()
+    return capture_region(frame)
+
+
+def watch_changed(before: Grid | None, after: Grid | None, threshold: int = LANE_PAUSE_THRESHOLD) -> tuple[bool, float]:
+    """True when the watched frame changed at least `threshold` percent."""
+    return should_recover(before, after, threshold)
+
+
+def _grid_from_image(image: Image.Image, width: int, height: int) -> Grid | None:
+    if image.size[0] < 2 or image.size[1] < 2:
+        return None
     if image.mode != "RGB":
         image = image.convert("RGB")
-    small = image.resize((GRID_W, GRID_H), Image.Resampling.BOX)
+    small = image.resize((width, height), Image.Resampling.BOX)
     pixels = _pixels(small)
-    if len(pixels) != GRID_W * GRID_H:
+    if len(pixels) != width * height:
         return None
     return pixels
 

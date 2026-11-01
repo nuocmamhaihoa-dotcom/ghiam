@@ -138,7 +138,7 @@ VPS chỉ giữ kịch bản. Ghi phím/chuột và bấm Làm lại phải làm
    Từng bước: Bôi màu trên ảnh (hoặc Chụp màn) chỗ cần bấm, hoặc Chọn vị trí trên màn.
    Máy tìm tâm vùng tô rồi bấm trái đúng chỗ đó. Nhớ tỷ lệ màn hình. Chưa nhận thì bấm lại.
    Bắt đầu gồm cả hai kịch bản: gõ mã rồi Enter; màn đổi ≥ 80% thì tự bấm 4 nút trái, lưu số, rồi tăng số tiếp.
-   Hướng 2 (độc lập): Bắt đầu 2 chạy 4 làn cùng lúc, Enter đồng loạt, 4 mã không trùng.
+   Hướng 2 (độc lập): Bắt đầu 2 chạy 4 làn. Sau mỗi Enter, nếu khung 5 số đổi ≥ 20% thì dừng mã đó, lưu đủ dãy, thao tác tay xong bấm Tiếp tục.
 
 Đồng bộ với VPS (sau khi đặt địa chỉ):
   python -m pc_macro pull

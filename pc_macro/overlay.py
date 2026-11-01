@@ -13,6 +13,7 @@ from pc_macro.screen import (
     click_slots,
     overlay_banner,
     sanitize_clicks,
+    sanitize_frame,
     upsert_slot,
 )
 
@@ -22,6 +23,7 @@ _TEXT = "#ffffff"
 _BG = "#101820"
 DoneFn = Callable[[list[dict[str, Any]]], None]
 CancelFn = Callable[[], None]
+FrameDoneFn = Callable[[dict[str, Any]], None]
 
 
 class ClickOverlay:
@@ -254,3 +256,210 @@ def show_click_overlay(
 
 def preview_labels(clicks: list[dict[str, Any]] | None) -> list[str]:
     return click_order_labels(clicks or [])
+
+
+class FrameOverlay:
+    """Drag a rectangle around the 5-digit area, then save it."""
+
+    def __init__(
+        self,
+        root: tk.Misc,
+        *,
+        on_done: FrameDoneFn,
+        on_cancel: CancelFn,
+        frame: dict[str, Any] | None = None,
+    ) -> None:
+        self._on_done = on_done
+        self._on_cancel = on_cancel
+        self.screen_w = max(1, int(root.winfo_screenwidth()))
+        self.screen_h = max(1, int(root.winfo_screenheight()))
+        self.frame = sanitize_frame(frame)
+        self._origin: tuple[int, int] | None = None
+        self._draft: tuple[int, int, int, int] | None = None
+        self.win = tk.Toplevel(root)
+        self.win.overrideredirect(True)
+        self.win.attributes("-topmost", True)
+        self.win.geometry(f"{self.screen_w}x{self.screen_h}+0+0")
+        self.win.configure(bg=_BG)
+        try:
+            self.win.attributes("-alpha", 0.42)
+        except tk.TclError:
+            pass
+        self.bar = tk.Frame(self.win, bg="#0b6bcb")
+        self.bar.pack(side="bottom", fill="x")
+        self.hint = tk.Label(
+            self.bar,
+            text="Kéo một khung quanh chỗ 5 số tăng. Esc hủy.",
+            fg=_TEXT,
+            bg="#0b6bcb",
+            font=("Segoe UI", 12, "bold"),
+        )
+        self.hint.pack(side="left", padx=12, pady=10)
+        self.btn_save = tk.Button(
+            self.bar,
+            text="Lưu khung 5 số",
+            command=self._save,
+            font=("Segoe UI", 12, "bold"),
+            bg="#ffd166",
+            fg="#102030",
+            activebackground="#ffe08a",
+            relief="flat",
+            padx=16,
+            pady=8,
+            state="disabled",
+        )
+        self.btn_redo = tk.Button(
+            self.bar,
+            text="Kéo lại",
+            command=self._redo,
+            font=("Segoe UI", 12, "bold"),
+            bg="#e8edf2",
+            fg="#17202a",
+            relief="flat",
+            padx=12,
+            pady=8,
+        )
+        self.btn_cancel = tk.Button(
+            self.bar,
+            text="Hủy",
+            command=self.cancel,
+            font=("Segoe UI", 12, "bold"),
+            bg="#c2410c",
+            fg=_TEXT,
+            relief="flat",
+            padx=12,
+            pady=8,
+        )
+        self.btn_cancel.pack(side="right", padx=8, pady=8)
+        self.btn_redo.pack(side="right", padx=4, pady=8)
+        self.btn_save.pack(side="right", padx=4, pady=8)
+        self.canvas = tk.Canvas(self.win, bg=_BG, highlightthickness=0, cursor="crosshair")
+        self.canvas.pack(fill="both", expand=True)
+        self.canvas.bind("<ButtonPress-1>", self._down)
+        self.canvas.bind("<B1-Motion>", self._drag)
+        self.canvas.bind("<ButtonRelease-1>", self._up)
+        self.win.bind("<Escape>", lambda _e: self.cancel())
+        self.win.bind("<F8>", lambda _e: self.cancel())
+        self.win.bind("<Return>", lambda _e: self._save())
+        try:
+            self.win.grab_set()
+        except tk.TclError:
+            pass
+        self.win.focus_force()
+        if self.frame is not None:
+            self._draft = (
+                int(self.frame["x"]),
+                int(self.frame["y"]),
+                int(self.frame["x"]) + int(self.frame["w"]),
+                int(self.frame["y"]) + int(self.frame["h"]),
+            )
+            self.btn_save.configure(state="normal")
+            self.hint.configure(text="Đã có khung. Kéo lại hoặc bấm Lưu khung 5 số.")
+        self._redraw()
+
+    def _down(self, event: tk.Event) -> None:
+        self._origin = (int(event.x_root), int(event.y_root))
+        self._draft = None
+        self.btn_save.configure(state="disabled")
+        self.hint.configure(text="Đang kéo khung quanh 5 số…")
+        self._redraw()
+
+    def _drag(self, event: tk.Event) -> None:
+        if self._origin is None:
+            return
+        self._draft = (self._origin[0], self._origin[1], int(event.x_root), int(event.y_root))
+        self._redraw()
+
+    def _up(self, event: tk.Event) -> None:
+        if self._origin is None:
+            return
+        self._draft = (self._origin[0], self._origin[1], int(event.x_root), int(event.y_root))
+        self._origin = None
+        box = self._as_frame()
+        if box is None:
+            self._draft = None
+            self.btn_save.configure(state="disabled")
+            self.hint.configure(text="Khung quá nhỏ. Kéo rộng hơn quanh 5 số.")
+        else:
+            self.btn_save.configure(state="normal")
+            self.hint.configure(text=f"Khung {box['w']}×{box['h']}. Bấm Lưu khung 5 số.")
+        self._redraw()
+
+    def _redo(self) -> None:
+        self._origin = None
+        self._draft = None
+        self.frame = None
+        self.btn_save.configure(state="disabled")
+        self.hint.configure(text="Kéo một khung quanh chỗ 5 số tăng. Esc hủy.")
+        self._redraw()
+
+    def _save(self) -> None:
+        box = self._as_frame()
+        if box is None:
+            return
+        self.close()
+        self._on_done(box)
+
+    def cancel(self) -> None:
+        self.close()
+        self._on_cancel()
+
+    def close(self) -> None:
+        try:
+            self.win.grab_release()
+        except tk.TclError:
+            pass
+        if self.win.winfo_exists():
+            self.win.destroy()
+
+    def _as_frame(self) -> dict[str, Any] | None:
+        if self._draft is None:
+            return sanitize_frame(self.frame)
+        left, top, right, bottom = self._draft
+        return sanitize_frame(
+            {
+                "x": min(left, right),
+                "y": min(top, bottom),
+                "w": abs(right - left),
+                "h": abs(bottom - top),
+                "sw": self.screen_w,
+                "sh": self.screen_h,
+            }
+        )
+
+    def _redraw(self) -> None:
+        self.canvas.delete("all")
+        width = max(int(self.canvas.winfo_width() or self.screen_w), 320)
+        self.canvas.create_rectangle(0, 0, width, 64, fill="#0b6bcb", outline="")
+        self.canvas.create_text(
+            20,
+            32,
+            text="Hướng 2 — kéo khung quanh 5 số tăng. So sánh ≥20% chỉ trong khung này.",
+            fill=_TEXT,
+            font=("Segoe UI", 15, "bold"),
+            anchor="w",
+        )
+        box = self._as_frame()
+        if box is None:
+            return
+        x1, y1 = int(box["x"]), int(box["y"])
+        x2, y2 = x1 + int(box["w"]), y1 + int(box["h"])
+        self.canvas.create_rectangle(x1, y1, x2, y2, outline="#ffd166", width=4)
+        self.canvas.create_rectangle(x1, y1, x2, y2, fill="#ff00aa", stipple="gray25", outline="")
+        self.canvas.create_text(
+            (x1 + x2) // 2,
+            (y1 + y2) // 2,
+            text="Khung 5 số",
+            fill="#ffffff",
+            font=("Segoe UI", 16, "bold"),
+        )
+
+
+def show_frame_overlay(
+    root: tk.Misc,
+    *,
+    on_done: FrameDoneFn,
+    on_cancel: CancelFn,
+    frame: dict[str, Any] | None = None,
+) -> FrameOverlay:
+    return FrameOverlay(root, on_done=on_done, on_cancel=on_cancel, frame=frame)

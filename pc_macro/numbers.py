@@ -5,7 +5,13 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from pc_macro.screen import DEFAULT_THRESHOLD, normalize_threshold, sanitize_clicks
+from pc_macro.screen import (
+    DEFAULT_THRESHOLD,
+    LANE_PAUSE_THRESHOLD,
+    normalize_threshold,
+    sanitize_clicks,
+    sanitize_frame,
+)
 
 _SPLIT = re.compile(r"[\n,;\s]+")
 _MAX_ITEMS = 500
@@ -309,6 +315,11 @@ class FourLaneQueue:
         step: int = 1,
         exhausted: bool = False,
         last_used: Any = None,
+        flagged: list[str] | None = None,
+        paused: str = "",
+        waiting: bool = False,
+        watch_frame: Any = None,
+        change_threshold: int = LANE_PAUSE_THRESHOLD,
     ) -> None:
         self.prefix = normalize_prefix(prefix)
         start_digits = normalize_digits(start or "00001")
@@ -328,6 +339,11 @@ class FourLaneQueue:
             now = self.start
         self.current = now
         self.last_used = _clean_codes(last_used if isinstance(last_used, (list, tuple)) else [last_used] if last_used else [])
+        self.flagged = _clean_codes(flagged)
+        self.paused = _clean_code(paused)
+        self.waiting = bool(waiting) and bool(self.paused)
+        self.watch_frame = sanitize_frame(watch_frame)
+        self.change_threshold = normalize_threshold(change_threshold, LANE_PAUSE_THRESHOLD)
         self.exhausted = False
         if int(self.current) > int(self.end):
             self.exhausted = True
@@ -345,10 +361,15 @@ class FourLaneQueue:
             step=data.get("step") if data.get("step") is not None else 1,
             exhausted=bool(data.get("exhausted")),
             last_used=data.get("last_used") or data.get("last_used_lanes") or [],
+            flagged=data.get("flagged") or [],
+            paused=str(data.get("paused") or ""),
+            waiting=bool(data.get("waiting")),
+            watch_frame=data.get("watch_frame") or data.get("frame"),
+            change_threshold=data.get("change_threshold") if data.get("change_threshold") is not None else LANE_PAUSE_THRESHOLD,
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "lanes": True,
             "lane_count": LANE_COUNT,
             "prefix": self.prefix,
@@ -358,7 +379,14 @@ class FourLaneQueue:
             "step": self.step,
             "exhausted": self.exhausted,
             "last_used": list(self.last_used),
+            "flagged": list(self.flagged),
+            "paused": self.paused,
+            "waiting": self.waiting,
+            "change_threshold": self.change_threshold,
         }
+        if self.watch_frame is not None:
+            payload["watch_frame"] = dict(self.watch_frame)
+        return payload
 
     def peek(self) -> list[str]:
         """Up to four unused codes, starting at `current`, spaced by `step`."""
@@ -374,6 +402,10 @@ class FourLaneQueue:
             cursor += self.step
         return out
 
+    def peek_one(self) -> str:
+        codes = self.peek()
+        return codes[0] if codes else ""
+
     def take(self) -> list[str]:
         codes = self.peek()
         if not codes:
@@ -388,6 +420,53 @@ class FourLaneQueue:
         if nxt > int(self.end):
             self.exhausted = True
         return codes
+
+    def take_one(self) -> str:
+        """Advance one code after Enter did not trip the 20% watch frame."""
+        code = self.peek_one()
+        if not code:
+            self.exhausted = True
+            return ""
+        self.last_used = ([code] + [item for item in self.last_used if item != code])[:LANE_COUNT]
+        nxt = int(self.current) + self.step
+        if nxt > 10**DIGIT_LEN - 1:
+            self.exhausted = True
+            return code
+        self.current = str(nxt).zfill(DIGIT_LEN)
+        if nxt > int(self.end):
+            self.exhausted = True
+        return code
+
+    def flag(self, value: str | None = None) -> str | None:
+        """Keep the full code (prefix + 5 digits) that made the frame change."""
+        chosen = _clean_code(value or self.paused or self.peek_one() or (self.last_used[0] if self.last_used else ""))
+        if not chosen:
+            return None
+        if chosen not in self.flagged:
+            self.flagged.append(chosen)
+            if len(self.flagged) > _MAX_ITEMS:
+                self.flagged = self.flagged[-_MAX_ITEMS:]
+        return chosen
+
+    def pause_at(self, value: str | None = None) -> str | None:
+        """Stop this sequence on `value` and wait for Continue."""
+        chosen = self.flag(value)
+        if not chosen:
+            return None
+        digits = chosen[-DIGIT_LEN:] if len(chosen) >= DIGIT_LEN else chosen
+        self.paused = chosen
+        self.waiting = True
+        self.current = normalize_digits(digits)
+        self.exhausted = False
+        return chosen
+
+    def resume(self) -> str:
+        """Continue from the paused full code. Other lanes stay on their next numbers."""
+        self.waiting = False
+        if self.paused:
+            self.current = normalize_digits(self.paused[-DIGIT_LEN:])
+            self.exhausted = False
+        return self.paused or self.peek_one()
 
 
 def _clean_code(raw: Any) -> str:

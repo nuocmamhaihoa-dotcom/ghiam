@@ -135,12 +135,21 @@ def compile_script(steps: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], l
     return cleaned, steps_to_events(cleaned)
 
 
-def number_enter_steps(sample: str = "1") -> list[dict[str, Any]]:
-    """Type the current code (5 fixed chars + 5 digits), then Enter."""
+def number_type_steps(sample: str = "1") -> list[dict[str, Any]]:
+    """Type the current code only. Enter is sent after the watch-frame snapshot."""
     text = "".join(ch for ch in sample if ch.isalnum()) or "1"
     typed = new_step("type", value=text)
+    return [step for step in (typed,) if step]
+
+
+def enter_key_steps() -> list[dict[str, Any]]:
     enter = new_step("key", key="enter", wait=80)
-    return [step for step in (typed, enter) if step]
+    return [step for step in (enter,) if step]
+
+
+def number_enter_steps(sample: str = "1") -> list[dict[str, Any]]:
+    """Type the current code (5 fixed chars + 5 digits), then Enter."""
+    return [*number_type_steps(sample), *enter_key_steps()]
 
 
 def four_lane_enter_steps(codes: list[str] | tuple[str, ...]) -> list[dict[str, Any]]:

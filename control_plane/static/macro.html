@@ -175,8 +175,11 @@
     #translateWarn { padding: 8px 10px; background: #fdecec; color: #8a2b2b; border-radius: 8px; }
     .ok { color: #0d7a46; }
     .err { color: #b42318; }
+    .lanes { position: relative; }
     .lanes .line { margin: 0 0 6px; }
     .lanes .line.on { background: #fff1e8; border-color: #c2410c; }
+    .lanes .line.stop { background: #fdecec; border-color: #b42318; }
+    .lanes .pick { position: absolute; border: 2px solid #ff00aa; pointer-events: none; }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -226,8 +229,8 @@
   </section>
 
   <section class="card" id="dir2">
-    <label>Hướng&nbsp;2&nbsp;—&nbsp;4&nbsp;làn&nbsp;Enter&nbsp;đồng&nbsp;loạt</label>
-    <p class="hint">Không&nbsp;đụng&nbsp;hướng&nbsp;1.&nbsp;Cùng&nbsp;5&nbsp;ký&nbsp;tự&nbsp;+&nbsp;5&nbsp;số.&nbsp;Mỗi&nbsp;nhịp&nbsp;gõ&nbsp;4&nbsp;mã&nbsp;khác&nbsp;nhau,&nbsp;Enter&nbsp;cả&nbsp;4,&nbsp;rồi&nbsp;cả&nbsp;4&nbsp;tiến&nbsp;tiếp&nbsp;(không&nbsp;trùng).</p>
+    <label>Hướng&nbsp;2&nbsp;—&nbsp;4&nbsp;làn,&nbsp;dừng&nbsp;khi&nbsp;khung&nbsp;5&nbsp;số&nbsp;đổi&nbsp;≥&nbsp;20%</label>
+    <p class="hint">Không&nbsp;đụng&nbsp;hướng&nbsp;1.&nbsp;Sau&nbsp;từng&nbsp;Enter,&nbsp;nếu&nbsp;khung&nbsp;5&nbsp;số&nbsp;đổi&nbsp;≥&nbsp;20%&nbsp;thì&nbsp;dừng&nbsp;mã&nbsp;đó,&nbsp;lưu&nbsp;đủ&nbsp;dãy.&nbsp;Thao&nbsp;tác&nbsp;tay&nbsp;xong&nbsp;bấm&nbsp;Tiếp&nbsp;tục.</p>
     <label for="prefix2"><span class="w">5</span><span class="w">ký</span><span class="w">tự</span><span class="w">cố</span><span class="w">định</span></label>
     <input id="prefix2" class="wide" type="text" maxlength="5" autocomplete="off" spellcheck="false" placeholder="SPXAB" />
     <div class="pair">
@@ -251,7 +254,18 @@
         <input id="step2" type="number" value="1" />
       </div>
     </div>
-    <p class="status" id="status2">Bắt&nbsp;đầu&nbsp;2&nbsp;chạy&nbsp;4&nbsp;làn&nbsp;song&nbsp;song,&nbsp;Enter&nbsp;đồng&nbsp;loạt.</p>
+    <div class="pair">
+      <div>
+        <label for="threshold2"><span class="w">Khung</span><span class="w">đổi</span><span class="w">≥</span><span class="w">%</span></label>
+        <input id="threshold2" type="number" value="20" min="1" max="100" />
+      </div>
+      <div>
+        <label for="frameChange2"><span class="w">Mô</span><span class="w">phỏng</span><span class="w">khung</span><span class="w">đổi</span><span class="w">%</span></label>
+        <input id="frameChange2" type="number" value="0" min="0" max="100" />
+      </div>
+    </div>
+    <p class="hint" id="frame2Label">Chưa&nbsp;chọn&nbsp;khung&nbsp;5&nbsp;số&nbsp;—&nbsp;trên&nbsp;PC&nbsp;kéo&nbsp;khung&nbsp;quanh&nbsp;chỗ&nbsp;5&nbsp;số&nbsp;tăng.</p>
+    <p class="status" id="status2">Bắt&nbsp;đầu&nbsp;2:&nbsp;gõ&nbsp;từng&nbsp;mã&nbsp;+&nbsp;Enter;&nbsp;khung&nbsp;5&nbsp;số&nbsp;đổi&nbsp;≥&nbsp;20%&nbsp;thì&nbsp;dừng.</p>
     <div class="lanes" id="lanes2">
       <div class="line" id="lane0" contenteditable="true"></div>
       <div class="line" id="lane1" contenteditable="true"></div>
@@ -261,7 +275,14 @@
     <div class="row">
       <button type="button" class="go" id="btnStart2">Bắt&nbsp;đầu&nbsp;2</button>
       <button type="button" id="btnStop2">Dừng&nbsp;2</button>
+      <button type="button" class="go" id="btnContinue2">Tiếp&nbsp;tục</button>
     </div>
+    <div class="row">
+      <button type="button" id="btnFrame2">Chọn&nbsp;khung&nbsp;5&nbsp;số</button>
+      <button type="button" class="warn" id="btnPause2">Khung&nbsp;đổi</button>
+    </div>
+    <p class="hint">Mã&nbsp;dừng&nbsp;khi&nbsp;khung&nbsp;5&nbsp;số&nbsp;đổi&nbsp;(đủ&nbsp;5&nbsp;ký&nbsp;tự&nbsp;+&nbsp;5&nbsp;số)</p>
+    <ul class="flags" id="flags2"></ul>
   </section>
 
   <section class="card">
@@ -294,6 +315,7 @@
     <p class="hint"><span class="w">2.</span><span class="w">Nhập</span><span class="w">số</span><span class="w">bắt</span><span class="w">đầu</span><span class="w">và</span><span class="w">số</span><span class="w">kết</span><span class="w">thúc</span><span class="w">của</span><span class="w">5</span><span class="w">số</span><span class="w">sau.</span></p>
     <p class="hint">3.&nbsp;Bắt&nbsp;đầu&nbsp;gồm&nbsp;cả&nbsp;hai&nbsp;kịch&nbsp;bản:&nbsp;gõ&nbsp;mã,&nbsp;Enter,&nbsp;cộng&nbsp;1.</p>
     <p class="hint">4.&nbsp;Sau&nbsp;Enter,&nbsp;nếu&nbsp;màn&nbsp;đổi&nbsp;≥&nbsp;80%&nbsp;tự&nbsp;bấm&nbsp;4&nbsp;nút&nbsp;trái,&nbsp;lưu&nbsp;số,&nbsp;rồi&nbsp;tăng&nbsp;số&nbsp;tiếp.</p>
+    <p class="hint">5.&nbsp;Hướng&nbsp;2:&nbsp;chọn&nbsp;khung&nbsp;5&nbsp;số.&nbsp;Sau&nbsp;Enter,&nbsp;khung&nbsp;đổi&nbsp;≥&nbsp;20%&nbsp;thì&nbsp;dừng&nbsp;mã&nbsp;đó,&nbsp;lưu&nbsp;đủ&nbsp;dãy,&nbsp;bấm&nbsp;Tiếp&nbsp;tục.</p>
     <div class="row">
       <button type="button" id="btnSave"><span class="w">Lưu</span></button>
       <a class="btn" href="/tai/pc-macro.zip"><span class="w">Tải</span><span class="w">phần</span><span class="w">mềm</span><span class="w">PC</span></a>
@@ -322,6 +344,12 @@
   var lastUsed2 = [];
   var currentDigits2 = "00001";
   var exhausted2 = false;
+  var flagged2 = [];
+  var paused2 = "";
+  var waiting2 = false;
+  var forcePause2 = false;
+  var frame2 = null;
+  var framePick2 = false;
   var lastUsed = "";
   var currentDigits = "00001";
   var exhausted = false;
@@ -793,6 +821,35 @@
     $("status2").textContent = text;
     $("status2").className = "status" + (kind ? " " + kind : "");
   }
+  function threshold2() {
+    var n = parseInt($("threshold2").value || "20", 10);
+    if (isNaN(n) || n < 1) n = 20;
+    if (n > 100) n = 100;
+    return n;
+  }
+  function demoFramePercent() {
+    var n = parseFloat($("frameChange2").value || "0");
+    return isNaN(n) ? 0 : n;
+  }
+  function renderFlags2() {
+    $("flags2").innerHTML = "";
+    flagged2.forEach(function (value) {
+      var li = document.createElement("li");
+      li.textContent = value;
+      $("flags2").appendChild(li);
+    });
+  }
+  function addFlag2(value) {
+    if (!value) return;
+    if (flagged2.indexOf(value) >= 0) return;
+    flagged2.push(value);
+    renderFlags2();
+  }
+  function showFrame2() {
+    $("frame2Label").textContent = frame2
+      ? ("Đã chọn khung 5 số: " + frame2.w + "×" + frame2.h)
+      : "Chưa chọn khung 5 số — trên PC kéo khung quanh chỗ 5 số tăng.";
+  }
   function nextLanes() {
     if (exhausted2 || prefix2().length !== 5) return [];
     var range = bounds2();
@@ -807,32 +864,51 @@
     }
     return out;
   }
-  function takeLanes() {
+  function takeOne2() {
     var codes = nextLanes();
-    if (!codes.length) { exhausted2 = true; return []; }
-    lastUsed2 = codes.slice();
-    var nxt = parseInt(currentDigits2, 10) + LANE_COUNT * step2();
+    if (!codes.length) { exhausted2 = true; return ""; }
+    var code = codes[0];
+    lastUsed2 = [code].concat(lastUsed2.filter(function (item) { return item !== code; })).slice(0, LANE_COUNT);
+    var nxt = parseInt(currentDigits2, 10) + step2();
     if (nxt > 99999) exhausted2 = true;
     currentDigits2 = String(Math.min(nxt, 99999)).padStart(5, "0");
     if (nxt > parseInt(bounds2().end, 10)) exhausted2 = true;
-    return codes;
+    return code;
+  }
+  function pauseAt2(code, percent) {
+    playing2 = false;
+    waiting2 = true;
+    paused2 = code;
+    addFlag2(code);
+    forcePause2 = false;
+    if (timer2) window.clearTimeout(timer2);
+    timer2 = 0;
+    showLanes();
+    persist2().catch(function () {});
+    setStatus2("Khung đổi " + Math.round(percent || threshold2()) + "% — đã lưu " + code + ". Thao tác tay xong bấm Tiếp tục.");
   }
   function showLanes() {
     if ($("prefix2").value !== prefix2()) $("prefix2").value = prefix2();
     var now = nextLanes();
-    $("current2").textContent = lastUsed2.length
-      ? ("Sẽ gõ 4 làn: " + (now.join(" · ") || "—") + "   (vừa xong: " + lastUsed2.join(" · ") + ")")
-      : ("Sẽ gõ 4 làn: " + (now.join(" · ") || "—"));
+    if (waiting2 && paused2) {
+      $("current2").textContent = "Tạm dừng tại " + paused2 + " — bấm Tiếp tục";
+    } else {
+      $("current2").textContent = lastUsed2.length
+        ? ("Sẽ gõ 4 làn: " + (now.join(" · ") || "—") + "   (vừa xong: " + lastUsed2.join(" · ") + ")")
+        : ("Sẽ gõ 4 làn: " + (now.join(" · ") || "—"));
+    }
     for (var i = 0; i < LANE_COUNT; i++) {
       var box = $("lane" + i);
       if (!box) continue;
       box.textContent = now[i] || lastUsed2[i] || "";
-      box.className = "line";
+      box.className = (waiting2 && paused2 && (now[i] === paused2 || lastUsed2[i] === paused2)) ? "line stop" : "line";
     }
+    showFrame2();
+    renderFlags2();
   }
   function persist2() {
     var range = bounds2();
-    var sample = (nextLanes()[0] || lastUsed2[0] || (prefix2() + pad5(currentDigits2)) || "1");
+    var sample = (nextLanes()[0] || lastUsed2[0] || paused2 || (prefix2() + pad5(currentDigits2)) || "1");
     var body = {
       name: "Hướng 2 — 4 làn Enter",
       slug: SLUG2,
@@ -849,44 +925,60 @@
         current: pad5(currentDigits2),
         exhausted: exhausted2,
         step: step2(),
-        last_used: lastUsed2.slice()
+        last_used: lastUsed2.slice(),
+        flagged: flagged2.slice(),
+        paused: paused2,
+        waiting: waiting2,
+        change_threshold: threshold2(),
+        watch_frame: frame2
       }
     };
     return fetch("/v1/macros", { method: "POST", headers: headers(), body: JSON.stringify(body) })
       .then(function (res) { if (!res.ok) throw new Error("Không lưu được hướng 2."); return res.json(); });
   }
-  function flashLanes(codes, done) {
+  function flashLane(code, index, done) {
     for (var i = 0; i < LANE_COUNT; i++) {
       var box = $("lane" + i);
       if (!box) continue;
-      box.textContent = codes[i] || "";
-      box.className = codes[i] ? "line on" : "line";
+      if (i === index) {
+        box.textContent = code;
+        box.className = "line on";
+      } else {
+        box.className = "line";
+      }
     }
     timer2 = window.setTimeout(function () {
-      for (var j = 0; j < LANE_COUNT; j++) {
-        var reset = $("lane" + j);
-        if (reset) reset.className = "line";
-      }
+      var reset = $("lane" + index);
+      if (reset) reset.className = "line";
       done();
     }, 420);
   }
   function oneTurn2() {
-    if (!playing2) return;
-    var codes = takeLanes();
-    if (!codes.length) { playing2 = false; setStatus2("Hướng 2 hết dãy."); showLanes(); return; }
+    if (!playing2 || waiting2) return;
+    var codes = nextLanes();
+    var code = codes[0] || "";
+    if (!code) { playing2 = false; setStatus2("Hướng 2 hết dãy."); showLanes(); return; }
     showLanes();
-    persist2().catch(function () {});
-    var wait = Math.max(800, (parseFloat($("delay2").value || "1") || 1) * 1000);
-    setStatus2("Hướng 2 đã gõ " + codes.join(" · ") + ", Enter đồng loạt.");
-    flashLanes(codes, function () {
+    setStatus2("Hướng 2 đang gõ " + code + " rồi Enter. Theo dõi khung 5 số ≥" + threshold2() + "%.");
+    flashLane(code, 0, function () {
       if (!playing2) return;
-      setStatus2("Hướng 2 Enter đồng loạt xong. Tiếp theo: " + (nextLanes().join(" · ") || "—") + ".");
+      var percent = demoFramePercent();
+      if (forcePause2 || percent >= threshold2()) {
+        pauseAt2(code, forcePause2 ? threshold2() : percent);
+        return;
+      }
+      takeOne2();
+      showLanes();
+      persist2().catch(function () {});
+      setStatus2("Đã Enter " + code + ". Khung đổi " + Math.round(percent) + "% — tiếp 4 làn.");
+      var wait = Math.max(400, (parseFloat($("delay2").value || "1") || 1) * 1000);
       timer2 = window.setTimeout(oneTurn2, wait);
     });
   }
   function startPlay2() {
     if (playing) { setStatus2("Đang chạy hướng 1. Bấm Dừng rồi hãy bắt đầu hướng 2.", "err"); return; }
     if (playing2) return;
+    if (waiting2) { setStatus2("Hướng 2 đang chờ tại " + paused2 + ". Bấm Tiếp tục.", "err"); return; }
     var range = bounds2();
     $("start2").value = range.start;
     $("end2").value = range.end;
@@ -897,19 +989,39 @@
     if (exhausted2) { setStatus2("Hướng 2 đã hết dãy. Đổi số bắt đầu / kết thúc để chạy lại.", "err"); return; }
     playing2 = true;
     var delay = Math.max(0, parseFloat($("delay2").value || "0") || 0);
-    setStatus2("Hướng 2: 4 làn song song, mỗi nhịp Enter đồng loạt.");
+    setStatus2("Hướng 2: gõ từng mã + Enter; khung 5 số đổi ≥" + threshold2() + "% thì dừng.");
     if (timer2) window.clearTimeout(timer2);
     timer2 = window.setTimeout(function () {
       if (!playing2) return;
       oneTurn2();
     }, delay * 1000);
   }
+  function continuePlay2() {
+    if (playing || playing2) { setStatus2("Đang chạy. Bấm Dừng 2 rồi hãy tiếp tục.", "err"); return; }
+    if (!waiting2 && !paused2) { startPlay2(); return; }
+    waiting2 = false;
+    if (paused2 && paused2.length >= 5) currentDigits2 = pad5(paused2.slice(-5));
+    exhausted2 = false;
+    forcePause2 = false;
+    showLanes();
+    persist2().catch(function () {});
+    playing2 = true;
+    setStatus2("Tiếp tục hướng 2 từ " + (paused2 || nextLanes()[0] || "—") + ".");
+    if (timer2) window.clearTimeout(timer2);
+    timer2 = window.setTimeout(function () {
+      if (!playing2) return;
+      oneTurn2();
+    }, 0);
+  }
   function stopPlay2() {
     playing2 = false;
+    forcePause2 = false;
     if (timer2) window.clearTimeout(timer2);
     timer2 = 0;
     persist2().catch(function () {});
-    setStatus2("Đã dừng hướng 2. Tiếp theo: " + (nextLanes().join(" · ") || "—") + ".");
+    setStatus2(waiting2
+      ? ("Đã dừng hướng 2. Chờ Tiếp tục tại " + (paused2 || "—") + ".")
+      : ("Đã dừng hướng 2. Tiếp theo: " + (nextLanes().join(" · ") || "—") + "."));
   }
   function loadSaved2() {
     fetch("/v1/macros", { headers: headers() })
@@ -929,8 +1041,14 @@
         exhausted2 = !!item.numbers.exhausted && parseInt(currentDigits2, 10) > parseInt(pad5(item.numbers.end || currentDigits2), 10);
         if (item.numbers.step) $("step2").value = item.numbers.step;
         lastUsed2 = Array.isArray(item.numbers.last_used) ? item.numbers.last_used.slice() : [];
+        flagged2 = Array.isArray(item.numbers.flagged) ? item.numbers.flagged.slice() : [];
+        paused2 = item.numbers.paused || "";
+        waiting2 = !!item.numbers.waiting && !!paused2;
+        frame2 = item.numbers.watch_frame || item.numbers.frame || null;
+        if (item.numbers.change_threshold) $("threshold2").value = item.numbers.change_threshold;
         showLanes();
-        if (item.numbers.prefix) setStatus2("Đã mở hướng 2 đã lưu. Bấm Bắt đầu 2.");
+        if (waiting2) setStatus2("Đã mở hướng 2. Đang chờ Tiếp tục tại " + paused2 + ".");
+        else if (item.numbers.prefix) setStatus2("Đã mở hướng 2 đã lưu. Bấm Bắt đầu 2.");
       })
       .catch(function () {});
   }
@@ -938,6 +1056,69 @@
   $("btnStart").onclick = startPlay;
   $("btnStart2").onclick = startPlay2;
   $("btnStop2").onclick = stopPlay2;
+  $("btnContinue2").onclick = continuePlay2;
+  $("btnPause2").onclick = function () {
+    var code = nextLanes()[0] || paused2 || lastUsed2[0] || "";
+    if (!code) { setStatus2("Chưa có mã để lưu.", "err"); return; }
+    if (playing2) {
+      forcePause2 = true;
+      setStatus2("Sẽ dừng mã đang gõ khi khung đổi.");
+      return;
+    }
+    pauseAt2(code, threshold2());
+  };
+  $("btnFrame2").onclick = function () {
+    framePick2 = !framePick2;
+    $("lanes2").style.outline = framePick2 ? "2px dashed #ff00aa" : "";
+    setStatus2(framePick2
+      ? "Kéo một khung trên 4 làn để nhớ chỗ 5 số (trên PC kéo trực tiếp màn hình)."
+      : "Đã tắt chọn khung.");
+  };
+  $("lanes2").onmousedown = function (ev) {
+    if (!framePick2) return;
+    var box = $("lanes2").getBoundingClientRect();
+    var x0 = ev.clientX - box.left;
+    var y0 = ev.clientY - box.top;
+    function move(ev2) {
+      var x1 = ev2.clientX - box.left;
+      var y1 = ev2.clientY - box.top;
+      var mark = $("frameMark2");
+      if (!mark) {
+        mark = document.createElement("div");
+        mark.id = "frameMark2";
+        mark.className = "pick";
+        $("lanes2").appendChild(mark);
+      }
+      mark.style.left = Math.min(x0, x1) + "px";
+      mark.style.top = Math.min(y0, y1) + "px";
+      mark.style.width = Math.abs(x1 - x0) + "px";
+      mark.style.height = Math.abs(y1 - y0) + "px";
+    }
+    function up(ev2) {
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+      var x1 = ev2.clientX - box.left;
+      var y1 = ev2.clientY - box.top;
+      var w = Math.abs(x1 - x0);
+      var h = Math.abs(y1 - y0);
+      if (w < 16 || h < 16) { setStatus2("Khung quá nhỏ. Kéo rộng hơn.", "err"); return; }
+      frame2 = {
+        x: Math.round(Math.min(x0, x1)),
+        y: Math.round(Math.min(y0, y1)),
+        w: Math.round(w),
+        h: Math.round(h),
+        sw: Math.round(box.width),
+        sh: Math.round(box.height)
+      };
+      framePick2 = false;
+      $("lanes2").style.outline = "";
+      showFrame2();
+      persist2().catch(function () {});
+      setStatus2("Đã chọn khung 5 số " + frame2.w + "×" + frame2.h + ". Trên PC máy so đúng khung này.");
+    }
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  };
   $("btnStop").onclick = stopPlay;
   $("btnFlag").onclick = flagNow;
   $("btnRecordRecover").onclick = function () {
@@ -1022,6 +1203,8 @@
     if (!playing2) {
       currentDigits2 = range.start;
       exhausted2 = false;
+      waiting2 = false;
+      paused2 = "";
     } else if (parseInt(currentDigits2, 10) < parseInt(range.start, 10)) {
       currentDigits2 = range.start;
     }
