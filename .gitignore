@@ -6,6 +6,7 @@ __pycache__/
 .pytest_cache/
 data/*.db
 data/*.db-*
+data/macros/
 data/posts.txt
 data/metrics/
 logs/

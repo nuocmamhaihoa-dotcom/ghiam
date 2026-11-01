@@ -9,6 +9,8 @@ VPS đóng vai trò **trung tâm**:
 
 PC chỉ dùng CPU/RAM/proxy local để quét; kết quả đẩy về VPS.
 
+Hỗ trợ Ubuntu/Debian (`apt`) và AlmaLinux/RHEL 8+ (`dnf`).
+
 ## Cài trên VPS (đã có sẵn script)
 
 ```bash
