@@ -35,19 +35,25 @@ from pc_macro.script import (
     script_captions,
     steps_to_events,
 )
+from PIL import Image
+
+from pc_macro.paint import paint_centroid, paint_point
 from pc_macro.screen import (
     append_screen_click,
     apply_click_names,
     change_percent,
+    click_from_paint,
     click_landed,
     click_order_cards,
     click_order_labels,
+    click_slots,
     make_grid,
     overlay_banner,
     play_named_clicks,
     sanitize_clicks,
     scale_clicks,
     should_recover,
+    upsert_slot,
 )
 from pc_macro.session import Player, Recorder
 from pc_macro.store import MacroStore
@@ -400,6 +406,38 @@ class PrefixRangeTests(unittest.TestCase):
         self.assertIn("click:11", sent)
         self.assertIn("click:77", sent)
         self.assertLess(sent.index("key:enter"), sent.index("click:11"))
+
+    def test_paint_centroid_and_upsert_keep_step_order(self) -> None:
+        image = Image.new("RGB", (100, 80), (12, 12, 12))
+        for x in range(40, 51):
+            for y in range(20, 31):
+                image.putpixel((x, y), (255, 0, 170))
+        x, y, count = paint_centroid(image)
+        self.assertGreaterEqual(count, 8)
+        self.assertEqual((x, y), (45, 25))
+        self.assertIsNone(paint_centroid(Image.new("RGB", (20, 20), (12, 12, 12))))
+        hit = paint_point(image)
+        self.assertEqual(hit["sw"], 100)
+        self.assertEqual(hit["sh"], 80)
+        painted = click_from_paint(image, name="Nút OK", step=2)
+        self.assertEqual(painted["via"], "paint")
+        self.assertEqual(painted["step"], 2)
+        self.assertEqual(painted["name"], "Nút OK")
+        only_third = upsert_slot([], 2, painted["x"], painted["y"], 100, 80, "Nút OK", via="paint")
+        self.assertEqual(len(only_third), 1)
+        self.assertEqual(only_third[0]["step"], 2)
+        slots = click_slots(only_third)
+        self.assertIsNone(slots[0])
+        self.assertIsNone(slots[1])
+        self.assertEqual(slots[2]["x"], painted["x"])
+        cards = click_order_cards(only_third)
+        self.assertEqual(cards[0]["detail"], "chưa ghi")
+        self.assertIn("bôi màu", cards[2]["detail"])
+        first = upsert_slot(only_third, 0, 10, 12, 100, 80, via="point")
+        self.assertEqual([item["step"] for item in first], [0, 2])
+        named = apply_click_names(first, ["Một", "", "Ba", ""])
+        self.assertEqual(named[0]["name"], "Một")
+        self.assertEqual(named[1]["name"], "Ba")
 
 
 class ScriptStepTests(unittest.TestCase):

@@ -135,8 +135,8 @@ VPS chỉ giữ kịch bản. Ghi phím/chuột và bấm Làm lại phải làm
 2. Mở PowerShell trong thư mục này:
    .\\Cai-dat.ps1
 3. Cửa sổ hiện ra. Nhập 5 ký tự cố định, số bắt đầu và số kết thúc (5 số).
-   Bấm Ghi 4 nút: màn hình phủ lên, bấm 4 chỗ thật, nhập tên từng vị trí, rồi Lưu.
-   Mỗi chỗ nhớ tỷ lệ trên màn hình. Nếu máy không nhận lần bấm, bấm lại đúng tên đó.
+   Từng bước: Bôi màu trên ảnh (hoặc Chụp màn) chỗ cần bấm, hoặc Chọn vị trí trên màn.
+   Máy tìm tâm vùng tô rồi bấm trái đúng chỗ đó. Nhớ tỷ lệ màn hình. Chưa nhận thì bấm lại.
    Bắt đầu: máy gõ mã rồi Enter; đổi ≥ 80% thì lưu số vừa gõ, bấm 4 nút, rồi tăng số tiếp.
 
 Đồng bộ với VPS (sau khi đặt địa chỉ):

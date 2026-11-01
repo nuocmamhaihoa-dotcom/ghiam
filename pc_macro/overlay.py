@@ -6,7 +6,15 @@ from typing import Any, Callable
 
 import tkinter as tk
 
-from pc_macro.screen import RECOVER_CLICKS, append_screen_click, click_order_labels, overlay_banner, sanitize_clicks
+from pc_macro.screen import (
+    RECOVER_CLICKS,
+    append_screen_click,
+    click_order_labels,
+    click_slots,
+    overlay_banner,
+    sanitize_clicks,
+    upsert_slot,
+)
 
 _FILL = "#0b6bcb"
 _EDGE = "#ffffff"
@@ -27,11 +35,13 @@ class ClickOverlay:
         on_cancel: CancelFn,
         clicks: list[dict[str, Any]] | None = None,
         recording: bool = True,
+        step: int | None = None,
     ) -> None:
         self._on_done = on_done
         self._on_cancel = on_cancel
         self._recording = recording
         self._awaiting_save = False
+        self._step = step if step is not None and 0 <= int(step) < RECOVER_CLICKS else None
         self.screen_w = max(1, int(root.winfo_screenwidth()))
         self.screen_h = max(1, int(root.winfo_screenheight()))
         self.clicks = sanitize_clicks(clicks or [])
@@ -50,7 +60,7 @@ class ClickOverlay:
         self.hint.pack(side="left", padx=12, pady=10)
         self.btn_save = tk.Button(
             self.bar,
-            text="Lưu 4 nút",
+            text="Lưu vị trí" if self._step is not None else "Lưu 4 nút",
             command=self._save,
             font=("Segoe UI", 12, "bold"),
             bg="#ffd166",
@@ -96,7 +106,7 @@ class ClickOverlay:
         except tk.TclError:
             pass
         self.win.focus_force()
-        if recording and len(self.clicks) >= RECOVER_CLICKS:
+        if recording and self._step is None and len(self.clicks) >= RECOVER_CLICKS:
             self._recording = False
             self._awaiting_save = True
         self._sync_bar()
@@ -116,15 +126,25 @@ class ClickOverlay:
         y = int(event.y_root)
         if x < 0 or y < 0:
             return
-        self.clicks = append_screen_click(self.clicks, x, y, self.screen_w, self.screen_h)
-        if len(self.clicks) >= RECOVER_CLICKS:
+        if self._step is not None:
+            self.clicks = upsert_slot(self.clicks, self._step, x, y, self.screen_w, self.screen_h, via="point")
             self._recording = False
             self._awaiting_save = True
+        else:
+            self.clicks = append_screen_click(self.clicks, x, y, self.screen_w, self.screen_h)
+            if len(self.clicks) >= RECOVER_CLICKS:
+                self._recording = False
+                self._awaiting_save = True
         self._sync_bar()
         self._redraw()
 
     def _save(self) -> None:
-        if not self._awaiting_save or len(self.clicks) < RECOVER_CLICKS:
+        if not self._awaiting_save:
+            return
+        if self._step is not None:
+            if click_slots(self.clicks)[self._step] is None:
+                return
+        elif len(self.clicks) < RECOVER_CLICKS:
             return
         clicks = list(self.clicks)
         self.close()
@@ -133,7 +153,12 @@ class ClickOverlay:
     def _redo(self) -> None:
         if not self._recording and not self._awaiting_save:
             return
-        self.clicks = []
+        if self._step is not None:
+            slots = click_slots(self.clicks)
+            slots[self._step] = None
+            self.clicks = [item for item in slots if item is not None]
+        else:
+            self.clicks = []
         self._recording = True
         self._awaiting_save = False
         self._sync_bar()
@@ -158,10 +183,15 @@ class ClickOverlay:
     def _sync_bar(self) -> None:
         if self._awaiting_save:
             self.btn_save.configure(state="normal")
-            self.hint.configure(text="Đã chọn 4 nút. Bấm Lưu để giữ, hoặc Ghi lại.")
+            if self._step is not None:
+                self.hint.configure(text=f"Đã chọn nút {self._step + 1}. Bấm Lưu vị trí, hoặc Ghi lại.")
+            else:
+                self.hint.configure(text="Đã chọn 4 nút. Bấm Lưu để giữ, hoặc Ghi lại.")
             return
         self.btn_save.configure(state="disabled")
-        if self._recording:
+        if self._recording and self._step is not None:
+            self.hint.configure(text=f"Bấm trái trên màn hình · nút {self._step + 1}")
+        elif self._recording:
             self.hint.configure(text=f"Bấm trái trên màn hình · nút {len(self.clicks) + 1}/{RECOVER_CLICKS}")
         else:
             self.hint.configure(text="")
@@ -173,6 +203,7 @@ class ClickOverlay:
             len(self.clicks),
             recording=self._recording,
             awaiting_save=self._awaiting_save,
+            step=self._step,
         )
         self.canvas.create_rectangle(0, 0, width, 72, fill="#0b6bcb", outline="")
         self.canvas.create_text(20, 24, text=banner, fill=_TEXT, font=("Segoe UI", 16, "bold"), anchor="w")
@@ -209,8 +240,16 @@ def show_click_overlay(
     on_cancel: CancelFn,
     clicks: list[dict[str, Any]] | None = None,
     recording: bool = True,
+    step: int | None = None,
 ) -> ClickOverlay:
-    return ClickOverlay(root, on_done=on_done, on_cancel=on_cancel, clicks=clicks, recording=recording)
+    return ClickOverlay(
+        root,
+        on_done=on_done,
+        on_cancel=on_cancel,
+        clicks=clicks,
+        recording=recording,
+        step=step,
+    )
 
 
 def preview_labels(clicks: list[dict[str, Any]] | None) -> list[str]:

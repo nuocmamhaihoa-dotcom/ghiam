@@ -7,6 +7,7 @@ from typing import Any
 
 from PIL import Image, ImageGrab
 
+from pc_macro.paint import paint_point
 from pc_macro.script import compile_script
 
 try:
@@ -39,11 +40,11 @@ def normalize_threshold(raw: Any, default: int = DEFAULT_THRESHOLD) -> int:
 
 def click_order_labels(clicks: Any) -> list[str]:
     """Four lines: Nút 1 → … so the order stays obvious."""
-    clean = sanitize_clicks(clicks)
+    slots = click_slots(clicks)
     labels: list[str] = []
     for index in range(RECOVER_CLICKS):
-        if index < len(clean):
-            item = clean[index]
+        item = slots[index]
+        if item is not None:
             labels.append(f"Nút {index + 1}  →  chuột trái  ·  {item['x']} , {item['y']}")
         else:
             labels.append(f"Nút {index + 1}  →  chưa ghi")
@@ -52,11 +53,11 @@ def click_order_labels(clicks: Any) -> list[str]:
 
 def click_order_cards(clicks: Any) -> list[dict[str, str]]:
     """One card per button: big step number plus the saved point."""
-    clean = sanitize_clicks(clicks)
+    slots = click_slots(clicks)
     cards: list[dict[str, str]] = []
     for index in range(RECOVER_CLICKS):
-        if index < len(clean):
-            item = clean[index]
+        item = slots[index]
+        if item is not None:
             cards.append(
                 {
                     "step": str(index + 1),
@@ -90,27 +91,106 @@ def click_name(click: Any, index: int = 0) -> str:
 
 
 def apply_click_names(clicks: Any, names: Any) -> list[dict[str, Any]]:
-    """Write the four typed names onto the saved points."""
-    clean = sanitize_clicks(clicks)
+    """Write the four typed names onto the matching step slots."""
+    slots = click_slots(clicks)
     labels = list(names or [])
-    for index, click in enumerate(clean):
-        if index >= len(labels):
-            break
+    for index, click in enumerate(slots):
+        if click is None or index >= len(labels):
+            continue
         name = normalize_click_name(labels[index])
         if name:
             click["name"] = name
         else:
             click.pop("name", None)
-    return clean
+    return [item for item in slots if item is not None]
 
 
 def append_screen_click(clicks: Any, x: Any, y: Any, sw: Any = 0, sh: Any = 0, name: Any = "") -> list[dict[str, Any]]:
-    """Remember the next left-click in order (max four), with the screen it was on."""
-    return sanitize_clicks([*sanitize_clicks(clicks), {"x": x, "y": y, "sw": sw, "sh": sh, "name": name}])
+    """Remember the next empty slot, with the screen it was on."""
+    slots = click_slots(clicks)
+    for index, slot in enumerate(slots):
+        if slot is None:
+            return upsert_slot(clicks, index, x, y, sw, sh, name, via="point")
+    return [item for item in slots if item is not None]
 
 
-def overlay_banner(count: int, *, recording: bool, total: int = RECOVER_CLICKS, awaiting_save: bool = False) -> str:
+def upsert_slot(
+    clicks: Any,
+    step: Any,
+    x: Any,
+    y: Any,
+    sw: Any = 0,
+    sh: Any = 0,
+    name: Any = "",
+    *,
+    via: str = "",
+) -> list[dict[str, Any]]:
+    """Set one of the four steps without dropping the others."""
+    try:
+        index = int(step)
+    except (TypeError, ValueError):
+        return sanitize_clicks(clicks)
+    if not 0 <= index < RECOVER_CLICKS:
+        return sanitize_clicks(clicks)
+    slots = click_slots(clicks)
+    try:
+        px = int(round(float(x)))
+        py = int(round(float(y)))
+    except (TypeError, ValueError):
+        return [item for item in slots if item is not None]
+    try:
+        screen_w = int(round(float(sw or 0)))
+        screen_h = int(round(float(sh or 0)))
+    except (TypeError, ValueError):
+        screen_w, screen_h = 0, 0
+    slots[index] = _click_record(px, py, screen_w, screen_h, name=name, step=index, via=via)
+    return [item for item in slots if item is not None]
+
+
+def click_slots(clicks: Any) -> list[dict[str, Any] | None]:
+    """Always four slots so painting step 3 first still lands on step 3."""
+    slots: list[dict[str, Any] | None] = [None] * RECOVER_CLICKS
+    sequential: list[dict[str, Any]] = []
+    for item in clicks or []:
+        record = _parse_click(item)
+        if record is None:
+            continue
+        step = record.get("step")
+        if isinstance(step, int) and 0 <= step < RECOVER_CLICKS and slots[step] is None:
+            slots[step] = record
+        else:
+            sequential.append(record)
+    for record in sequential:
+        for index in range(RECOVER_CLICKS):
+            if slots[index] is None:
+                slots[index] = {**record, "step": index}
+                break
+    return slots
+
+
+def click_from_paint(image: Any, name: Any = "", step: Any = None) -> dict[str, Any] | None:
+    """Turn the painted blob into one recover click. The image itself is not stored."""
+    hit = paint_point(image)
+    if hit is None:
+        return None
+    return _click_record(hit["x"], hit["y"], hit["sw"], hit["sh"], name=name, step=step, via="paint")
+
+
+def overlay_banner(
+    count: int,
+    *,
+    recording: bool,
+    total: int = RECOVER_CLICKS,
+    awaiting_save: bool = False,
+    step: int | None = None,
+) -> str:
     """Top bar while the user points at the real screen."""
+    if step is not None:
+        if awaiting_save:
+            return f"Đã chọn nút {step + 1}. Bấm Lưu để giữ vị trí."
+        if recording:
+            return f"Bấm trái nút {step + 1} trên màn hình. Esc hủy."
+        return f"Đã nhớ nút {step + 1}."
     if awaiting_save:
         return "Đã chọn 4 nút. Bấm Lưu để giữ vị trí."
     if recording and 0 <= count < total:
@@ -162,6 +242,8 @@ def scale_clicks(clicks: Any, sw: int, sh: int) -> list[dict[str, Any]]:
                 sh,
                 wait=int(item.get("wait") or 120),
                 name=item.get("name"),
+                step=item.get("step"),
+                via=str(item.get("via") or ""),
             )
         )
     return out
@@ -169,9 +251,10 @@ def scale_clicks(clicks: Any, sw: int, sh: int) -> list[dict[str, Any]]:
 
 def _click_detail(item: dict[str, Any]) -> str:
     ratio = _ratio(item)
+    painted = "  ·  bôi màu" if item.get("via") == "paint" else ""
     if ratio is None:
-        return f"trái  {item['x']} , {item['y']}"
-    return f"trái  {item['x']} , {item['y']}  ·  {round(ratio[0] * 100)}% × {round(ratio[1] * 100)}%"
+        return f"trái  {item['x']} , {item['y']}{painted}"
+    return f"trái  {item['x']} , {item['y']}  ·  {round(ratio[0] * 100)}% × {round(ratio[1] * 100)}%{painted}"
 
 
 def _ratio(item: dict[str, Any]) -> tuple[float, float] | None:
@@ -192,11 +275,30 @@ def _ratio(item: dict[str, Any]) -> tuple[float, float] | None:
     return None
 
 
-def _click_record(x: int, y: int, sw: int, sh: int, *, wait: int = 120, name: Any = "") -> dict[str, Any]:
+def _click_record(
+    x: int,
+    y: int,
+    sw: int,
+    sh: int,
+    *,
+    wait: int = 120,
+    name: Any = "",
+    step: Any = None,
+    via: str = "",
+) -> dict[str, Any]:
     record: dict[str, Any] = {"kind": "click", "x": x, "y": y, "button": "left", "wait": wait}
     label = normalize_click_name(name)
     if label:
         record["name"] = label
+    try:
+        index = int(step) if step is not None and str(step) != "" else -1
+    except (TypeError, ValueError):
+        index = -1
+    if 0 <= index < RECOVER_CLICKS:
+        record["step"] = index
+    mark = str(via or "").strip().lower()
+    if mark in {"paint", "point"}:
+        record["via"] = mark
     if sw > 0 and sh > 0:
         record["sw"] = sw
         record["sh"] = sh
@@ -205,38 +307,46 @@ def _click_record(x: int, y: int, sw: int, sh: int, *, wait: int = 120, name: An
     return record
 
 
+def _parse_click(item: Any) -> dict[str, Any] | None:
+    if not isinstance(item, dict):
+        return None
+    try:
+        x = int(round(float(item.get("x"))))
+        y = int(round(float(item.get("y"))))
+    except (TypeError, ValueError):
+        return None
+    if not (0 <= x <= _MAX_COORD and 0 <= y <= _MAX_COORD):
+        return None
+    try:
+        sw = int(round(float(item.get("sw") or 0)))
+        sh = int(round(float(item.get("sh") or 0)))
+    except (TypeError, ValueError):
+        sw, sh = 0, 0
+    if not (2 <= sw <= _MAX_COORD and 2 <= sh <= _MAX_COORD):
+        sw, sh = 0, 0
+    try:
+        wait = int(item.get("wait") or 120)
+    except (TypeError, ValueError):
+        wait = 120
+    record = _click_record(
+        x,
+        y,
+        sw,
+        sh,
+        wait=max(0, min(2000, wait)),
+        name=item.get("name"),
+        step=item.get("step"),
+        via=str(item.get("via") or ""),
+    )
+    ratio = _ratio(item)
+    if ratio is not None and sw > 0 and sh > 0:
+        record["rx"], record["ry"] = ratio
+    return record
+
+
 def sanitize_clicks(raw: Any) -> list[dict[str, Any]]:
-    """Keep up to four left-click points the user pointed at."""
-    clicks: list[dict[str, Any]] = []
-    for item in raw or []:
-        if not isinstance(item, dict):
-            continue
-        try:
-            x = int(round(float(item.get("x"))))
-            y = int(round(float(item.get("y"))))
-        except (TypeError, ValueError):
-            continue
-        if not (0 <= x <= _MAX_COORD and 0 <= y <= _MAX_COORD):
-            continue
-        try:
-            sw = int(round(float(item.get("sw") or 0)))
-            sh = int(round(float(item.get("sh") or 0)))
-        except (TypeError, ValueError):
-            sw, sh = 0, 0
-        if not (2 <= sw <= _MAX_COORD and 2 <= sh <= _MAX_COORD):
-            sw, sh = 0, 0
-        try:
-            wait = int(item.get("wait") or 120)
-        except (TypeError, ValueError):
-            wait = 120
-        record = _click_record(x, y, sw, sh, wait=max(0, min(2000, wait)), name=item.get("name"))
-        ratio = _ratio(item)
-        if ratio is not None and sw > 0 and sh > 0:
-            record["rx"], record["ry"] = ratio
-        clicks.append(record)
-        if len(clicks) >= RECOVER_CLICKS:
-            break
-    return clicks
+    """Keep up to four left-click points, in step order 1 → 4."""
+    return [item for item in click_slots(raw) if item is not None]
 
 
 def capture_grid() -> Grid | None:

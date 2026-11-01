@@ -127,7 +127,43 @@
       font-size: 0.95rem;
       white-space: nowrap;
     }
+    .mark .pick {
+      flex: 1 1 100%;
+      display: flex;
+      gap: 8px;
+    }
+    .mark .pick button { flex: 1; min-height: 42px; }
     .coords { font-family: ui-monospace, Consolas, monospace; font-size: 0.95rem; }
+    #paintModal {
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      background: #101820;
+      display: flex;
+      flex-direction: column;
+    }
+    #paintModal[hidden] { display: none !important; }
+    .paint-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 10px 12px;
+      background: #0b6bcb;
+      color: #fff;
+    }
+    .paint-bar p { flex: 1 1 100%; margin: 0; font-weight: 700; }
+    .paint-bar button, .paint-bar label.btn {
+      min-height: 44px;
+      background: #e8edf2;
+      color: #17202a;
+    }
+    .paint-bar button.go { background: #ffd166; color: #102030; }
+    #paintCanvas {
+      flex: 1;
+      width: 100%;
+      background: #101820;
+      touch-action: none;
+    }
     .flags { list-style: none; margin: 0; padding: 0; }
     .flags li {
       padding: 8px 0;
@@ -188,7 +224,7 @@
 
   <section class="card">
     <label>4&nbsp;nút&nbsp;chuột&nbsp;trái</label>
-    <p class="hint">Trên&nbsp;máy&nbsp;tính:&nbsp;bấm&nbsp;<b>Ghi&nbsp;4&nbsp;nút</b>,&nbsp;nhập&nbsp;tên&nbsp;từng&nbsp;vị&nbsp;trí,&nbsp;rồi&nbsp;<b>Lưu</b>.&nbsp;Máy&nbsp;không&nbsp;nhận&nbsp;lần&nbsp;bấm&nbsp;thì&nbsp;bấm&nbsp;lại&nbsp;đúng&nbsp;tên&nbsp;đó.</p>
+    <p class="hint">Từng&nbsp;bước:&nbsp;nhập&nbsp;tên,&nbsp;bấm&nbsp;<b>Thêm&nbsp;ảnh</b>&nbsp;rồi&nbsp;<b>Bôi&nbsp;màu</b>&nbsp;chỗ&nbsp;cần&nbsp;ấn,&nbsp;hoặc&nbsp;<b>Chọn&nbsp;vị&nbsp;trí</b>&nbsp;trên&nbsp;ảnh.&nbsp;Máy&nbsp;bấm&nbsp;trái&nbsp;đúng&nbsp;chỗ&nbsp;tô.</p>
     <p class="order" id="orderStrip">1&nbsp;→&nbsp;2&nbsp;→&nbsp;3&nbsp;→&nbsp;4</p>
     <p class="hint coords" id="recoverLabel">Thứ&nbsp;tự:&nbsp;chưa&nbsp;ghi</p>
     <div class="marks" id="marks"></div>
@@ -222,6 +258,16 @@
     </div>
   </section>
 </main>
+<div id="paintModal" hidden>
+  <div class="paint-bar">
+    <p id="paintHint">Thêm&nbsp;ảnh,&nbsp;bôi&nbsp;màu&nbsp;hồng&nbsp;chỗ&nbsp;cần&nbsp;bấm,&nbsp;rồi&nbsp;Lưu&nbsp;vị&nbsp;trí.</p>
+    <label class="btn">Thêm&nbsp;ảnh<input id="paintFile" type="file" accept="image/*" hidden /></label>
+    <button type="button" id="paintClear">Xóa&nbsp;màu</button>
+    <button type="button" class="go" id="paintSave">Lưu&nbsp;vị&nbsp;trí</button>
+    <button type="button" id="paintCancel">Hủy</button>
+  </div>
+  <canvas id="paintCanvas"></canvas>
+</div>
 <script>
   var serverToken = __CONTROL_TOKEN__;
   var SLUG = "day-so-enter";
@@ -230,9 +276,14 @@
   var lastUsed = "";
   var currentDigits = "00001";
   var exhausted = false;
-  var recoverClicks = [];
+  var recoverClicks = [null, null, null, null];
   var recordingRecover = false;
   var forceRecover = false;
+  var paintStep = -1;
+  var paintMode = "paint";
+  var paintImage = null;
+  var paintDirty = false;
+  var PAINT = { r: 255, g: 0, b: 170 };
 
   function $(id) { return document.getElementById(id); }
   function headers() {
@@ -316,7 +367,7 @@
         flagged: flags(),
         last_used: lastUsed,
         items: [],
-        recover_clicks: recoverClicks.slice(0, 4),
+        recover_clicks: filledClicks(),
         change_threshold: threshold()
       }
     };
@@ -382,14 +433,125 @@
     if (n > 100) n = 100;
     return n;
   }
+  function emptySlots() { return [null, null, null, null]; }
+  function filledClicks() {
+    var out = [];
+    for (var i = 0; i < 4; i++) if (recoverClicks[i]) out.push(recoverClicks[i]);
+    return out;
+  }
+  function filledCount() { return filledClicks().length; }
+  function upsertClick(step, point) {
+    var name = recoverClicks[step] && recoverClicks[step].name ? recoverClicks[step].name : "";
+    recoverClicks[step] = {
+      x: point.x,
+      y: point.y,
+      sw: point.sw,
+      sh: point.sh,
+      rx: point.rx,
+      ry: point.ry,
+      name: name,
+      step: step,
+      via: point.via || ""
+    };
+  }
+  function isPaint(r, g, b) {
+    return Math.abs(r - PAINT.r) + Math.abs(g - PAINT.g) + Math.abs(b - PAINT.b) <= 70;
+  }
+  function paintCentroid(canvas) {
+    var ctx = canvas.getContext("2d");
+    var data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    var sumX = 0, sumY = 0, n = 0, w = canvas.width;
+    for (var i = 0; i < data.length; i += 4) {
+      if (!isPaint(data[i], data[i + 1], data[i + 2])) continue;
+      var p = i / 4;
+      sumX += p % w;
+      sumY += Math.floor(p / w);
+      n += 1;
+    }
+    if (n < 8) return null;
+    return { x: Math.round(sumX / n), y: Math.round(sumY / n), n: n };
+  }
+  function openPaint(step, mode) {
+    paintStep = step;
+    paintMode = mode;
+    paintDirty = false;
+    $("paintHint").textContent = mode === "pick"
+      ? ("Thêm ảnh, rồi ấn đúng chỗ nút " + (step + 1) + ".")
+      : ("Thêm ảnh, bôi màu hồng chỗ nút " + (step + 1) + ", rồi Lưu vị trí.");
+    $("paintModal").hidden = false;
+    if (paintImage) drawPaintImage();
+  }
+  function closePaint() {
+    $("paintModal").hidden = true;
+    paintStep = -1;
+  }
+  function drawPaintImage() {
+    var canvas = $("paintCanvas");
+    if (!paintImage) return;
+    var maxW = Math.max(320, Math.min(paintImage.naturalWidth || paintImage.width, 1600));
+    var scale = maxW / (paintImage.naturalWidth || paintImage.width);
+    canvas.width = Math.round((paintImage.naturalWidth || paintImage.width) * scale);
+    canvas.height = Math.round((paintImage.naturalHeight || paintImage.height) * scale);
+    var ctx = canvas.getContext("2d");
+    ctx.drawImage(paintImage, 0, 0, canvas.width, canvas.height);
+    paintDirty = false;
+  }
+  function canvasPoint(ev) {
+    var canvas = $("paintCanvas");
+    var rect = canvas.getBoundingClientRect();
+    var src = ev.touches && ev.touches[0] ? ev.touches[0] : ev;
+    var x = (src.clientX - rect.left) * (canvas.width / Math.max(1, rect.width));
+    var y = (src.clientY - rect.top) * (canvas.height / Math.max(1, rect.height));
+    return { x: Math.round(x), y: Math.round(y) };
+  }
+  function strokePaint(ev) {
+    if (paintStep < 0 || !paintImage) return;
+    ev.preventDefault();
+    var canvas = $("paintCanvas");
+    var ctx = canvas.getContext("2d");
+    var point = canvasPoint(ev);
+    if (paintMode === "pick") {
+      ctx.fillStyle = "#ff00aa";
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 10, 0, Math.PI * 2);
+      ctx.fill();
+      paintDirty = true;
+      savePaintPoint({ x: point.x, y: point.y, sw: canvas.width, sh: canvas.height, via: "point" });
+      return;
+    }
+    ctx.fillStyle = "#ff00aa";
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 16, 0, Math.PI * 2);
+    ctx.fill();
+    paintDirty = true;
+  }
+  function savePaintPoint(point) {
+    var step = paintStep;
+    if (step < 0) return;
+    var sw = point.sw || $("paintCanvas").width;
+    var sh = point.sh || $("paintCanvas").height;
+    if (sw < 2 || sh < 2) return;
+    upsertClick(step, {
+      x: point.x,
+      y: point.y,
+      sw: sw,
+      sh: sh,
+      rx: point.x / sw,
+      ry: point.y / sh,
+      via: point.via || "paint"
+    });
+    closePaint();
+    renderRecover();
+    persist().catch(function () {});
+    setStatus("Đã nhớ nút " + (step + 1) + " tại chỗ bôi màu. Máy bấm trái đúng chỗ đó.", "ok");
+  }
   function renderRecover() {
     var box = $("marks");
     box.innerHTML = "";
     for (var index = 0; index < 4; index++) {
       var click = recoverClicks[index];
       var card = document.createElement("div");
-      var waiting = recordingRecover && index === recoverClicks.length;
-      card.className = "mark" + (click ? "" : " empty") + (waiting ? " next" : "");
+      card.className = "mark" + (click ? "" : " empty");
       card.id = "mark" + index;
       var title = document.createElement("b");
       title.textContent = String(index + 1);
@@ -405,24 +567,46 @@
         recoverClicks[at].name = this.value.replace(/\s+/g, " ").slice(0, 40);
       };
       var detail = document.createElement("span");
-      if (!click) {
+      if (!click || click.x == null || (click.x === 0 && click.y === 0 && !click.sw)) {
         detail.innerHTML = "chưa&nbsp;ghi";
       } else if (click.rx != null && click.ry != null) {
-        detail.textContent = "trái " + click.x + " , " + click.y + " · " + Math.round(click.rx * 100) + "% × " + Math.round(click.ry * 100) + "%";
+        detail.textContent = "trái " + click.x + " , " + click.y + " · " + Math.round(click.rx * 100) + "% × " + Math.round(click.ry * 100) + "%" + (click.via === "paint" ? " · bôi màu" : "");
       } else {
         detail.textContent = "trái " + click.x + " , " + click.y;
       }
+      var pick = document.createElement("div");
+      pick.className = "pick";
+      var paintBtn = document.createElement("button");
+      paintBtn.type = "button";
+      paintBtn.innerHTML = "Bôi&nbsp;màu";
+      paintBtn.setAttribute("data-step", String(index));
+      paintBtn.onclick = function (ev) {
+        ev.stopPropagation();
+        openPaint(parseInt(this.getAttribute("data-step"), 10), "paint");
+      };
+      var chooseBtn = document.createElement("button");
+      chooseBtn.type = "button";
+      chooseBtn.innerHTML = "Chọn&nbsp;vị&nbsp;trí";
+      chooseBtn.setAttribute("data-step", String(index));
+      chooseBtn.onclick = function (ev) {
+        ev.stopPropagation();
+        openPaint(parseInt(this.getAttribute("data-step"), 10), "pick");
+      };
+      pick.appendChild(paintBtn);
+      pick.appendChild(chooseBtn);
       card.appendChild(title);
       card.appendChild(name);
       card.appendChild(detail);
+      card.appendChild(pick);
       box.appendChild(card);
     }
     $("orderStrip").textContent = "1 → 2 → 3 → 4";
-    if (!recoverClicks.length) {
+    if (!filledCount()) {
       $("recoverLabel").textContent = "Thứ tự: chưa ghi";
       return;
     }
     $("recoverLabel").textContent = recoverClicks.map(function (click, index) {
+      if (!click || click.x == null) return "Nút " + (index + 1) + " → chưa ghi";
       var extra = (click.rx != null) ? (" · " + Math.round(click.rx * 100) + "%") : "";
       return "Nút " + (index + 1) + " → " + click.x + " , " + click.y + extra;
     }).join("   |   ");
@@ -437,7 +621,7 @@
     forceRecover = false;
     addFlag(value);
     persist().catch(function () {});
-    if (recoverClicks.length < 4) {
+    if (filledCount() < 4) {
       setStatus("Đã lưu " + value + ". Chưa đủ 4 nút — tiếp tục gõ số.", "ok");
       done();
       return;
@@ -447,7 +631,7 @@
   }
   function flashDots(index, done, retry) {
     if (!playing) { done(); return; }
-    if (index >= recoverClicks.length) {
+    if (index >= 4) {
       renderRecover();
       done();
       return;
@@ -491,9 +675,15 @@
         exhausted = !!item.numbers.exhausted && parseInt(currentDigits, 10) >= parseInt(pad5(item.numbers.end || currentDigits), 10);
         if (item.numbers.step) $("step").value = item.numbers.step;
         if (item.numbers.change_threshold) $("threshold").value = item.numbers.change_threshold;
-        recoverClicks = (item.numbers.recover_clicks || []).map(function (click) {
-          return { x: click.x, y: click.y, sw: click.sw, sh: click.sh, rx: click.rx, ry: click.ry, name: click.name || "" };
-        }).slice(0, 4);
+        recoverClicks = emptySlots();
+        (item.numbers.recover_clicks || []).forEach(function (click, index) {
+          var step = (click.step >= 0 && click.step < 4) ? click.step : index;
+          if (step >= 4) return;
+          recoverClicks[step] = {
+            x: click.x, y: click.y, sw: click.sw, sh: click.sh,
+            rx: click.rx, ry: click.ry, name: click.name || "", step: step, via: click.via || ""
+          };
+        });
         renderFlags(item.numbers.flagged || []);
         renderRecover();
         showCurrent();
@@ -508,41 +698,57 @@
   $("btnStop").onclick = stopPlay;
   $("btnFlag").onclick = flagNow;
   $("btnRecordRecover").onclick = function () {
-    recoverClicks = [];
-    recordingRecover = true;
+    recordingRecover = false;
     renderRecover();
-    setStatus("Trên máy tính: Ghi 4 nút, bấm 4 chỗ trên màn hình, rồi Lưu 4 nút. Ở đây bấm 4 thẻ theo thứ tự.");
+    setStatus("Từng bước: Thêm ảnh, Bôi màu chỗ cần bấm, hoặc Chọn vị trí trên ảnh, rồi Lưu vị trí.");
   };
   $("btnSaveRecover").onclick = function () {
-    if (recoverClicks.length < 4) {
-      setStatus("Chưa đủ 4 nút. Trên PC hãy Ghi 4 nút trên màn hình rồi Lưu.", "err");
+    if (filledCount() < 4) {
+      setStatus("Chưa đủ 4 nút. Bôi màu hoặc chọn vị trí từng bước trên ảnh, rồi Lưu.", "err");
       return;
     }
-    recordingRecover = false;
     persist().then(function () {
-      setStatus("Đã lưu 4 nút. Trên PC máy sẽ bấm theo tỷ lệ khi đổi cỡ màn.", "ok");
+      setStatus("Đã lưu 4 nút. Trên PC máy bấm trái đúng chỗ bôi màu, theo tỷ lệ màn hình.", "ok");
     }).catch(function (err) { setStatus(err.message, "err"); });
   };
   $("btnClearRecover").onclick = function () {
-    recoverClicks = [];
+    recoverClicks = emptySlots();
     recordingRecover = false;
     renderRecover();
     persist().catch(function () {});
     setStatus("Đã xóa 4 nút.");
   };
-  $("marks").onclick = function (ev) {
-    if (ev.target && ev.target.tagName === "INPUT") return;
-    if (!recordingRecover && recoverClicks.length >= 4) return;
-    if (!recordingRecover) recordingRecover = true;
-    recoverClicks.push({ x: (recoverClicks.length + 1) * 100, y: 100, name: "" });
-    if (recoverClicks.length >= 4) {
-      recordingRecover = false;
-      setStatus("Đã chọn 4 thẻ. Bấm Lưu 4 nút. Vị trí thật phải Ghi trên màn hình máy tính.", "ok");
-    } else {
-      setStatus("Đã chọn nút " + recoverClicks.length + "/4. Chọn đủ rồi Lưu.");
-    }
-    renderRecover();
+  $("paintFile").onchange = function () {
+    var file = this.files && this.files[0];
+    this.value = "";
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      var img = new Image();
+      img.onload = function () {
+        paintImage = img;
+        drawPaintImage();
+        $("paintHint").textContent = paintMode === "pick"
+          ? "Ấn đúng chỗ nút trên ảnh."
+          : "Bôi màu hồng chỗ cần bấm, rồi Lưu vị trí.";
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
   };
+  $("paintClear").onclick = function () { drawPaintImage(); };
+  $("paintCancel").onclick = closePaint;
+  $("paintSave").onclick = function () {
+    if (!paintImage) { setStatus("Thêm ảnh trước khi lưu vị trí.", "err"); return; }
+    if (paintMode === "pick") { setStatus("Ấn vào chỗ cần bấm trên ảnh.", "err"); return; }
+    var hit = paintCentroid($("paintCanvas"));
+    if (!hit) { setStatus("Bôi màu hồng lên chỗ cần bấm, rồi Lưu vị trí.", "err"); return; }
+    savePaintPoint({ x: hit.x, y: hit.y, sw: $("paintCanvas").width, sh: $("paintCanvas").height, via: "paint" });
+  };
+  $("paintCanvas").onmousedown = strokePaint;
+  $("paintCanvas").onmousemove = function (ev) { if (ev.buttons) strokePaint(ev); };
+  $("paintCanvas").ontouchstart = strokePaint;
+  $("paintCanvas").ontouchmove = strokePaint;
   $("btnSave").onclick = function () {
     if (prefix().length !== 5) { setStatus("Nhập đủ 5 ký tự cố định rồi lưu.", "err"); return; }
     persist().then(function () { setStatus("Đã lưu dãy và các số lúc giao diện đổi.", "ok"); showCurrent(); })

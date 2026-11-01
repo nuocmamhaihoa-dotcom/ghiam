@@ -12,6 +12,7 @@ from pc_macro.desktop import Desktop, available, install_hint
 from pc_macro.hub import HubError, configured, describe, pull, push
 from pc_macro.numbers import NumberQueue, make_code, normalize_digits, normalize_prefix
 from pc_macro.overlay import ClickOverlay, show_click_overlay
+from pc_macro.painter import PaintPicker, show_paint_picker
 from pc_macro.screen import (
     RECOVER_CLICKS,
     append_screen_click,
@@ -43,8 +44,8 @@ class App:
         self.store = MacroStore()
         self.root = tk.Tk()
         self.root.title("Gõ số rồi Enter")
-        self.root.geometry("430x940")
-        self.root.minsize(400, 820)
+        self.root.geometry("430x1080")
+        self.root.minsize(400, 900)
         self.root.attributes("-topmost", True)
         self.status = tk.StringVar(value="Nhập 5 ký tự cố định, số bắt đầu / kết thúc, rồi ghi 4 nút nếu cần.")
         self.current_label = tk.StringVar(value="Sẽ gõ: —")
@@ -68,6 +69,7 @@ class App:
         self._before_grid = None
         self._capture_warned = False
         self._overlay: ClickOverlay | None = None
+        self._painter: PaintPicker | None = None
         self._build()
         self._load_or_empty()
         self.prefix.trace_add("write", self._on_fields)
@@ -123,9 +125,9 @@ class App:
         ttk.Button(extra, text="Lên VPS", command=self.push_hub).pack(side="left", padx=2)
         ttk.Button(extra, text="Lấy VPS", command=self.pull_hub).pack(side="left", padx=2)
 
-        ttk.Label(self.root, text="4 nút chuột trái — nhập tên vị trí, máy bấm lại nếu chưa nhận").pack(anchor="w", padx=12, pady=(8, 2))
+        ttk.Label(self.root, text="4 nút chuột trái — tên, chọn vị trí hoặc bôi màu trên ảnh").pack(anchor="w", padx=12, pady=(8, 2))
         self._name_vars: list[tk.StringVar] = []
-        self._mark_cards: list[tuple[tk.Frame, tk.Label, tk.Label]] = []
+        self._mark_cards: list[tuple[tk.Frame, tk.Label, tk.Label, tk.Frame]] = []
         self._loading_names = False
         for index in range(RECOVER_CLICKS):
             card = tk.Frame(self.root, bd=1, relief="solid", bg="#f3f8fd")
@@ -137,10 +139,14 @@ class App:
             name = tk.StringVar()
             ttk.Entry(head, textvariable=name).pack(side="left", fill="x", expand=True, padx=4, pady=4)
             detail = tk.Label(card, text="chưa ghi", font=("Segoe UI", 10), bg="#f3f8fd", anchor="w")
-            detail.pack(fill="x", padx=8, pady=(0, 6))
+            detail.pack(fill="x", padx=8)
+            actions = tk.Frame(card, bg="#f3f8fd")
+            actions.pack(fill="x", padx=8, pady=(2, 6))
+            ttk.Button(actions, text="Bôi màu", command=lambda at=index: self.paint_step(at)).pack(side="left", padx=2)
+            ttk.Button(actions, text="Chọn vị trí", command=lambda at=index: self.pick_step(at)).pack(side="left", padx=2)
             name.trace_add("write", self._on_click_name)
             self._name_vars.append(name)
-            self._mark_cards.append((card, num, detail))
+            self._mark_cards.append((card, num, detail, actions))
         marks = ttk.Frame(self.root)
         marks.pack(fill="x", **pad)
         ttk.Button(marks, text="Lưu 4 nút", command=self.save_recover).pack(side="left", padx=2)
@@ -150,7 +156,7 @@ class App:
         ttk.Label(self.root, text="Số lúc giao diện đổi ≥ ngưỡng — F9 cũng lưu số vừa Enter.").pack(anchor="w", padx=12, pady=(8, 2))
         self.flag_box = tk.Listbox(self.root, height=4, font=("Segoe UI", 12))
         self.flag_box.pack(fill="both", expand=True, padx=12, pady=4)
-        ttk.Label(self.root, text="F8 dừng. Ghi 4 nút trên màn, đặt tên, Lưu. Chưa nhận thì bấm lại đúng tên.").pack(anchor="w", padx=12, pady=(0, 8))
+        ttk.Label(self.root, text="F8 dừng. Từng bước: Bôi màu trên ảnh hoặc Chọn vị trí trên màn, rồi Lưu.").pack(anchor="w", padx=12, pady=(0, 8))
 
     def start_record(self) -> None:
         if self.recorder.on or self._playing() or self._record_recover:
@@ -172,6 +178,46 @@ class App:
                 on_done=self._overlay_done,
                 on_cancel=self._overlay_cancel,
                 recording=True,
+            )
+        except tk.TclError:
+            self._record_recover = False
+            self.root.deiconify()
+            self.status.set("Không mở được lớp phủ màn hình.")
+
+    def paint_step(self, index: int) -> None:
+        if self._busy() or not 0 <= index < RECOVER_CLICKS:
+            return
+        self.status.set(f"Bôi màu hồng lên nút {index + 1} trên ảnh, rồi Lưu vị trí.")
+        self.root.withdraw()
+        try:
+            self._painter = show_paint_picker(
+                self.root,
+                step=index,
+                clicks=self.queue.recover_clicks,
+                name=normalize_click_name(self._name_vars[index].get()),
+                on_done=self._paint_done,
+                on_cancel=self._paint_cancel,
+            )
+        except tk.TclError:
+            self._painter = None
+            self.root.deiconify()
+            self.status.set("Không mở được cửa sổ bôi màu.")
+
+    def pick_step(self, index: int) -> None:
+        if self._busy() or not 0 <= index < RECOVER_CLICKS:
+            return
+        self._record_recover = True
+        self._recover_draft = list(self.queue.recover_clicks)
+        self.status.set(f"Bấm trái trên màn hình cho nút {index + 1}, rồi Lưu vị trí.")
+        self.root.withdraw()
+        try:
+            self._overlay = show_click_overlay(
+                self.root,
+                on_done=self._overlay_done,
+                on_cancel=self._overlay_cancel,
+                clicks=self.queue.recover_clicks,
+                recording=True,
+                step=index,
             )
         except tk.TclError:
             self._record_recover = False
@@ -243,6 +289,8 @@ class App:
             self.player.cancel()
         if self._record_recover or self._overlay is not None:
             self._finish_recover(keep=False)
+        if self._painter is not None:
+            self._close_painter()
         if not self.recorder.on:
             return
         recorded = self.recorder.stop()
@@ -358,6 +406,8 @@ class App:
                 self.player.cancel()
             if self._record_recover:
                 self.root.after(0, lambda: self._finish_recover(keep=False))
+            if self._painter is not None:
+                self.root.after(0, self._paint_cancel)
             if self.recorder.on:
                 recorded = self.recorder.stop()
                 self.root.after(0, lambda ev=recorded: self._after_record(ev))
@@ -422,17 +472,49 @@ class App:
         except tk.TclError:
             pass
 
+    def _paint_done(self, clicks: list[dict[str, Any]]) -> None:
+        self._painter = None
+        self._recover_draft = sanitize_clicks(clicks)
+        self._finish_recover(keep=True)
+        self._deiconify()
+
+    def _paint_cancel(self) -> None:
+        self._painter = None
+        self._deiconify()
+        self.status.set("Đã hủy bôi màu.")
+
+    def _deiconify(self) -> None:
+        try:
+            if str(self.root.state()) == "withdrawn":
+                self.root.deiconify()
+                self.root.attributes("-topmost", True)
+        except tk.TclError:
+            pass
+
+    def _close_painter(self) -> None:
+        painter = self._painter
+        self._painter = None
+        if painter is not None:
+            try:
+                painter.close()
+            except tk.TclError:
+                pass
+        self._deiconify()
+
     def _finish_recover(self, *, keep: bool) -> None:
         self._record_recover = False
         self._close_overlay()
-        if keep and len(self._recover_draft) >= RECOVER_CLICKS:
-            self.queue.recover_clicks = self._named_clicks(self._recover_draft)
+        if keep:
+            clicks = self._named_clicks(self._recover_draft)
+            self.queue.recover_clicks = clicks
             self._persist(silent=True)
-            self.status.set("Đã lưu 4 nút. Nhập tên từng vị trí — máy bấm lại nếu chưa nhận.")
-        elif keep:
-            self.status.set("Chưa đủ 4 nút. Bấm Ghi 4 nút rồi bấm 4 chỗ trên màn hình.")
+            filled = len(sanitize_clicks(clicks))
+            if filled >= RECOVER_CLICKS:
+                self.status.set("Đã lưu 4 nút. Máy bấm trái đúng chỗ bôi màu / chọn vị trí.")
+            else:
+                self.status.set(f"Đã ghi {filled}/4. Bôi màu hoặc chọn vị trí bước còn thiếu, rồi Lưu.")
         else:
-            self.status.set("Đã hủy ghi 4 nút.")
+            self.status.set("Đã hủy ghi vị trí.")
         self._recover_draft = []
         self._refresh_recover()
 
@@ -503,7 +585,7 @@ class App:
                 if var.get() != name:
                     var.set(name)
             self._loading_names = False
-        for index, (card, num, detail) in enumerate(self._mark_cards):
+        for index, (card, num, detail, actions) in enumerate(self._mark_cards):
             item = cards[index]
             detail.configure(text=item["detail"])
             empty = bool(item["empty"])
@@ -512,13 +594,14 @@ class App:
             card.configure(bg=bg)
             num.configure(fg=fg, bg=bg)
             detail.configure(bg=bg)
+            actions.configure(bg=bg)
         done = sum(1 for item in sanitize_clicks(clicks))
         if done >= RECOVER_CLICKS:
-            self.recover_label.set("Đã chọn 4 nút. Đặt tên từng vị trí. Chưa nhận lệnh thì máy bấm lại đúng tên.")
+            self.recover_label.set("Đã chọn 4 nút. Bôi màu hoặc chọn vị trí từng bước. Chưa nhận thì bấm lại đúng tên.")
         elif done:
-            self.recover_label.set(f"Đã ghi {done}/4. Bấm Ghi 4 nút, nhập tên, rồi Lưu.")
+            self.recover_label.set(f"Đã ghi {done}/4. Bôi màu / chọn vị trí bước còn thiếu, rồi Lưu.")
         else:
-            self.recover_label.set("Chưa ghi. Bấm Ghi 4 nút trên màn, nhập tên vị trí, rồi Lưu.")
+            self.recover_label.set("Chưa ghi. Từng bước: Bôi màu trên ảnh hoặc Chọn vị trí trên màn.")
 
     def _on_fields(self, *_args: Any) -> None:
         cleaned = normalize_prefix(self.prefix.get())
@@ -654,11 +737,12 @@ class App:
         return self._play_thread is not None and self._play_thread.is_alive()
 
     def _busy(self) -> bool:
-        return self.recorder.on or self._playing() or self._record_recover
+        return self.recorder.on or self._playing() or self._record_recover or self._painter is not None
 
     def _close(self) -> None:
         self.stop_all()
         self._close_overlay()
+        self._close_painter()
         self._persist(silent=True)
         self.desktop.stop()
         self.root.destroy()
