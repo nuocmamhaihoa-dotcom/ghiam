@@ -317,8 +317,10 @@ class FourLaneQueue:
         last_used: Any = None,
         flagged: list[str] | None = None,
         paused: str = "",
+        paused_codes: Any = None,
         waiting: bool = False,
         watch_frame: Any = None,
+        lane_clicks: Any = None,
         change_threshold: int = LANE_PAUSE_THRESHOLD,
     ) -> None:
         self.prefix = normalize_prefix(prefix)
@@ -340,9 +342,11 @@ class FourLaneQueue:
         self.current = now
         self.last_used = _clean_codes(last_used if isinstance(last_used, (list, tuple)) else [last_used] if last_used else [])
         self.flagged = _clean_codes(flagged)
-        self.paused = _clean_code(paused)
-        self.waiting = bool(waiting) and bool(self.paused)
+        self.paused_codes = _clean_codes(paused_codes if paused_codes is not None else ([paused] if paused else []))
+        self.paused = self.paused_codes[0] if self.paused_codes else _clean_code(paused)
+        self.waiting = bool(waiting) and bool(self.paused_codes or self.paused)
         self.watch_frame = sanitize_frame(watch_frame)
+        self.lane_clicks = sanitize_clicks(lane_clicks)
         self.change_threshold = normalize_threshold(change_threshold, LANE_PAUSE_THRESHOLD)
         self.exhausted = False
         if int(self.current) > int(self.end):
@@ -363,8 +367,10 @@ class FourLaneQueue:
             last_used=data.get("last_used") or data.get("last_used_lanes") or [],
             flagged=data.get("flagged") or [],
             paused=str(data.get("paused") or ""),
+            paused_codes=data.get("paused_codes") or data.get("paused_lanes") or [],
             waiting=bool(data.get("waiting")),
             watch_frame=data.get("watch_frame") or data.get("frame"),
+            lane_clicks=data.get("lane_clicks") or data.get("field_clicks") or [],
             change_threshold=data.get("change_threshold") if data.get("change_threshold") is not None else LANE_PAUSE_THRESHOLD,
         )
 
@@ -381,7 +387,9 @@ class FourLaneQueue:
             "last_used": list(self.last_used),
             "flagged": list(self.flagged),
             "paused": self.paused,
+            "paused_codes": list(self.paused_codes),
             "waiting": self.waiting,
+            "lane_clicks": list(self.lane_clicks),
             "change_threshold": self.change_threshold,
         }
         if self.watch_frame is not None:
@@ -450,23 +458,31 @@ class FourLaneQueue:
 
     def pause_at(self, value: str | None = None) -> str | None:
         """Stop this sequence on `value` and wait for Continue."""
-        chosen = self.flag(value)
-        if not chosen:
-            return None
-        digits = chosen[-DIGIT_LEN:] if len(chosen) >= DIGIT_LEN else chosen
-        self.paused = chosen
+        saved = self.pause_batch([value] if value else [])
+        return saved[0] if saved else None
+
+    def pause_batch(self, codes: Any) -> list[str]:
+        """Stop all four codes from the burst that changed the frame."""
+        items = _clean_codes(codes if isinstance(codes, (list, tuple)) else [codes] if codes else self.peek())
+        if not items:
+            return []
+        for code in items:
+            self.flag(code)
+        self.paused_codes = list(items)
+        self.paused = items[0]
         self.waiting = True
-        self.current = normalize_digits(digits)
+        self.current = normalize_digits(items[0][-DIGIT_LEN:] if len(items[0]) >= DIGIT_LEN else items[0])
         self.exhausted = False
-        return chosen
+        return list(items)
 
     def resume(self) -> str:
-        """Continue from the paused full code. Other lanes stay on their next numbers."""
+        """Continue from the paused burst so all four processes run again together."""
         self.waiting = False
-        if self.paused:
-            self.current = normalize_digits(self.paused[-DIGIT_LEN:])
+        first = (self.paused_codes[0] if self.paused_codes else self.paused) or ""
+        if first:
+            self.current = normalize_digits(first[-DIGIT_LEN:] if len(first) >= DIGIT_LEN else first)
             self.exhausted = False
-        return self.paused or self.peek_one()
+        return " · ".join(self.paused_codes) if self.paused_codes else (self.paused or self.peek_one())
 
 
 def _clean_code(raw: Any) -> str:

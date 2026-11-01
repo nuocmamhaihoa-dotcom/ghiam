@@ -33,7 +33,9 @@ from pc_macro.script import (
     move_step,
     new_step,
     enter_key_steps,
+    four_lane_enter_burst_steps,
     four_lane_enter_steps,
+    four_lane_type_steps,
     number_enter_steps,
     number_type_steps,
     replace_step,
@@ -406,9 +408,35 @@ class FourLaneTests(unittest.TestCase):
         result = player.play([], times=0, gap_ms=0, prepare=prepare)
         self.assertEqual(result["loops"], 1)
         self.assertEqual(sent.count("enter"), 4)
-        self.assertEqual(sent[:11], ["S", "P", "X", "A", "B", "0", "0", "0", "0", "1", "enter"])
-        self.assertEqual(sent[11:22], ["S", "P", "X", "A", "B", "0", "0", "0", "0", "2", "enter"])
+        typed = [key for key in sent if key != "enter"]
+        self.assertEqual("".join(typed), "SPXAB00001SPXAB00002SPXAB00003SPXAB00004")
+        self.assertEqual(sent[-4:], ["enter", "enter", "enter", "enter"])
         self.assertTrue(queue.exhausted)
+
+    def test_pause_batch_saves_all_four_codes_then_continue(self) -> None:
+        clicks = [{"x": 10, "y": 20}, {"x": 30, "y": 40}, {"x": 50, "y": 60}, {"x": 70, "y": 80}]
+        queue = FourLaneQueue(prefix="SPXAB", start="00001", end="00020", step=1, lane_clicks=clicks)
+        codes = queue.peek()
+        self.assertEqual(codes, ["SPXAB00001", "SPXAB00002", "SPXAB00003", "SPXAB00004"])
+        typed = four_lane_type_steps(codes, clicks)
+        burst = four_lane_enter_burst_steps(clicks, count=4)
+        self.assertEqual([step["kind"] for step in typed].count("click"), 4)
+        self.assertEqual([step["kind"] for step in typed].count("type"), 4)
+        self.assertEqual([step["kind"] for step in burst].count("click"), 4)
+        self.assertEqual([step["kind"] for step in burst].count("key"), 4)
+        saved = queue.pause_batch(codes)
+        self.assertEqual(saved, codes)
+        self.assertTrue(queue.waiting)
+        self.assertEqual(queue.paused_codes, codes)
+        self.assertEqual(queue.flagged, codes)
+        self.assertEqual(queue.peek(), codes)
+        self.assertEqual(queue.resume(), " · ".join(codes))
+        self.assertFalse(queue.waiting)
+        self.assertEqual(queue.peek(), codes)
+        again = FourLaneQueue.from_dict(queue.to_dict())
+        self.assertEqual(again.paused_codes, codes)
+        self.assertEqual(len(again.lane_clicks), 4)
+        self.assertEqual(again.lane_clicks[0]["x"], 10)
 
     def test_pause_full_code_when_frame_changes_then_continue(self) -> None:
         queue = FourLaneQueue(prefix="SPXAB", start="00001", end="00020", step=1)
