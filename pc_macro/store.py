@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from pc_macro.events import default_title, sanitize_events
+from pc_macro.numbers import NumberQueue
 
 _SLUG = re.compile(r"[^\w]+", re.UNICODE)
 
@@ -42,21 +43,35 @@ class MacroStore:
             return None
         return self._read(path)
 
-    def save(self, name: str, events: list[dict[str, Any]]) -> dict[str, Any]:
+    def save(
+        self,
+        name: str,
+        events: list[dict[str, Any]],
+        *,
+        slug: str | None = None,
+        numbers: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         cleaned = sanitize_events(events)
         if not cleaned:
             raise ValueError("no replayable events")
         title = " ".join(name.split()) or default_title(cleaned)
-        slug = _unique_slug(self.root, title)
         self.root.mkdir(parents=True, exist_ok=True)
+        chosen = _safe_slug(slug) if slug else _unique_slug(self.root, title)
+        path = self.root / f"{chosen}.json"
+        created = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        if path.is_file():
+            previous = self._read(path)
+            if previous and previous.get("created"):
+                created = str(previous["created"])
         payload = {
             "name": title,
-            "slug": slug,
-            "created": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "slug": chosen,
+            "created": created,
             "event_count": len(cleaned),
             "events": cleaned,
         }
-        path = self.root / f"{slug}.json"
+        if numbers:
+            payload["numbers"] = NumberQueue.from_dict(numbers).to_dict()
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return payload
 
@@ -78,13 +93,16 @@ class MacroStore:
         if not events:
             return None
         slug = path.stem
-        return {
+        item = {
             "name": str(data.get("name") or default_title(events)),
             "slug": slug,
             "created": str(data.get("created") or ""),
             "event_count": len(events),
             "events": events,
         }
+        if data.get("numbers") is not None:
+            item["numbers"] = NumberQueue.from_dict(data.get("numbers")).to_dict()
+        return item
 
 
 def _safe_slug(value: str) -> str:

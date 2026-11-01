@@ -9,6 +9,7 @@ from pc_macro.events import point_in_box, sanitize_events, schedule
 SendFn = Callable[[dict[str, Any]], None]
 SleepFn = Callable[[float], None]
 IgnoreFn = Callable[[float, float], bool]
+PrepareFn = Callable[[int], list[dict[str, Any]]]
 
 
 class Recorder:
@@ -75,14 +76,18 @@ class Player:
         times: int = 1,
         gap_ms: int = 400,
         speed: float = 1.0,
+        prepare: PrepareFn | None = None,
     ) -> dict[str, Any]:
         cleaned = sanitize_events(events)
         loops = 0
         played = 0
-        if not cleaned:
+        if not cleaned and prepare is None:
             return {"loops": 0, "played": 0, "stopped": False}
         while not self.cancelled:
-            for wait_ms, event in schedule(cleaned, speed):
+            batch = sanitize_events(prepare(loops) if prepare is not None else cleaned)
+            if not batch:
+                break
+            for wait_ms, event in schedule(batch, speed):
                 if self.cancelled:
                     return {"loops": loops, "played": played, "stopped": True}
                 if wait_ms:

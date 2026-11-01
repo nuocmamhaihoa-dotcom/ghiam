@@ -9,6 +9,7 @@ from typing import Sequence
 
 from pc_macro.desktop import Desktop, available, install_hint
 from pc_macro.events import default_title, script_lines
+from pc_macro.numbers import NumberQueue, apply_turn, digit_spans
 from pc_macro.session import Player
 from pc_macro.store import MacroStore
 
@@ -65,8 +66,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         time.sleep(args.delay)
     desktop = Desktop(lambda _now, _raw: None, lambda: 0)
     player = Player(desktop.send, time.sleep)
+    queue = NumberQueue.from_dict(item.get("numbers"))
+    spans = digit_spans(item["events"])
+
+    def prepare(_loop: int) -> list:
+        batch, value = apply_turn(item["events"], spans, queue)
+        if value:
+            print(f"Số: {value}")
+        return batch
+
     print(f"Đang làm lại «{item['name']}»…")
-    result = player.play(item["events"], times=args.repeat)
+    result = player.play(item["events"], times=args.repeat, prepare=prepare)
+    if item.get("slug"):
+        store.save(item["name"], item["events"], slug=item["slug"], numbers=queue.to_dict())
     if result["stopped"]:
         print(f"Đã dừng sau {result['loops']} lần.")
     else:
