@@ -179,7 +179,9 @@
     .lanes .line { margin: 0 0 6px; }
     .lanes .line.on { background: #fff1e8; border-color: #c2410c; }
     .lanes .line.stop { background: #fdecec; border-color: #b42318; }
+    .lanes .line.run { background: #e8f6ee; border-color: #14804a; }
     .lanes .pick { position: absolute; border: 2px solid #ff00aa; pointer-events: none; }
+    .pcts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -229,8 +231,8 @@
   </section>
 
   <section class="card" id="dir2">
-    <label>Hướng&nbsp;2&nbsp;—&nbsp;4&nbsp;tiến&nbsp;trình&nbsp;Enter&nbsp;đồng&nbsp;loạt,&nbsp;dừng&nbsp;khi&nbsp;khung&nbsp;5&nbsp;số&nbsp;đổi&nbsp;≥&nbsp;20%</label>
-    <p class="hint">Không&nbsp;đụng&nbsp;hướng&nbsp;1.&nbsp;Gõ&nbsp;4&nbsp;mã&nbsp;rồi&nbsp;Enter&nbsp;cả&nbsp;4&nbsp;tiến&nbsp;trình&nbsp;cùng&nbsp;lúc.&nbsp;Khung&nbsp;5&nbsp;số&nbsp;đổi&nbsp;≥&nbsp;20%&nbsp;thì&nbsp;dừng&nbsp;và&nbsp;lưu&nbsp;đủ&nbsp;4&nbsp;mã.&nbsp;Thao&nbsp;tác&nbsp;tay&nbsp;xong&nbsp;bấm&nbsp;Tiếp&nbsp;tục.</p>
+    <label>Hướng&nbsp;2&nbsp;—&nbsp;4&nbsp;mã&nbsp;Enter&nbsp;đồng&nbsp;loạt,&nbsp;mỗi&nbsp;dãy&nbsp;một&nbsp;trình&nbsp;duyệt</label>
+    <p class="hint">Không&nbsp;đụng&nbsp;hướng&nbsp;1.&nbsp;Gõ&nbsp;4&nbsp;mã&nbsp;rồi&nbsp;Enter&nbsp;đồng&nbsp;loạt.&nbsp;Chỉ&nbsp;lưu&nbsp;mã&nbsp;của&nbsp;trình&nbsp;duyệt&nbsp;có&nbsp;khung&nbsp;5&nbsp;số&nbsp;đổi&nbsp;≥&nbsp;20%;&nbsp;các&nbsp;mã&nbsp;khác&nbsp;vẫn&nbsp;chạy.</p>
     <label for="prefix2"><span class="w">5</span><span class="w">ký</span><span class="w">tự</span><span class="w">cố</span><span class="w">định</span></label>
     <input id="prefix2" class="wide" type="text" maxlength="5" autocomplete="off" spellcheck="false" placeholder="SPXAB" />
     <div class="pair">
@@ -259,18 +261,32 @@
         <label for="threshold2"><span class="w">Khung</span><span class="w">đổi</span><span class="w">≥</span><span class="w">%</span></label>
         <input id="threshold2" type="number" value="20" min="1" max="100" />
       </div>
-      <div>
-        <label for="frameChange2"><span class="w">Mô</span><span class="w">phỏng</span><span class="w">khung</span><span class="w">đổi</span><span class="w">%</span></label>
-        <input id="frameChange2" type="number" value="0" min="0" max="100" />
-      </div>
     </div>
-    <p class="hint" id="frame2Label">Chưa&nbsp;chọn&nbsp;khung&nbsp;5&nbsp;số&nbsp;—&nbsp;trên&nbsp;PC&nbsp;kéo&nbsp;khung&nbsp;quanh&nbsp;chỗ&nbsp;5&nbsp;số&nbsp;tăng.</p>
-    <p class="status" id="status2">Bắt&nbsp;đầu&nbsp;2:&nbsp;gõ&nbsp;4&nbsp;mã&nbsp;rồi&nbsp;Enter&nbsp;đồng&nbsp;loạt;&nbsp;khung&nbsp;5&nbsp;số&nbsp;đổi&nbsp;≥&nbsp;20%&nbsp;thì&nbsp;dừng&nbsp;cả&nbsp;4&nbsp;mã.</p>
+    <p class="hint" id="frame2Label">Chưa&nbsp;chọn&nbsp;khung&nbsp;5&nbsp;số&nbsp;—&nbsp;trên&nbsp;PC&nbsp;kéo&nbsp;4&nbsp;khung,&nbsp;mỗi&nbsp;trình&nbsp;duyệt&nbsp;một&nbsp;khung.</p>
+    <p class="status" id="status2">Bắt&nbsp;đầu&nbsp;2:&nbsp;gõ&nbsp;4&nbsp;mã&nbsp;rồi&nbsp;Enter&nbsp;đồng&nbsp;loạt;&nbsp;chỉ&nbsp;lưu&nbsp;mã&nbsp;của&nbsp;trình&nbsp;duyệt&nbsp;đổi.</p>
     <div class="lanes" id="lanes2">
       <div class="line" id="lane0" contenteditable="true"></div>
       <div class="line" id="lane1" contenteditable="true"></div>
       <div class="line" id="lane2" contenteditable="true"></div>
       <div class="line" id="lane3" contenteditable="true"></div>
+    </div>
+    <div class="pcts">
+      <div>
+        <label for="frameChange2_0">Trình&nbsp;1&nbsp;đổi&nbsp;%</label>
+        <input id="frameChange2_0" type="number" value="0" min="0" max="100" />
+      </div>
+      <div>
+        <label for="frameChange2_1">Trình&nbsp;2&nbsp;đổi&nbsp;%</label>
+        <input id="frameChange2_1" type="number" value="0" min="0" max="100" />
+      </div>
+      <div>
+        <label for="frameChange2_2">Trình&nbsp;3&nbsp;đổi&nbsp;%</label>
+        <input id="frameChange2_2" type="number" value="0" min="0" max="100" />
+      </div>
+      <div>
+        <label for="frameChange2_3">Trình&nbsp;4&nbsp;đổi&nbsp;%</label>
+        <input id="frameChange2_3" type="number" value="0" min="0" max="100" />
+      </div>
     </div>
     <div class="row">
       <button type="button" class="go" id="btnStart2">Bắt&nbsp;đầu&nbsp;2</button>
@@ -315,7 +331,7 @@
     <p class="hint"><span class="w">2.</span><span class="w">Nhập</span><span class="w">số</span><span class="w">bắt</span><span class="w">đầu</span><span class="w">và</span><span class="w">số</span><span class="w">kết</span><span class="w">thúc</span><span class="w">của</span><span class="w">5</span><span class="w">số</span><span class="w">sau.</span></p>
     <p class="hint">3.&nbsp;Bắt&nbsp;đầu&nbsp;gồm&nbsp;cả&nbsp;hai&nbsp;kịch&nbsp;bản:&nbsp;gõ&nbsp;mã,&nbsp;Enter,&nbsp;cộng&nbsp;1.</p>
     <p class="hint">4.&nbsp;Sau&nbsp;Enter,&nbsp;nếu&nbsp;màn&nbsp;đổi&nbsp;≥&nbsp;80%&nbsp;tự&nbsp;bấm&nbsp;4&nbsp;nút&nbsp;trái,&nbsp;lưu&nbsp;số,&nbsp;rồi&nbsp;tăng&nbsp;số&nbsp;tiếp.</p>
-    <p class="hint">5.&nbsp;Hướng&nbsp;2:&nbsp;chọn&nbsp;4&nbsp;ô&nbsp;nhập&nbsp;và&nbsp;khung&nbsp;5&nbsp;số.&nbsp;Gõ&nbsp;4&nbsp;mã&nbsp;rồi&nbsp;Enter&nbsp;đồng&nbsp;loạt.&nbsp;Khung&nbsp;đổi&nbsp;≥&nbsp;20%&nbsp;thì&nbsp;dừng&nbsp;cả&nbsp;4&nbsp;mã,&nbsp;bấm&nbsp;Tiếp&nbsp;tục.</p>
+    <p class="hint">5.&nbsp;Hướng&nbsp;2:&nbsp;chọn&nbsp;4&nbsp;ô&nbsp;nhập&nbsp;và&nbsp;4&nbsp;khung.&nbsp;Gõ&nbsp;4&nbsp;mã&nbsp;rồi&nbsp;Enter&nbsp;đồng&nbsp;loạt.&nbsp;Chỉ&nbsp;lưu&nbsp;mã&nbsp;của&nbsp;trình&nbsp;duyệt&nbsp;đổi&nbsp;≥&nbsp;20%;&nbsp;các&nbsp;mã&nbsp;khác&nbsp;vẫn&nbsp;chạy.</p>
     <div class="row">
       <button type="button" id="btnSave"><span class="w">Lưu</span></button>
       <a class="btn" href="/tai/pc-macro.zip"><span class="w">Tải</span><span class="w">phần</span><span class="w">mềm</span><span class="w">PC</span></a>
@@ -347,9 +363,13 @@
   var flagged2 = [];
   var paused2 = "";
   var pausedCodes2 = [];
+  var pausedLanes2 = ["", "", "", ""];
+  var waitingLanes2 = [false, false, false, false];
+  var currents2 = ["00001", "00002", "00003", "00004"];
   var waiting2 = false;
   var forcePause2 = false;
   var frame2 = null;
+  var frames2 = [null, null, null, null];
   var framePick2 = false;
   var lastUsed = "";
   var currentDigits = "00001";
@@ -828,9 +848,25 @@
     if (n > 100) n = 100;
     return n;
   }
-  function demoFramePercent() {
-    var n = parseFloat($("frameChange2").value || "0");
+  function demoLanePercent(index) {
+    var el = $("frameChange2_" + index);
+    if (!el) return 0;
+    var n = parseFloat(el.value || "0");
     return isNaN(n) ? 0 : n;
+  }
+  function resetCurrents2() {
+    var range = bounds2();
+    var bump = step2();
+    currents2 = [];
+    for (var i = 0; i < LANE_COUNT; i++) {
+      currents2.push(pad5(parseInt(range.start, 10) + i * bump));
+    }
+    waitingLanes2 = [false, false, false, false];
+    pausedLanes2 = ["", "", "", ""];
+    waiting2 = false;
+    paused2 = "";
+    pausedCodes2 = [];
+    exhausted2 = false;
   }
   function renderFlags2() {
     $("flags2").innerHTML = "";
@@ -851,55 +887,87 @@
       ? ("Đã chọn khung 5 số: " + frame2.w + "×" + frame2.h)
       : "Chưa chọn khung 5 số — trên PC kéo khung quanh chỗ 5 số tăng.";
   }
-  function nextLanes() {
+  function nextActive2() {
     if (exhausted2 || prefix2().length !== 5) return [];
     var range = bounds2();
-    var n = parseInt(currentDigits2, 10);
     var endN = parseInt(range.end, 10);
-    var bump = step2();
     var out = [];
     for (var i = 0; i < LANE_COUNT; i++) {
-      var value = n + i * bump;
-      if (value > endN) break;
-      out.push(prefix2() + pad5(value));
+      if (waitingLanes2[i]) continue;
+      var n = parseInt(currents2[i], 10);
+      if (n > endN) continue;
+      out.push({ i: i, code: prefix2() + pad5(n) });
     }
     return out;
   }
+  function nextLanes() {
+    return nextActive2().map(function (item) { return item.code; });
+  }
+  function takeLane2(index) {
+    var nxt = parseInt(currents2[index], 10) + LANE_COUNT * step2();
+    currents2[index] = String(Math.min(nxt, 99999)).padStart(5, "0");
+    currentDigits2 = currents2[0];
+    if (!nextActive2().length && !waitingLanes2.some(Boolean)) exhausted2 = true;
+  }
   function takeBurst2() {
-    var codes = nextLanes();
-    if (!codes.length) { exhausted2 = true; return []; }
+    var active = nextActive2();
+    if (!active.length) {
+      if (!waitingLanes2.some(Boolean)) exhausted2 = true;
+      return [];
+    }
+    var codes = active.map(function (item) { return item.code; });
     lastUsed2 = codes.slice();
-    var nxt = parseInt(currentDigits2, 10) + codes.length * step2();
-    if (nxt > 99999) exhausted2 = true;
-    currentDigits2 = String(Math.min(nxt, 99999)).padStart(5, "0");
-    if (nxt > parseInt(bounds2().end, 10)) exhausted2 = true;
+    active.forEach(function (item) { takeLane2(item.i); });
     return codes;
   }
   function codesText2(codes, fallback) {
     var items = (codes || []).filter(Boolean);
     return items.length ? items.join(" · ") : (fallback || "—");
   }
+  function pauseLane2(index, code) {
+    if (!code) return;
+    addFlag2(code);
+    pausedLanes2[index] = code;
+    waitingLanes2[index] = true;
+    currents2[index] = pad5(code.slice(-5));
+    pausedCodes2 = pausedLanes2.filter(Boolean);
+    paused2 = pausedCodes2[0] || "";
+    waiting2 = true;
+    exhausted2 = false;
+    currentDigits2 = currents2[0];
+  }
   function pauseBatch2(codes, percent) {
     var items = (codes || []).filter(Boolean);
     if (!items.length) return;
-    playing2 = false;
-    waiting2 = true;
-    pausedCodes2 = items.slice();
-    paused2 = items[0];
-    items.forEach(addFlag2);
+    var range = bounds2();
+    items.forEach(function (code) {
+      var digits = pad5(code.slice(-5));
+      var offset = parseInt(digits, 10) - parseInt(range.start, 10);
+      var index = offset >= 0 && offset % step2() === 0 ? (offset / step2()) % LANE_COUNT : -1;
+      if (index < 0) return;
+      pauseLane2(index, code);
+    });
     forcePause2 = false;
-    if (timer2) window.clearTimeout(timer2);
-    timer2 = 0;
     showLanes();
     persist2().catch(function () {});
-    setStatus2("Khung đổi " + Math.round(percent || threshold2()) + "% — đã lưu " + codesText2(items) + ". Thao tác tay xong bấm Tiếp tục.");
+    var still = nextLanes();
+    if (still.length) {
+      setStatus2("Đã lưu " + codesText2(items) + " vì trình duyệt đổi " + Math.round(percent || threshold2()) + "%. Các mã khác vẫn chạy: " + codesText2(still) + ".");
+    } else {
+      playing2 = false;
+      if (timer2) window.clearTimeout(timer2);
+      timer2 = 0;
+      setStatus2("Đã lưu " + codesText2(items) + " vì trình duyệt đổi. Bấm Tiếp tục khi xong thao tác tay.");
+    }
   }
   function showLanes() {
     if ($("prefix2").value !== prefix2()) $("prefix2").value = prefix2();
     var now = nextLanes();
     var pausedShow = codesText2(pausedCodes2, paused2);
-    if (waiting2 && pausedShow !== "—") {
-      $("current2").textContent = "Tạm dừng tại " + pausedShow + " — bấm Tiếp tục";
+    if (waiting2 && pausedShow !== "—" && now.length) {
+      $("current2").textContent = "Đã lưu " + pausedShow + " — các trình duyệt khác: " + now.join(" · ");
+    } else if (waiting2 && pausedShow !== "—") {
+      $("current2").textContent = "Đã lưu " + pausedShow + " — bấm Tiếp tục";
     } else {
       $("current2").textContent = lastUsed2.length
         ? ("Sẽ gõ 4 làn: " + (now.join(" · ") || "—") + "   (vừa xong: " + lastUsed2.join(" · ") + ")")
@@ -908,8 +976,9 @@
     for (var i = 0; i < LANE_COUNT; i++) {
       var box = $("lane" + i);
       if (!box) continue;
-      box.textContent = now[i] || lastUsed2[i] || pausedCodes2[i] || "";
-      box.className = (waiting2 && pausedCodes2.indexOf(box.textContent) >= 0) ? "line stop" : "line";
+      var shown = waitingLanes2[i] ? (pausedLanes2[i] || "") : (prefix2().length === 5 && parseInt(currents2[i], 10) <= parseInt(bounds2().end, 10) ? (prefix2() + pad5(currents2[i])) : (pausedLanes2[i] || lastUsed2[i] || ""));
+      box.textContent = shown;
+      box.className = waitingLanes2[i] ? "line stop" : (playing2 && shown ? "line run" : "line");
     }
     showFrame2();
     renderFlags2();
@@ -933,52 +1002,88 @@
         start: range.start,
         end: range.end,
         current: pad5(currentDigits2),
+        currents: currents2.slice(),
         exhausted: exhausted2,
         step: step2(),
         last_used: lastUsed2.slice(),
         flagged: flagged2.slice(),
         paused: paused2,
         paused_codes: pausedCodes2.slice(),
+        paused_lanes: pausedLanes2.slice(),
         waiting: waiting2,
+        waiting_lanes: waitingLanes2.slice(),
         change_threshold: threshold2(),
-        watch_frame: frame2
+        watch_frame: frame2,
+        watch_frames: frames2.slice()
       }
     };
     return fetch("/v1/macros", { method: "POST", headers: headers(), body: JSON.stringify(body) })
       .then(function (res) { if (!res.ok) throw new Error("Không lưu được hướng 2."); return res.json(); });
   }
-  function flashAllLanes(codes, done) {
+  function flashAllLanes(active, done) {
     for (var i = 0; i < LANE_COUNT; i++) {
       var box = $("lane" + i);
       if (!box) continue;
-      box.textContent = codes[i] || "";
-      box.className = codes[i] ? "line on" : "line";
+      if (waitingLanes2[i]) {
+        box.className = "line stop";
+        continue;
+      }
+      var hit = active.filter(function (item) { return item.i === i; })[0];
+      box.textContent = hit ? hit.code : box.textContent;
+      box.className = hit ? "line on" : "line";
     }
     timer2 = window.setTimeout(function () {
       for (var i = 0; i < LANE_COUNT; i++) {
         var reset = $("lane" + i);
-        if (reset) reset.className = "line";
+        if (!reset) continue;
+        reset.className = waitingLanes2[i] ? "line stop" : "line";
       }
       done();
     }, 420);
   }
   function oneTurn2() {
-    if (!playing2 || waiting2) return;
-    var codes = nextLanes();
-    if (!codes.length) { playing2 = false; setStatus2("Hướng 2 hết dãy."); showLanes(); return; }
+    if (!playing2) return;
+    var active = nextActive2();
+    if (!active.length) {
+      playing2 = false;
+      setStatus2(waiting2 ? ("Đã lưu " + codesText2(pausedCodes2, paused2) + ". Bấm Tiếp tục cho trình duyệt đã dừng.") : "Hướng 2 hết dãy.");
+      showLanes();
+      return;
+    }
+    var codes = active.map(function (item) { return item.code; });
     showLanes();
-    setStatus2("Hướng 2 đang gõ " + codesText2(codes) + " rồi Enter đồng loạt. Theo dõi khung 5 số ≥" + threshold2() + "%.");
-    flashAllLanes(codes, function () {
+    setStatus2("Hướng 2 đang gõ " + codesText2(codes) + " rồi Enter đồng loạt. Chỉ lưu mã của trình duyệt đổi ≥" + threshold2() + "%.");
+    flashAllLanes(active, function () {
       if (!playing2) return;
-      var percent = demoFramePercent();
-      if (forcePause2 || percent >= threshold2()) {
-        pauseBatch2(codes, forcePause2 ? threshold2() : percent);
-        return;
-      }
-      takeBurst2();
+      var paused = [];
+      var kept = [];
+      active.forEach(function (item) {
+        var percent = demoLanePercent(item.i);
+        if (forcePause2 && item.i === active[0].i) percent = threshold2();
+        if (percent >= threshold2()) {
+          pauseLane2(item.i, item.code);
+          paused.push(item.code);
+        } else {
+          takeLane2(item.i);
+          kept.push(item.code);
+        }
+      });
+      forcePause2 = false;
+      lastUsed2 = codes.slice();
+      currentDigits2 = currents2[0];
       showLanes();
       persist2().catch(function () {});
-      setStatus2("Đã Enter " + codesText2(codes) + ". Khung đổi " + Math.round(percent) + "% — tiếp 4 tiến trình.");
+      if (paused.length && kept.length) {
+        setStatus2("Đã lưu " + codesText2(paused) + " vì trình duyệt đổi. Các mã khác vẫn chạy: " + codesText2(kept) + ".");
+      } else if (paused.length) {
+        setStatus2("Đã lưu " + codesText2(paused) + " vì trình duyệt đổi. Bấm Tiếp tục khi xong thao tác tay.");
+      } else {
+        setStatus2("Đã Enter " + codesText2(kept) + ". Không cửa sổ nào đổi — tiếp các trình duyệt còn lại.");
+      }
+      if (!nextActive2().length) {
+        playing2 = false;
+        return;
+      }
       var wait = Math.max(400, (parseFloat($("delay2").value || "1") || 1) * 1000);
       timer2 = window.setTimeout(oneTurn2, wait);
     });
@@ -986,36 +1091,57 @@
   function startPlay2() {
     if (playing) { setStatus2("Đang chạy hướng 1. Bấm Dừng rồi hãy bắt đầu hướng 2.", "err"); return; }
     if (playing2) return;
-    if (waiting2) { setStatus2("Hướng 2 đang chờ tại " + codesText2(pausedCodes2, paused2) + ". Bấm Tiếp tục.", "err"); return; }
     var range = bounds2();
     $("start2").value = range.start;
     $("end2").value = range.end;
     $("prefix2").value = prefix2();
-    if (parseInt(currentDigits2, 10) < parseInt(range.start, 10)) currentDigits2 = range.start;
-    if (parseInt(currentDigits2, 10) > parseInt(range.end, 10)) exhausted2 = true;
+    if (currents2.length !== LANE_COUNT) resetCurrents2();
     if (prefix2().length !== 5) { setStatus2("Hướng 2: nhập đủ 5 ký tự cố định.", "err"); return; }
-    if (exhausted2) { setStatus2("Hướng 2 đã hết dãy. Đổi số bắt đầu / kết thúc để chạy lại.", "err"); return; }
+    if (!nextActive2().length) {
+      if (waiting2) { setStatus2("Hướng 2 đã lưu " + codesText2(pausedCodes2, paused2) + ". Bấm Tiếp tục cho trình duyệt đã dừng.", "err"); return; }
+      setStatus2("Hướng 2 đã hết dãy. Đổi số bắt đầu / kết thúc để chạy lại.", "err");
+      return;
+    }
     playing2 = true;
     var delay = Math.max(0, parseFloat($("delay2").value || "0") || 0);
-    setStatus2("Hướng 2: gõ 4 mã rồi Enter đồng loạt cả 4 tiến trình. Khung ≥" + threshold2() + "% thì dừng cả 4 mã.");
+    setStatus2("Hướng 2: gõ 4 mã rồi Enter đồng loạt. Khung ≥" + threshold2() + "% thì chỉ lưu mã của trình duyệt đổi.");
     if (timer2) window.clearTimeout(timer2);
     timer2 = window.setTimeout(function () {
       if (!playing2) return;
       oneTurn2();
     }, delay * 1000);
   }
-  function continuePlay2() {
-    if (playing || playing2) { setStatus2("Đang chạy. Bấm Dừng 2 rồi hãy tiếp tục.", "err"); return; }
-    if (!waiting2 && !paused2) { startPlay2(); return; }
+  function resumePaused2() {
+    var unlocked = pausedLanes2.filter(Boolean);
+    for (var i = 0; i < LANE_COUNT; i++) {
+      if (waitingLanes2[i] && pausedLanes2[i]) currents2[i] = pad5(pausedLanes2[i].slice(-5));
+      waitingLanes2[i] = false;
+      pausedLanes2[i] = "";
+    }
     waiting2 = false;
-    var first = pausedCodes2[0] || paused2 || "";
-    if (first && first.length >= 5) currentDigits2 = pad5(first.slice(-5));
+    paused2 = "";
+    pausedCodes2 = [];
     exhausted2 = false;
+    currentDigits2 = currents2[0];
     forcePause2 = false;
+    return unlocked.join(" · ");
+  }
+  function continuePlay2() {
+    if (playing) { setStatus2("Đang chạy hướng 1. Bấm Dừng rồi hãy tiếp tục hướng 2.", "err"); return; }
+    if (playing2) {
+      if (!waiting2) { setStatus2("Hướng 2 đang chạy. Không có trình duyệt nào đang dừng."); return; }
+      var joined = resumePaused2();
+      showLanes();
+      persist2().catch(function () {});
+      setStatus2("Tiếp tục trình duyệt đã dừng: " + (joined || "—") + ". Các mã khác vẫn chạy.");
+      return;
+    }
+    if (!waiting2 && !paused2) { startPlay2(); return; }
+    var nxt = resumePaused2();
     showLanes();
     persist2().catch(function () {});
     playing2 = true;
-    setStatus2("Tiếp tục hướng 2 từ " + codesText2(pausedCodes2, first || nextLanes()[0] || "—") + ".");
+    setStatus2("Tiếp tục hướng 2 từ " + (nxt || nextLanes()[0] || "—") + ".");
     if (timer2) window.clearTimeout(timer2);
     timer2 = window.setTimeout(function () {
       if (!playing2) return;
@@ -1046,15 +1172,35 @@
         if (item.numbers.prefix) $("prefix2").value = item.numbers.prefix;
         if (item.numbers.start) $("start2").value = item.numbers.start;
         if (item.numbers.end) $("end2").value = item.numbers.end;
-        currentDigits2 = pad5(item.numbers.current || item.numbers.start || "00001");
-        exhausted2 = !!item.numbers.exhausted && parseInt(currentDigits2, 10) > parseInt(pad5(item.numbers.end || currentDigits2), 10);
         if (item.numbers.step) $("step2").value = item.numbers.step;
+        currentDigits2 = pad5(item.numbers.current || item.numbers.start || "00001");
+        if (Array.isArray(item.numbers.currents) && item.numbers.currents.length) {
+          currents2 = item.numbers.currents.map(function (item) { return pad5(item); });
+          while (currents2.length < LANE_COUNT) currents2.push(pad5(parseInt(currents2[currents2.length - 1], 10) + step2()));
+        } else {
+          resetCurrents2();
+          var shared = parseInt(currentDigits2, 10);
+          for (var i = 0; i < LANE_COUNT; i++) currents2[i] = pad5(shared + i * step2());
+        }
+        exhausted2 = !!item.numbers.exhausted && !nextActive2().length;
         lastUsed2 = Array.isArray(item.numbers.last_used) ? item.numbers.last_used.slice() : [];
         flagged2 = Array.isArray(item.numbers.flagged) ? item.numbers.flagged.slice() : [];
+        pausedLanes2 = Array.isArray(item.numbers.paused_lanes) ? item.numbers.paused_lanes.slice() : ["", "", "", ""];
+        while (pausedLanes2.length < LANE_COUNT) pausedLanes2.push("");
         pausedCodes2 = Array.isArray(item.numbers.paused_codes) ? item.numbers.paused_codes.slice() : (item.numbers.paused ? [item.numbers.paused] : []);
+        if (!pausedLanes2.some(Boolean) && pausedCodes2.length) {
+          pausedCodes2.forEach(function (code) {
+            var offset = parseInt(pad5(code.slice(-5)), 10) - parseInt(pad5(item.numbers.start || "00001"), 10);
+            var idx = offset >= 0 ? (offset / (item.numbers.step || 1)) % LANE_COUNT : -1;
+            if (idx >= 0) pausedLanes2[idx] = code;
+          });
+        }
         paused2 = pausedCodes2[0] || item.numbers.paused || "";
-        waiting2 = !!item.numbers.waiting && !!(paused2 || pausedCodes2.length);
+        waitingLanes2 = Array.isArray(item.numbers.waiting_lanes) ? item.numbers.waiting_lanes.map(Boolean) : pausedLanes2.map(Boolean);
+        waiting2 = waitingLanes2.some(Boolean);
         frame2 = item.numbers.watch_frame || item.numbers.frame || null;
+        frames2 = Array.isArray(item.numbers.watch_frames) ? item.numbers.watch_frames.slice() : [frame2, null, null, null];
+        while (frames2.length < LANE_COUNT) frames2.push(null);
         if (item.numbers.change_threshold) $("threshold2").value = item.numbers.change_threshold;
         showLanes();
         if (waiting2) setStatus2("Đã mở hướng 2. Đang chờ Tiếp tục tại " + codesText2(pausedCodes2, paused2) + ".");
@@ -1075,7 +1221,15 @@
     if (!codes.length) { setStatus2("Chưa có mã để lưu.", "err"); return; }
     if (playing2) {
       forcePause2 = true;
-      setStatus2("Sẽ dừng cả 4 mã sau burst Enter khi khung đổi.");
+      setStatus2("Sẽ lưu mã của trình duyệt đổi; các mã khác vẫn chạy.");
+      return;
+    }
+    var active = nextActive2();
+    if (active.length) {
+      pauseLane2(active[0].i, active[0].code);
+      showLanes();
+      persist2().catch(function () {});
+      setStatus2("Đã lưu " + active[0].code + " vì trình duyệt đổi. Các mã khác vẫn chạy.");
       return;
     }
     pauseBatch2(codes, threshold2());
@@ -1214,11 +1368,8 @@
   $("start2").oninput = function () {
     var range = bounds2();
     if (!playing2) {
+      resetCurrents2();
       currentDigits2 = range.start;
-      exhausted2 = false;
-      waiting2 = false;
-      paused2 = "";
-      pausedCodes2 = [];
     } else if (parseInt(currentDigits2, 10) < parseInt(range.start, 10)) {
       currentDigits2 = range.start;
     }

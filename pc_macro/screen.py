@@ -433,6 +433,70 @@ def frame_label(frame: Any) -> str:
     return f"Khung 5 số: {item['x']},{item['y']}  {item['w']}×{item['h']}"
 
 
+def sanitize_frames(raw: Any, count: int = RECOVER_CLICKS) -> list[dict[str, Any] | None]:
+    """Up to four watch rectangles, one per browser window."""
+    total = max(1, int(count or RECOVER_CLICKS))
+    items = list(raw) if isinstance(raw, (list, tuple)) else ([raw] if raw else [])
+    return [sanitize_frame(items[index]) if index < len(items) else None for index in range(total)]
+
+
+def frames_label(frames: Any) -> str:
+    items = sanitize_frames(frames)
+    ready = sum(1 for item in items if item is not None)
+    if ready == 0:
+        return "Chưa chọn 4 khung trình duyệt — sẽ so vùng quanh mỗi ô nhập."
+    if ready < len(items):
+        return f"Khung trình duyệt: đã chọn {ready}/{len(items)} — thiếu thì so quanh ô nhập."
+    parts = [f"{index + 1}:{item['w']}×{item['h']}" for index, item in enumerate(items) if item]
+    return "4 khung: " + " · ".join(parts)
+
+
+def frame_around_click(click: Any, width: int = 420, height: int = 320) -> dict[str, Any] | None:
+    """A rectangle around one input field, used when that browser has no saved frame."""
+    if not isinstance(click, dict):
+        return None
+    try:
+        px = int(round(float(click.get("x"))))
+        py = int(round(float(click.get("y"))))
+    except (TypeError, ValueError):
+        return None
+    try:
+        sw = int(round(float(click.get("sw") or 0)))
+        sh = int(round(float(click.get("sh") or 0)))
+    except (TypeError, ValueError):
+        sw, sh = 0, 0
+    box_w = max(_MIN_FRAME, int(width))
+    box_h = max(_MIN_FRAME, int(height))
+    if sw >= _MIN_FRAME:
+        box_w = max(_MIN_FRAME, min(box_w, max(_MIN_FRAME, sw // 2)))
+    if sh >= _MIN_FRAME:
+        box_h = max(_MIN_FRAME, min(box_h, max(_MIN_FRAME, sh // 2)))
+    left = px - box_w // 2
+    top = py - box_h // 2
+    if sw >= _MIN_FRAME:
+        left = max(0, min(sw - box_w, left))
+        box_w = min(box_w, sw)
+    else:
+        left = max(0, left)
+    if sh >= _MIN_FRAME:
+        top = max(0, min(sh - box_h, top))
+        box_h = min(box_h, sh)
+    else:
+        top = max(0, top)
+    return sanitize_frame({"x": left, "y": top, "w": box_w, "h": box_h, "sw": sw, "sh": sh})
+
+
+def lane_watch_frame(frames: Any, clicks: Any, index: int) -> dict[str, Any] | None:
+    """Prefer the frame drawn on that browser; otherwise the region around its input."""
+    slots = sanitize_frames(frames)
+    if 0 <= index < len(slots) and slots[index] is not None:
+        return slots[index]
+    points = sanitize_clicks(clicks)
+    if 0 <= index < len(points):
+        return frame_around_click(points[index])
+    return None
+
+
 def capture_grid() -> Grid | None:
     """Downsample the screen so a later compare is cheap."""
     try:

@@ -51,7 +51,11 @@ from pc_macro.screen import (
     change_percent,
     frame_label,
     scale_frame,
+    frame_around_click,
+    frames_label,
+    lane_watch_frame,
     sanitize_frame,
+    sanitize_frames,
     watch_changed,
     click_from_paint,
     click_landed,
@@ -413,7 +417,7 @@ class FourLaneTests(unittest.TestCase):
         self.assertEqual(sent[-4:], ["enter", "enter", "enter", "enter"])
         self.assertTrue(queue.exhausted)
 
-    def test_pause_batch_saves_all_four_codes_then_continue(self) -> None:
+    def test_pause_only_changed_browser_others_keep_running(self) -> None:
         clicks = [{"x": 10, "y": 20}, {"x": 30, "y": 40}, {"x": 50, "y": 60}, {"x": 70, "y": 80}]
         queue = FourLaneQueue(prefix="SPXAB", start="00001", end="00020", step=1, lane_clicks=clicks)
         codes = queue.peek()
@@ -424,25 +428,27 @@ class FourLaneTests(unittest.TestCase):
         self.assertEqual([step["kind"] for step in typed].count("type"), 4)
         self.assertEqual([step["kind"] for step in burst].count("click"), 4)
         self.assertEqual([step["kind"] for step in burst].count("key"), 4)
-        saved = queue.pause_batch(codes)
-        self.assertEqual(saved, codes)
+        saved = queue.pause_lane(1, "SPXAB00002")
+        self.assertEqual(saved, "SPXAB00002")
         self.assertTrue(queue.waiting)
-        self.assertEqual(queue.paused_codes, codes)
-        self.assertEqual(queue.flagged, codes)
-        self.assertEqual(queue.peek(), codes)
-        self.assertEqual(queue.resume(), " · ".join(codes))
+        self.assertEqual(queue.paused_codes, ["SPXAB00002"])
+        self.assertEqual(queue.flagged, ["SPXAB00002"])
+        self.assertEqual(queue.peek(), ["SPXAB00001", "SPXAB00003", "SPXAB00004"])
+        self.assertEqual(queue.take(), ["SPXAB00001", "SPXAB00003", "SPXAB00004"])
+        self.assertEqual(queue.peek(), ["SPXAB00005", "SPXAB00007", "SPXAB00008"])
+        self.assertEqual(queue.resume(), "SPXAB00002")
         self.assertFalse(queue.waiting)
-        self.assertEqual(queue.peek(), codes)
+        self.assertEqual(queue.peek(), ["SPXAB00005", "SPXAB00002", "SPXAB00007", "SPXAB00008"])
         again = FourLaneQueue.from_dict(queue.to_dict())
-        self.assertEqual(again.paused_codes, codes)
+        self.assertEqual(again.paused_codes, [])
+        self.assertEqual(again.currents[1], "00002")
         self.assertEqual(len(again.lane_clicks), 4)
         self.assertEqual(again.lane_clicks[0]["x"], 10)
 
     def test_pause_full_code_when_frame_changes_then_continue(self) -> None:
         queue = FourLaneQueue(prefix="SPXAB", start="00001", end="00020", step=1)
         self.assertEqual(queue.peek_one(), "SPXAB00001")
-        self.assertEqual(queue.take_one(), "SPXAB00001")
-        self.assertEqual(queue.peek_one(), "SPXAB00002")
+        self.assertEqual([index for index, _code in queue.peek_active()], [0, 1, 2, 3])
         typed = number_type_steps("SPXAB00002")
         self.assertEqual(typed[0]["value"], "SPXAB00002")
         self.assertEqual(enter_key_steps()[0]["key"], "enter")
@@ -450,14 +456,14 @@ class FourLaneTests(unittest.TestCase):
         self.assertEqual(paused, "SPXAB00002")
         self.assertTrue(queue.waiting)
         self.assertEqual(queue.flagged, ["SPXAB00002"])
-        self.assertEqual(queue.peek_one(), "SPXAB00002")
+        self.assertEqual(queue.peek(), ["SPXAB00001", "SPXAB00003", "SPXAB00004"])
         self.assertEqual(queue.resume(), "SPXAB00002")
         self.assertFalse(queue.waiting)
-        self.assertEqual(queue.peek_one(), "SPXAB00002")
+        self.assertEqual(queue.peek(), ["SPXAB00001", "SPXAB00002", "SPXAB00003", "SPXAB00004"])
         again = FourLaneQueue.from_dict(queue.to_dict())
-        self.assertEqual(again.paused, "SPXAB00002")
         self.assertEqual(again.flagged, ["SPXAB00002"])
         self.assertEqual(again.change_threshold, 20)
+        self.assertEqual(again.peek(), ["SPXAB00001", "SPXAB00002", "SPXAB00003", "SPXAB00004"])
         same = make_grid((10, 10, 10))
         hit, percent = watch_changed(same, make_grid((10, 10, 10), flip=int(0.25 * 48 * 27)), 20)
         self.assertTrue(hit)
@@ -474,6 +480,16 @@ class FourLaneTests(unittest.TestCase):
         self.assertEqual(scaled["h"], 160)
         self.assertIn("100,200", frame_label(frame))
         self.assertIsNone(sanitize_frame({"x": 1, "y": 1, "w": 4, "h": 4}))
+        around = frame_around_click({"x": 200, "y": 150, "sw": 1000, "sh": 800})
+        self.assertIsNotNone(around)
+        self.assertGreaterEqual(around["w"], 16)
+        frames = sanitize_frames([frame, None, around, None])
+        self.assertEqual(len(frames), 4)
+        self.assertIsNotNone(frames[0])
+        self.assertIsNone(frames[1])
+        self.assertIn("đã chọn", frames_label(frames))
+        fallback = lane_watch_frame([None, None, None, None], [{"x": 80, "y": 90, "sw": 800, "sh": 600}], 0)
+        self.assertIsNotNone(fallback)
 
     def test_screen_change_and_four_clicks_then_continue(self) -> None:
         same = make_grid((10, 10, 10))

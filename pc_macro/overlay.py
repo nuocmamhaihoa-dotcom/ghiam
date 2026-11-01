@@ -268,9 +268,11 @@ class FrameOverlay:
         on_done: FrameDoneFn,
         on_cancel: CancelFn,
         frame: dict[str, Any] | None = None,
+        title: str = "",
     ) -> None:
         self._on_done = on_done
         self._on_cancel = on_cancel
+        self.title = title or "Hướng 2 — kéo khung quanh màn hình trình duyệt này."
         self.screen_w = max(1, int(root.winfo_screenwidth()))
         self.screen_h = max(1, int(root.winfo_screenheight()))
         self.frame = sanitize_frame(frame)
@@ -289,7 +291,7 @@ class FrameOverlay:
         self.bar.pack(side="bottom", fill="x")
         self.hint = tk.Label(
             self.bar,
-            text="Kéo một khung quanh chỗ 5 số tăng. Esc hủy.",
+            text=self.title + " Esc hủy.",
             fg=_TEXT,
             bg="#0b6bcb",
             font=("Segoe UI", 12, "bold"),
@@ -390,7 +392,7 @@ class FrameOverlay:
         self._draft = None
         self.frame = None
         self.btn_save.configure(state="disabled")
-        self.hint.configure(text="Kéo một khung quanh chỗ 5 số tăng. Esc hủy.")
+        self.hint.configure(text=self.title + " Esc hủy.")
         self._redraw()
 
     def _save(self) -> None:
@@ -434,7 +436,7 @@ class FrameOverlay:
         self.canvas.create_text(
             20,
             32,
-            text="Hướng 2 — kéo khung quanh 5 số tăng. So sánh ≥20% chỉ trong khung này.",
+            text=self.title,
             fill=_TEXT,
             font=("Segoe UI", 15, "bold"),
             anchor="w",
@@ -461,5 +463,6 @@ def show_frame_overlay(
     on_done: FrameDoneFn,
     on_cancel: CancelFn,
     frame: dict[str, Any] | None = None,
+    title: str = "",
 ) -> FrameOverlay:
-    return FrameOverlay(root, on_done=on_done, on_cancel=on_cancel, frame=frame)
+    return FrameOverlay(root, on_done=on_done, on_cancel=on_cancel, frame=frame, title=title)

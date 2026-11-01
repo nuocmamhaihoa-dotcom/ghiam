@@ -46,7 +46,7 @@ Windows (đã có venv của agent):
 
 **Dãy số:** mỗi mã gồm **5 ký tự cố định** đứng trước + **5 số** tăng dần. Ví dụ tiền tố `SPXAB`, bắt đầu `00001`, kết thúc `00100` → máy gõ `SPXAB00001` rồi Enter, sau đó `SPXAB00002` … đến `SPXAB00100`. Sau Enter máy so sánh ảnh màn hình; đổi ≥ ngưỡng (mặc định 80%) thì lưu mã vừa gõ và bấm 4 vị trí đã ghi, rồi tiếp tục tăng số. Đổi 5 ký tự cố định bất cứ lúc nào. F9 lưu mã khi bạn thấy đổi.
 
-**Hướng 2** (độc lập, không đụng 4 nút / 80% của hướng 1): cùng 5 ký tự + 5 số. **Chọn 4 ô nhập** của 4 tiến trình. **Bắt đầu 2** gõ 4 mã vào 4 ô rồi Enter đồng loạt cả 4 tiến trình — không chạy từng tiến trình một. Sau burst Enter, nếu khung 5 số đổi ≥20% thì dừng và lưu đủ 4 mã; thao tác tay xong bấm **Tiếp tục** để gửi lại burst đó. Ví dụ `00001`–`00010` → nhịp 1: `…00001 …00002 …00003 …00004`, nhịp 2: `…00005 …00006 …00007 …00008`. F8 dừng cả hai hướng.
+**Hướng 2** (độc lập, không đụng 4 nút / 80% của hướng 1): cùng 5 ký tự + 5 số. Mỗi dãy số chạy **một trình duyệt**. **Chọn 4 ô nhập** rồi **Chọn 4 khung** (mỗi cửa sổ một khung; thiếu thì so vùng quanh ô nhập). **Bắt đầu 2** gõ 4 mã rồi Enter đồng loạt. Sau Enter, chỉ lưu mã của trình duyệt có khung đổi ≥20%; các mã / trình duyệt khác vẫn chạy. **Tiếp tục** chỉ mở lại cửa sổ đã dừng. Ví dụ `00001`–`00010` → nhịp 1: `…00001 …00002 …00003 …00004`; nếu chỉ `…00002` đổi thì lần sau gõ `…00005 …00002(chờ) …00007 …00008`. F8 dừng cả hai hướng.
 
 ## Cài đặt trên PC (dùng tài nguyên máy local)
 
