@@ -1,158 +1,671 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" translate="no" class="notranslate">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Click tự động trên PC</title>
+  <meta name="color-scheme" content="only light" />
+  <meta name="google" content="notranslate" />
+  <meta http-equiv="content-language" content="vi" />
+  <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate" />
+  <title>Ghi nhớ thao tác</title>
   <style>
-    :root { --ink: #17202a; --muted: #5c6770; --line: #d9dee5; --bg: #f3f5f7; --card: #fff; --blue: #0b6bcb; --ok: #0d7a46; }
+    html { color-scheme: only light; }
+    :root { --ink: #1a1a1a; --muted: #5a5a5a; --line: #c5c5c5; --face: #f0f0f0; --win: #e8e8e8; --blue: #0b6bcb; --ok: #0d7a46; }
     * { box-sizing: border-box; }
+    html, body, button, input, textarea, select {
+      color-scheme: only light;
+      font-synthesis: none;
+      -webkit-font-smoothing: antialiased;
+    }
     html, body {
       margin: 0;
       color: var(--ink);
-      background: var(--bg);
-      font-family: system-ui, "Segoe UI", Tahoma, Arial, sans-serif;
-      font-size: 16px;
-      line-height: 1.45;
+      background: #d8dde3;
+      font-family: -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
+      font-size: 14px;
+      font-weight: 400;
+      line-height: 1.4;
+      letter-spacing: 0;
+      word-spacing: 0.12em;
     }
-    main { max-width: 760px; margin: 0 auto; padding: 1.4rem 1rem 3rem; }
-    h1 { font-size: 1.7rem; margin: 0 0 0.3rem; }
-    h2 { font-size: 1.1rem; margin: 0 0 0.6rem; }
-    p { margin: 0 0 0.7rem; }
-    .lead { color: var(--muted); }
-    .card {
-      background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      padding: 1rem 1.1rem;
-      margin: 0 0 1rem;
+    body { padding: 12px 10px 40px; }
+    .page { max-width: 920px; margin: 0 auto; }
+    .desk { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+    .win {
+      width: 100%;
+      max-width: 440px;
+      background: var(--win);
+      border: 1px solid #7a7a7a;
+      box-shadow: 0 8px 24px rgba(0,0,0,.18);
     }
-    ol { margin: 0; padding-left: 1.2rem; }
-    li { margin: 0.35rem 0; }
-    .row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.8rem; }
-    a.btn, button {
-      display: inline-block;
-      border: 0;
-      border-radius: 8px;
-      background: var(--blue);
-      color: #fff;
-      text-decoration: none;
-      padding: 0.55rem 0.9rem;
+    .titlebar {
+      background: linear-gradient(#e8e8e8, #d4d4d4);
+      border-bottom: 1px solid #b5b5b5;
+      padding: 7px 10px;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .winbody { padding: 8px 10px 12px; }
+    .status { margin: 0 0 8px; color: var(--ink); min-height: 2.4em; }
+    .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 8px; }
+    button, .file {
       font: inherit;
+      border: 1px solid #8d8d8d;
+      background: #f3f3f3;
+      border-radius: 3px;
+      min-height: 30px;
+      padding: 0 10px;
       cursor: pointer;
     }
-    button.ghost { background: #e8edf2; color: var(--ink); }
-    code { background: #eef2f6; padding: 0.05rem 0.3rem; border-radius: 4px; }
-    .status { color: var(--muted); min-height: 1.3em; }
+    button.primary, a.file { background: var(--blue); color: #fff; border-color: #0858a8; text-decoration: none; display: inline-flex; align-items: center; }
+    button:disabled { opacity: 0.55; cursor: default; }
+    input[type="text"], input[type="number"], select, textarea {
+      font: inherit;
+      border: 1px solid #8d8d8d;
+      background: #fff;
+      padding: 4px 6px;
+      border-radius: 2px;
+    }
+    input.tiny { width: 52px; }
+    input.grow { flex: 1; min-width: 80px; }
+    textarea { width: 100%; min-height: 68px; resize: vertical; }
+    fieldset {
+      border: 1px solid #b0b0b0;
+      margin: 0 0 8px;
+      padding: 8px;
+    }
+    legend { padding: 0 4px; font-weight: 700; }
+    .hint { color: var(--muted); margin: 0 0 6px; }
+    select.list, .script {
+      width: 100%;
+      min-height: 72px;
+      background: #fff;
+    }
+    .script { min-height: 140px; }
+    .grid { display: grid; grid-template-columns: auto 1fr auto auto; gap: 4px 6px; align-items: center; }
+    .xy { display: flex; gap: 4px; }
+    .xy input { width: 64px; }
+    .screen {
+      position: relative;
+      height: 150px;
+      background: #2b3036;
+      color: #d7dde3;
+      border: 1px solid #111;
+      overflow: hidden;
+      margin: 8px 0 0;
+      user-select: none;
+    }
+    .screen .place { position: absolute; inset: 8px; pointer-events: none; }
+    .cursor {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      margin: -6px 0 0 -6px;
+      border-radius: 50%;
+      background: #6cc6ff;
+      box-shadow: 0 0 0 3px rgba(108,198,255,.35);
+      display: none;
+    }
+    .typed { position: absolute; left: 10px; right: 10px; bottom: 8px; color: #fff; font-family: Consolas, monospace; }
+    .howto {
+      flex: 1;
+      min-width: 260px;
+      background: #fff;
+      border: 1px solid var(--line);
+      padding: 12px 14px;
+    }
+    .howto h2 { margin: 0 0 8px; font-size: 1.05rem; }
+    .howto ol { margin: 0 0 10px; padding-left: 1.2rem; }
+    .howto li { margin: 0.35rem 0; }
     .ok { color: var(--ok); }
     .err { color: #b42318; }
-    ul.macros { list-style: none; margin: 0; padding: 0; }
-    ul.macros li {
-      border-top: 1px solid var(--line);
-      padding: 0.7rem 0;
+    #translateWarn { margin: 0 0 10px; padding: 8px 10px; background: #fdecec; color: #8a2b2b; }
+    .w + .w { margin-left: 0.28em; }
+    .sp { font-weight: 400; }
+    [hidden] { display: none !important; }
+    @media (max-width: 520px) {
+      .win { max-width: none; }
+      .grid { grid-template-columns: auto 1fr; }
     }
-    ul.macros li:first-child { border-top: 0; padding-top: 0; }
-    .meta { color: var(--muted); font-size: 0.92rem; }
-    .caps { margin: 0.25rem 0 0; color: var(--ink); }
   </style>
 </head>
-<body>
-  <main>
-    <h1>Click tự động trên PC</h1>
-    <p class="lead">VPS này giữ kịch bản thao tác. Ghi phím, bấm chuột và bấm Làm lại phải chạy trên máy tính có màn hình.</p>
-
-    <section class="card">
-      <h2>Cài trên máy Windows</h2>
+<body translate="no" class="notranslate">
+<div class="page" translate="no">
+  <p id="translateWarn" hidden>Google Dịch đang bật nên chữ bị dính. Tắt dịch trang này, rồi tải lại.</p>
+  <div class="desk">
+    <div class="win" id="app">
+      <div class="titlebar">Ghi nhớ thao tác</div>
+      <div class="winbody">
+        <p class="status" id="status">Chưa ghi. Bấm Ghi, làm thao tác trên màn hình tập (trên PC là cả máy), rồi Dừng.</p>
+        <div class="row">
+          <button type="button" id="btnGhi">Ghi</button>
+          <button type="button" id="btnDung">Dừng</button>
+          <button type="button" id="btnLai">Làm lại</button>
+          <button type="button" id="btnThem">Ghi thêm</button>
+        </div>
+        <div class="row">
+          <span>Lặp</span>
+          <input class="tiny" id="times" type="number" value="1" min="0" />
+          <span>Chờ (giây)</span>
+          <input class="tiny" id="delay" type="number" value="2" min="0" />
+        </div>
+        <div class="row">
+          <input class="grow" id="name" type="text" placeholder="Tên kịch bản" />
+          <button type="button" id="btnLuu">Lưu</button>
+          <button type="button" id="btnLen">Lên VPS</button>
+          <button type="button" id="btnLay">Lấy VPS</button>
+        </div>
+        <fieldset>
+          <legend>Dãy số</legend>
+          <p class="hint">Dán mỗi dòng một số. Máy tự chọn dãy số dài nhất trong kịch bản — đổi ở ô dưới nếu sai.</p>
+          <textarea id="numbers" placeholder="1001&#10;1002&#10;1003"></textarea>
+          <div class="row">
+            <span>Số sẽ thay</span>
+            <select id="span" class="grow"><option>Không thay số</option></select>
+          </div>
+          <div class="row">
+            <label><input type="checkbox" id="bump" checked /> Sau mỗi lần dùng, cộng</label>
+            <input class="tiny" id="step" type="number" value="1" />
+          </div>
+          <p class="hint" id="nextNumber">Chưa có số tiếp theo.</p>
+        </fieldset>
+        <p class="hint">Bản đã lưu — nháy đúp hoặc bấm Mở. Chèn để ghép vào kịch bản đang sửa.</p>
+        <select id="saved" class="list" size="3"></select>
+        <div class="row">
+          <button type="button" id="btnMo">Mở</button>
+          <button type="button" id="btnChen">Chèn vào kịch bản</button>
+          <button type="button" id="btnXoa">Xoá bản</button>
+        </div>
+        <p class="hint">F8 dừng ghi / làm lại. Lặp 0 = làm mãi. Trên PC, Ghi nhớ cả bàn phím và chuột ngoài cửa sổ này.</p>
+        <fieldset>
+          <legend>Kịch bản — từng bước, sửa lần lượt</legend>
+          <p class="hint">Ghi xong sẽ tách thành bước. Sửa / xếp lại / thêm, rồi Làm lại đúng kịch bản.</p>
+          <select id="steps" class="script" size="8"></select>
+          <div class="row">
+            <button type="button" id="btnUp">Lên</button>
+            <button type="button" id="btnDown">Xuống</button>
+            <button type="button" id="btnSua">Sửa</button>
+            <button type="button" id="btnDelStep">Xóa</button>
+            <button type="button" id="btnAddStep">Thêm</button>
+          </div>
+          <div class="grid">
+            <span>Loại</span>
+            <select id="kind">
+              <option>Gõ chữ</option>
+              <option>Gõ số</option>
+              <option>Phím</option>
+              <option>Bấm chuột</option>
+              <option>Cuộn</option>
+              <option>Chờ</option>
+            </select>
+            <span>Chờ ms</span>
+            <input id="wait" class="tiny" type="number" value="0" />
+            <span>Gõ / số</span>
+            <input id="value" type="text" />
+            <span>Phím</span>
+            <input id="key" type="text" />
+            <span>X, Y</span>
+            <div class="xy"><input id="x" type="number" value="200" /><input id="y" type="number" value="200" /></div>
+            <span>Nút</span>
+            <select id="button"><option>trái</option><option>phải</option><option>giữa</option></select>
+            <span>Cuộn dx, dy</span>
+            <div class="xy"><input id="dx" type="number" value="0" /><input id="dy" type="number" value="-1" /></div>
+          </div>
+        </fieldset>
+        <div class="screen" id="screen">
+          <div class="place">Màn hình tập. Trên phần mềm PC, Ghi / Làm lại chạy trên cả máy Windows.</div>
+          <div class="cursor" id="cursor"></div>
+          <div class="typed" id="typed"></div>
+        </div>
+      </div>
+    </div>
+    <aside class="howto">
+      <h2>Cách dùng — giống phần mềm tải về máy</h2>
       <ol>
-        <li>Tải gói phần mềm, giải nén.</li>
-        <li>Cài Python 3.11 trở lên nếu máy chưa có.</li>
-        <li>Mở PowerShell trong thư mục vừa giải nén rồi chạy <code>.\Cai-dat.ps1</code>.</li>
-        <li>Cửa sổ Ghi / Dừng / Làm lại hiện ra. Bấm Ghi, làm thao tác trên máy, Dừng, rồi Làm lại. F8 cũng dừng.</li>
+        <li>Bấm <strong>Ghi</strong>, rồi gõ phím hoặc bấm trên màn hình tập. Trên PC: làm thao tác trên cửa sổ thật (Excel, trình duyệt…).</li>
+        <li>Bấm <strong>Dừng</strong> hoặc phím <strong>F8</strong>. Máy tách thành từng bước.</li>
+        <li>Sửa bước: Lên / Xuống / Sửa / Xóa / Thêm. Dán dãy số nếu cần tăng dần.</li>
+        <li>Bấm <strong>Làm lại</strong>. Ô Lặp = số lần. Ô Chờ = giây để chuyển cửa sổ. Lặp 0 = làm mãi.</li>
+        <li>Bấm <strong>Lưu</strong>. Trên PC, <strong>Lên VPS</strong> đưa bản lên kho này; <strong>Lấy VPS</strong> kéo về máy.</li>
       </ol>
+      <p class="hint">Cửa sổ bên trái là đúng giao diện phần mềm trên PC (Ghi nhớ thao tác). Tải về máy để Ghi / Làm lại cả bàn phím và chuột ngoài trình duyệt.</p>
       <div class="row">
-        <a class="btn" href="/tai/pc-macro.zip">Tải phần mềm PC</a>
+        <a class="file" href="/tai/pc-macro.zip">Tải phần mềm PC</a>
       </div>
-    </section>
+      <p class="hint" id="hubHint"></p>
+    </aside>
+  </div>
+</div>
+<script>
+  var serverToken = __CONTROL_TOKEN__;
+  var NONE = "Không thay số";
+  var KIND = { "Gõ chữ": "type", "Gõ số": "number", "Phím": "key", "Bấm chuột": "click", "Cuộn": "scroll", "Chờ": "wait" };
+  var KIND_LABEL = { type: "Gõ chữ", number: "Gõ số", key: "Phím", click: "Bấm chuột", scroll: "Cuộn", wait: "Chờ" };
+  var BTN = { trái: "left", phải: "right", giữa: "middle" };
+  var BTN_LABEL = { left: "trái", right: "phải", middle: "giữa" };
+  var state = { items: [], script: [], slug: "", recording: false, appending: false, playing: false, typeBuf: "", typeWait: 0 };
 
-    <section class="card">
-      <h2>Đưa kịch bản lên VPS</h2>
-      <p>Sau khi cài, đặt địa chỉ kho rồi đẩy bản đã lưu từ máy lên đây:</p>
-      <p><code id="hubEnv">$env:PC_MACRO_HUB='http://IP:8088'</code></p>
-      <p><code id="tokenEnv">$env:PC_MACRO_TOKEN=''</code></p>
-      <p>Trên máy: nút <strong>Lên VPS</strong> / <strong>Lấy VPS</strong>, hoặc:</p>
-      <p><code>python -m pc_macro push</code></p>
-      <p><code>python -m pc_macro pull</code></p>
-    </section>
-
-    <section class="card">
-      <h2>Kịch bản trên kho</h2>
-      <p class="status" id="status">Đang tải danh sách…</p>
-      <div class="row">
-        <button type="button" id="reload">Tải lại</button>
-        <button type="button" class="ghost" id="emptyHint">Ghi trên PC rồi Lên VPS</button>
-      </div>
-      <ul class="macros" id="list"></ul>
-    </section>
-  </main>
-  <script>
-    var serverToken = __CONTROL_TOKEN__;
-    var statusEl = document.getElementById("status");
-    var listEl = document.getElementById("list");
-
-    function headers() {
-      var out = { "Accept": "application/json" };
-      if (serverToken) out.Authorization = "Bearer " + serverToken;
-      return out;
+  function $(id) { return document.getElementById(id); }
+  function headers() {
+    var out = { "Accept": "application/json", "Content-Type": "application/json" };
+    if (serverToken) out.Authorization = "Bearer " + serverToken;
+    return out;
+  }
+  function setStatus(text, kind) {
+    $("status").textContent = text;
+    $("status").className = "status" + (kind ? " " + kind : "");
+  }
+  function caption(step) {
+    var wait = parseInt(step.wait || 0, 10);
+    var prefix = wait >= 200 && step.kind !== "wait" ? "Chờ " + wait + " ms · " : "";
+    if (step.kind === "type") return prefix + "Gõ " + (step.value || "");
+    if (step.kind === "number") return prefix + "Gõ số " + (step.value || "");
+    if (step.kind === "key") return prefix + "Phím " + (step.key || "");
+    if (step.kind === "click") return prefix + "Bấm " + (BTN_LABEL[step.button] || "trái") + " tại " + step.x + "," + step.y;
+    if (step.kind === "scroll") return prefix + "Cuộn tại " + step.x + "," + step.y;
+    if (step.kind === "wait") return prefix + "Chờ " + wait + " ms";
+    return prefix + "Bước";
+  }
+  function flushType() {
+    if (!state.typeBuf) return;
+    var kind = /^\d+$/.test(state.typeBuf) ? "number" : "type";
+    state.script.push({ kind: kind, value: state.typeBuf, wait: state.typeWait || 0 });
+    state.typeBuf = "";
+    state.typeWait = 0;
+  }
+  function refreshSteps(select) {
+    var box = $("steps");
+    box.innerHTML = "";
+    state.script.forEach(function (step, i) {
+      var opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = (i + 1) + ". " + caption(step);
+      box.appendChild(opt);
+    });
+    if (select != null && select >= 0 && select < state.script.length) {
+      box.selectedIndex = select;
+      loadStep(state.script[select]);
     }
-
-    function setStatus(text, kind) {
-      statusEl.textContent = text;
-      statusEl.className = "status" + (kind ? " " + kind : "");
+    refreshSpans();
+  }
+  function refreshSaved() {
+    var box = $("saved");
+    var keep = box.selectedIndex;
+    box.innerHTML = "";
+    state.items.forEach(function (item) {
+      var opt = document.createElement("option");
+      opt.value = item.slug;
+      opt.textContent = (item.name || item.slug) + "  (" + (item.step_count || 0) + " bước)";
+      box.appendChild(opt);
+    });
+    if (keep >= 0 && keep < box.options.length) box.selectedIndex = keep;
+  }
+  function refreshSpans() {
+    var numbers = longestNumbers();
+    var box = $("span");
+    var current = box.value;
+    box.innerHTML = "";
+    var first = document.createElement("option");
+    first.textContent = NONE;
+    box.appendChild(first);
+    numbers.forEach(function (num, i) {
+      var opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = (i + 1) + ". " + num;
+      box.appendChild(opt);
+    });
+    if (current && Array.prototype.some.call(box.options, function (o) { return o.value === current; })) {
+      box.value = current;
+    } else if (numbers.length) {
+      box.selectedIndex = 1;
     }
-
-    function render(items) {
-      listEl.innerHTML = "";
-      if (!items.length) {
-        setStatus("Chưa có kịch bản trên kho. Ghi trên PC rồi bấm Lên VPS.", "");
-        return;
-      }
-      setStatus(items.length + " kịch bản trên kho.", "ok");
-      items.forEach(function (item) {
-        var li = document.createElement("li");
-        var title = document.createElement("strong");
-        title.textContent = item.name || item.slug || "kịch bản";
-        var meta = document.createElement("div");
-        meta.className = "meta";
-        meta.textContent = (item.step_count || 0) + " bước · " + (item.slug || "");
-        var caps = document.createElement("div");
-        caps.className = "caps";
-        caps.textContent = (item.captions || []).slice(0, 6).join(" → ");
-        li.appendChild(title);
-        li.appendChild(meta);
-        if (caps.textContent) li.appendChild(caps);
-        listEl.appendChild(li);
+    updateNext();
+  }
+  function longestNumbers() {
+    return state.script.filter(function (s) { return s.kind === "number" && s.value; }).map(function (s) { return s.value; });
+  }
+  function updateNext() {
+    if ($("span").value === "" || $("span").options[$("span").selectedIndex].textContent === NONE) {
+      $("nextNumber").textContent = "Không thay số — làm lại đúng kịch bản.";
+      return;
+    }
+    var lines = $("numbers").value.split(/\s+/).filter(Boolean);
+    $("nextNumber").textContent = lines[0] ? "Số tiếp theo: " + lines[0] : "Chưa có số. Dán danh sách hoặc thêm bước Gõ số.";
+  }
+  function loadStep(step) {
+    $("kind").value = KIND_LABEL[step.kind] || "Gõ chữ";
+    $("value").value = step.value || "";
+    $("key").value = step.key || "";
+    $("x").value = step.x != null ? step.x : 200;
+    $("y").value = step.y != null ? step.y : 200;
+    $("button").value = BTN_LABEL[step.button] || "trái";
+    $("dx").value = step.dx != null ? step.dx : 0;
+    $("dy").value = step.dy != null ? step.dy : -1;
+    $("wait").value = step.wait || 0;
+  }
+  function stepFromForm() {
+    var kind = KIND[$("kind").value];
+    var wait = parseInt($("wait").value || "0", 10) || 0;
+    if (kind === "type" || kind === "number") return { kind: kind, value: $("value").value, wait: wait };
+    if (kind === "key") return { kind: kind, key: $("key").value, wait: wait };
+    if (kind === "click") return { kind: kind, x: +$("x").value || 0, y: +$("y").value || 0, button: BTN[$("button").value] || "left", wait: wait };
+    if (kind === "scroll") return { kind: kind, x: +$("x").value || 0, y: +$("y").value || 0, dx: +$("dx").value || 0, dy: +$("dy").value || 0, wait: wait };
+    return { kind: "wait", wait: wait };
+  }
+  function selectedSaved() {
+    var i = $("saved").selectedIndex;
+    return i >= 0 ? state.items[i] : null;
+  }
+  function startRecord(append) {
+    if (state.playing) return;
+    state.recording = true;
+    state.appending = append && state.script.length > 0;
+    if (!state.appending) {
+      state.script = [];
+      state.slug = "";
+      $("name").value = "";
+    }
+    state.typeBuf = "";
+    setStatus(state.appending ? "Đang ghi thêm vào kịch bản. Dừng hoặc F8 khi xong." : "Đang ghi. Làm lần lượt trên màn hình tập. Dừng hoặc F8 khi xong — máy tách thành bước.");
+    refreshSteps();
+  }
+  function stopRecord() {
+    if (!state.recording) return;
+    flushType();
+    state.recording = false;
+    state.appending = false;
+    if (!state.script.length) {
+      setStatus("Không có phím hay bấm để lưu. Bấm Ghi rồi làm trên màn hình tập.");
+      refreshSteps();
+      return;
+    }
+    if (!$("name").value.trim()) $("name").value = state.script.length + " bước";
+    refreshSteps(0);
+    setStatus("Kịch bản " + state.script.length + " bước. Sửa lần lượt, rồi Làm lại hoặc Lưu.");
+  }
+  function onScreenClick(ev) {
+    if (!state.recording) return;
+    flushType();
+    var box = $("screen").getBoundingClientRect();
+    state.script.push({ kind: "click", x: Math.round(ev.clientX - box.left), y: Math.round(ev.clientY - box.top), button: "left", wait: 80 });
+    setStatus("Đang ghi " + state.script.length + " thao tác…");
+    refreshSteps(state.script.length - 1);
+  }
+  function onKey(ev) {
+    if (ev.key === "F8") {
+      ev.preventDefault();
+      if (state.playing) { state.playing = false; setStatus("Đã dừng làm lại."); return; }
+      if (state.recording) stopRecord();
+      return;
+    }
+    if (!state.recording) return;
+    if (ev.target && /^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName)) return;
+    ev.preventDefault();
+    if (ev.key.length === 1) {
+      if (!state.typeBuf) state.typeWait = 80;
+      state.typeBuf += ev.key;
+      setStatus("Đang ghi…");
+      return;
+    }
+    flushType();
+    var map = { Enter: "enter", Backspace: "backspace", Tab: "tab", Escape: "esc", " ": "space" };
+    state.script.push({ kind: "key", key: map[ev.key] || ev.key.toLowerCase(), wait: 80 });
+    refreshSteps(state.script.length - 1);
+  }
+  function play() {
+    if (state.recording || state.playing) return;
+    if (!state.script.length) {
+      setStatus("Chưa có bước. Bấm Ghi rồi làm trên màn hình tập, hoặc Thêm bước.");
+      return;
+    }
+    var times = parseInt($("times").value || "1", 10);
+    var delay = parseFloat($("delay").value || "0");
+    if (isNaN(times) || isNaN(delay) || times < 0 || delay < 0) {
+      setStatus("Lần lặp và chờ phải là số.");
+      return;
+    }
+    state.playing = true;
+    $("typed").textContent = "";
+    $("cursor").style.display = "block";
+    setStatus("Chuẩn bị làm lại… trên PC hãy chuyển sang cửa sổ cần thao tác.");
+    var loops = 0;
+    function oneLoop() {
+      if (!state.playing) return;
+      loops += 1;
+      runSteps(0, function () {
+        if (!state.playing) return;
+        if (times !== 0 && loops >= times) {
+          state.playing = false;
+          setStatus("Đã làm xong " + loops + " lần. Trên PC, Làm lại gõ và bấm thật trên máy.");
+          return;
+        }
+        oneLoop();
       });
     }
-
-    function loadMacros() {
-      setStatus("Đang tải danh sách…", "");
-      fetch("/v1/macros", { headers: headers() })
-        .then(function (res) {
-          if (res.status === 401) throw new Error("Thiếu mã kết nối trang.");
-          if (!res.ok) throw new Error("Không đọc được kho.");
-          return res.json();
-        })
-        .then(function (body) { render(body.items || []); })
-        .catch(function (err) { setStatus(err.message || "Lỗi tải kho.", "err"); });
+    window.setTimeout(oneLoop, Math.max(0, delay) * 1000);
+  }
+  function runSteps(index, done) {
+    if (!state.playing || index >= state.script.length) { done(); return; }
+    var step = state.script[index];
+    $("steps").selectedIndex = index;
+    loadStep(step);
+    var wait = Math.min(1200, Math.max(120, parseInt(step.wait || 0, 10)));
+    if (step.kind === "click" || step.kind === "scroll") {
+      $("cursor").style.left = (step.x || 20) + "px";
+      $("cursor").style.top = (step.y || 20) + "px";
     }
-
-    document.getElementById("reload").addEventListener("click", loadMacros);
-    document.getElementById("emptyHint").addEventListener("click", function () {
-      setStatus("Mở phần mềm trên PC: Ghi → Dừng → Lưu → Lên VPS.", "");
+    if (step.kind === "type" || step.kind === "number") {
+      $("typed").textContent = (step.kind === "number" ? nextNumber(step.value) : step.value) || "";
+    }
+    if (step.kind === "key" && step.key === "enter") $("typed").textContent += "↵";
+    window.setTimeout(function () { runSteps(index + 1, done); }, wait);
+  }
+  function nextNumber(fallback) {
+    var lines = $("numbers").value.split(/\s+/).filter(Boolean);
+    if (!lines.length) return fallback;
+    var used = lines.shift();
+    if ($("bump").checked) {
+      var add = parseInt($("step").value || "1", 10) || 1;
+      var next = String(Math.max(0, parseInt(used, 10) + add));
+      if (/^0/.test(used)) next = next.padStart(used.length, "0");
+      lines.push(next);
+    }
+    $("numbers").value = lines.join("\n");
+    updateNext();
+    return used;
+  }
+  function saveMacro() {
+    if (state.recording) { setStatus("Dừng ghi rồi hãy lưu."); return; }
+    if (!state.script.length) { setStatus("Chưa có bước để lưu."); return; }
+    var body = { name: $("name").value, slug: state.slug || null, steps: state.script, numbers: { items: $("numbers").value.split(/\s+/).filter(Boolean), bump: $("bump").checked, step: parseInt($("step").value || "1", 10) || 1 } };
+    fetch("/v1/macros", { method: "POST", headers: headers(), body: JSON.stringify(body) })
+      .then(function (res) { if (!res.ok) throw new Error("Không lưu được."); return res.json(); })
+      .then(function (item) {
+        state.slug = item.slug || "";
+        $("name").value = item.name || $("name").value;
+        setStatus("Đã lưu kịch bản «" + $("name").value + "» — " + state.script.length + " bước.");
+        return loadList();
+      })
+      .catch(function (err) { setStatus(err.message, "err"); });
+  }
+  function openItem(item, insert) {
+    if (!item) { setStatus("Chọn một bản đã lưu."); return; }
+    fetch("/v1/macros/" + encodeURIComponent(item.slug), { headers: headers() })
+      .then(function (res) { if (!res.ok) throw new Error("Không mở được bản."); return res.json(); })
+      .then(function (full) {
+        var incoming = full.steps || [];
+        if (insert) {
+          state.script = state.script.concat(incoming);
+        } else {
+          state.script = incoming;
+          state.slug = full.slug || "";
+          $("name").value = full.name || "";
+          if (full.numbers && full.numbers.items) $("numbers").value = (full.numbers.items || []).join("\n");
+        }
+        refreshSteps(0);
+        setStatus(insert ? "Đã chèn vào kịch bản." : "Đã mở kịch bản «" + (full.name || "") + "» — " + state.script.length + " bước. Sửa rồi Làm lại.");
+      })
+      .catch(function (err) { setStatus(err.message, "err"); });
+  }
+  function deleteItem() {
+    var item = selectedSaved();
+    if (!item) return;
+    if (!window.confirm("Xoá «" + item.name + "»?")) return;
+    fetch("/v1/macros/" + encodeURIComponent(item.slug), { method: "DELETE", headers: headers() })
+      .then(function (res) { if (!res.ok) throw new Error("Không xoá được."); return loadList(); })
+      .then(function () { setStatus("Đã xoá «" + item.name + "»."); })
+      .catch(function (err) { setStatus(err.message, "err"); });
+  }
+  function loadList() {
+    return fetch("/v1/macros", { headers: headers() })
+      .then(function (res) {
+        if (res.status === 401) throw new Error("Thiếu mã kết nối trang.");
+        if (!res.ok) throw new Error("Không đọc được kho.");
+        return res.json();
+      })
+      .then(function (body) {
+        state.items = body.items || [];
+        refreshSaved();
+        return state.items;
+      });
+  }
+  function move(delta) {
+    var i = $("steps").selectedIndex;
+    var j = i + delta;
+    if (i < 0 || j < 0 || j >= state.script.length) return;
+    var tmp = state.script[i];
+    state.script[i] = state.script[j];
+    state.script[j] = tmp;
+    refreshSteps(j);
+    setStatus(delta < 0 ? "Đã chuyển bước lên vị trí " + (j + 1) + "." : "Đã chuyển bước xuống vị trí " + (j + 1) + ".");
+  }
+  function applyStep() {
+    var i = $("steps").selectedIndex;
+    if (i < 0) { setStatus("Chọn bước cần sửa."); return; }
+    state.script[i] = stepFromForm();
+    refreshSteps(i);
+    setStatus("Đã sửa bước " + (i + 1) + ".");
+  }
+  function addStep() {
+    var i = $("steps").selectedIndex;
+    var step = stepFromForm();
+    if (i < 0) state.script.push(step);
+    else state.script.splice(i + 1, 0, step);
+    refreshSteps(i < 0 ? state.script.length - 1 : i + 1);
+    setStatus("Đã thêm bước.");
+  }
+  function delStep() {
+    var i = $("steps").selectedIndex;
+    if (i < 0) return;
+    state.script.splice(i, 1);
+    refreshSteps(Math.min(i, state.script.length - 1));
+    setStatus("Đã xóa bước.");
+  }
+  function demoIfEmpty() {
+    if (state.items.length || state.script.length) return;
+    state.script = [
+      { kind: "type", value: "xin chao", wait: 0 },
+      { kind: "number", value: "1001", wait: 80 },
+      { kind: "key", key: "enter", wait: 80 },
+      { kind: "click", x: 80, y: 60, button: "left", wait: 200 }
+    ];
+    $("name").value = "Ví dụ — gõ, số, bấm";
+    $("numbers").value = "1001\n1002\n1003";
+    refreshSteps(0);
+    setStatus("Đây là cửa sổ phần mềm trên PC. Bấm Làm lại để xem kịch bản mẫu, hoặc Ghi để tập trên màn hình dưới.");
+  }
+  function fillWordWrap(wrap, text) {
+    wrap.setAttribute("data-words", text);
+    wrap.setAttribute("translate", "no");
+    wrap.classList.add("words");
+    wrap.textContent = "";
+    String(text).split(" ").forEach(function (part, index) {
+      if (index) {
+        var spacer = document.createElement("span");
+        spacer.className = "sp";
+        spacer.setAttribute("translate", "no");
+        spacer.textContent = " ";
+        wrap.appendChild(spacer);
+      }
+      if (part) {
+        var word = document.createElement("span");
+        word.className = "w";
+        word.setAttribute("translate", "no");
+        word.textContent = part;
+        wrap.appendChild(word);
+      }
     });
-    document.getElementById("hubEnv").textContent = "$env:PC_MACRO_HUB='" + location.origin + "'";
-    document.getElementById("tokenEnv").textContent = "$env:PC_MACRO_TOKEN='" + (serverToken || "") + "'";
-    loadMacros();
-  </script>
+  }
+  function padSpaces(root) {
+    if (!root) return;
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (node) {
+        var parent = node.parentElement;
+        if (!parent || parent.classList.contains("sp") || parent.classList.contains("w")) return NodeFilter.FILTER_REJECT;
+        if (parent.closest && parent.closest(".words, [data-words], INPUT, TEXTAREA, SELECT, SCRIPT, STYLE")) return NodeFilter.FILTER_REJECT;
+        if (!node.nodeValue || node.nodeValue.indexOf(" ") < 0) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    var nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(function (node) {
+      var wrap = document.createElement("span");
+      fillWordWrap(wrap, node.nodeValue);
+      node.parentNode.replaceChild(wrap, node);
+    });
+  }
+  function pageTranslated() {
+    return /translated/.test(document.documentElement.className) || !!document.querySelector(".goog-te-banner-frame, #goog-gt-tt");
+  }
+  function watchSpaces() {
+    var banner = $("translateWarn");
+    function tick() {
+      if (banner) banner.hidden = !pageTranslated();
+      if (pageTranslated()) padSpaces(document.body);
+    }
+    tick();
+    var n = 0;
+    var timer = window.setInterval(function () { tick(); n += 1; if (n >= 20) window.clearInterval(timer); }, 600);
+  }
+
+  $("btnGhi").onclick = function () { startRecord(false); };
+  $("btnThem").onclick = function () { startRecord(true); };
+  $("btnDung").onclick = function () { if (state.playing) { state.playing = false; setStatus("Đã dừng làm lại."); } else stopRecord(); };
+  $("btnLai").onclick = play;
+  $("btnLuu").onclick = saveMacro;
+  $("btnLen").onclick = function () { saveMacro(); setStatus("Đã đưa kịch bản lên kho VPS này — giống nút Lên VPS trên phần mềm PC."); };
+  $("btnLay").onclick = function () {
+    loadList().then(function (items) {
+      if (!items.length) { setStatus("Kho VPS chưa có bản. Ghi rồi Lưu, hoặc đẩy từ phần mềm PC."); return; }
+      openItem(items[0], false);
+      setStatus("Đã lấy danh sách từ kho VPS. Chọn bản rồi bấm Mở — giống Lấy VPS trên PC.");
+    });
+  };
+  $("btnMo").onclick = function () { openItem(selectedSaved(), false); };
+  $("btnChen").onclick = function () { openItem(selectedSaved(), true); };
+  $("btnXoa").onclick = deleteItem;
+  $("saved").ondblclick = function () { openItem(selectedSaved(), false); };
+  $("steps").onchange = function () {
+    var i = $("steps").selectedIndex;
+    if (i >= 0) loadStep(state.script[i]);
+  };
+  $("btnUp").onclick = function () { move(-1); };
+  $("btnDown").onclick = function () { move(1); };
+  $("btnSua").onclick = applyStep;
+  $("btnAddStep").onclick = addStep;
+  $("btnDelStep").onclick = delStep;
+  $("numbers").onblur = updateNext;
+  $("span").onchange = updateNext;
+  $("bump").onchange = updateNext;
+  $("screen").onclick = onScreenClick;
+  document.addEventListener("keydown", onKey);
+  $("hubHint").textContent = "Tải zip, chạy Cai-dat.ps1 trên Windows. PC_MACRO_HUB=" + location.origin;
+  loadList().then(demoIfEmpty).catch(function (err) {
+    setStatus(err.message, "err");
+    demoIfEmpty();
+  });
+  watchSpaces();
+</script>
 </body>
 </html>
