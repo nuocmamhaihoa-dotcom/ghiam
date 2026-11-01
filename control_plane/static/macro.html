@@ -225,7 +225,7 @@
     showCurrent();
     persist().catch(function () {});
     setStatus("Đã gõ " + value + ", Enter, cộng " + step + ". Số tiếp theo: " + list[0] + ".");
-    var wait = Math.max(400, (parseFloat($("delay").value || "0") || 0) * 200);
+    var wait = Math.max(800, (parseFloat($("delay").value || "1") || 1) * 1000);
     timer = window.setTimeout(oneTurn, wait);
   }
   function startPlay() {
