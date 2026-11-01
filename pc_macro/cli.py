@@ -11,7 +11,7 @@ from pc_macro.desktop import Desktop, available, install_hint
 from pc_macro.events import default_title
 from pc_macro.hub import HubError, describe, pull, push
 from pc_macro.numbers import NumberQueue, apply_turn, digit_spans
-from pc_macro.script import events_to_steps, script_captions, steps_to_events
+from pc_macro.script import compile_script, events_to_steps, number_enter_steps, script_captions, steps_to_events
 from pc_macro.session import Player
 from pc_macro.store import MacroStore
 
@@ -89,6 +89,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     spans = digit_spans(events)
 
     def prepare(_loop: int) -> list:
+        if queue.range_mode:
+            value = queue.take()
+            if not value:
+                return []
+            print(f"Số: {value}")
+            _script, batch = compile_script(number_enter_steps(value))
+            return batch
         batch, value = apply_turn(events, spans, queue)
         if value:
             print(f"Số: {value}")

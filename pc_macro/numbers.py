@@ -8,6 +8,30 @@ from typing import Any
 _SPLIT = re.compile(r"[\n,;\s]+")
 _MAX_ITEMS = 500
 _MAX_DIGITS = 40
+PREFIX_LEN = 5
+DIGIT_LEN = 5
+
+
+def normalize_prefix(raw: str) -> str:
+    """Keep up to 5 letters/digits. The user can change this block anytime."""
+    return "".join(ch for ch in raw if ch.isalnum())[:PREFIX_LEN]
+
+
+def normalize_digits(raw: Any, default: str = "00000") -> str:
+    """Always 5 digits, padded on the left."""
+    digits = "".join(ch for ch in str(raw) if ch.isdigit())
+    if not digits:
+        digits = "".join(ch for ch in default if ch.isdigit()) or "0"
+    value = int(digits)
+    if value < 0:
+        value = 0
+    if value > 10**DIGIT_LEN - 1:
+        value = 10**DIGIT_LEN - 1
+    return str(value).zfill(DIGIT_LEN)
+
+
+def make_code(prefix: str, digits: str) -> str:
+    return f"{normalize_prefix(prefix)}{normalize_digits(digits)}"
 
 
 def digit_spans(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -123,14 +147,35 @@ class NumberQueue:
         span: int | None = None,
         flagged: list[str] | None = None,
         last_used: str = "",
+        prefix: str = "",
+        start: str = "",
+        end: str = "",
+        current: str = "",
+        range_mode: bool = False,
+        exhausted: bool = False,
     ) -> None:
         self.items = [item for item in (items or []) if item][:_MAX_ITEMS]
         self.index = index if self.items and 0 <= index < len(self.items) else 0
-        self.step = step
+        self.step = step if step else 1
         self.bump = bump
         self.span = span
-        self.flagged = _clean_numbers(flagged)
-        self.last_used = "".join(ch for ch in last_used if ch.isdigit())[:_MAX_DIGITS]
+        self.flagged = _clean_codes(flagged)
+        self.last_used = _clean_code(last_used)
+        self.range_mode = bool(range_mode or prefix or start or end)
+        self.prefix = normalize_prefix(prefix)
+        start_digits = normalize_digits(start or "00000")
+        end_digits = normalize_digits(end or start_digits)
+        if int(end_digits) < int(start_digits):
+            start_digits, end_digits = end_digits, start_digits
+        self.start = start_digits
+        self.end = end_digits
+        now = normalize_digits(current or start_digits)
+        if int(now) < int(self.start):
+            now = self.start
+        self.current = now
+        past_end = int(self.current) > int(self.end)
+        finished_last = bool(exhausted) and int(self.current) == int(self.end)
+        self.exhausted = self.range_mode and (past_end or finished_last)
 
     @classmethod
     def from_dict(cls, raw: Any) -> NumberQueue:
@@ -161,6 +206,12 @@ class NumberQueue:
             span=span_index,
             flagged=data.get("flagged") or [],
             last_used=str(data.get("last_used") or ""),
+            prefix=str(data.get("prefix") or ""),
+            start=str(data.get("start") or ""),
+            end=str(data.get("end") or ""),
+            current=str(data.get("current") or ""),
+            range_mode=bool(data.get("range_mode") or data.get("prefix") or data.get("start") or data.get("end")),
+            exhausted=bool(data.get("exhausted")),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -171,6 +222,12 @@ class NumberQueue:
             "bump": self.bump,
             "flagged": list(self.flagged),
             "last_used": self.last_used,
+            "prefix": self.prefix,
+            "start": self.start,
+            "end": self.end,
+            "current": self.current,
+            "range_mode": self.range_mode,
+            "exhausted": self.exhausted,
         }
         if self.span is not None:
             payload["span"] = self.span
@@ -180,11 +237,29 @@ class NumberQueue:
         return "\n".join(self.items)
 
     def peek(self, fallback: str = "") -> str:
+        if self.range_mode:
+            if self.exhausted or len(self.prefix) != PREFIX_LEN:
+                return ""
+            return make_code(self.prefix, self.current)
         if not self.items:
             return "".join(ch for ch in fallback if ch.isdigit()) or fallback
         return self.items[self.index]
 
-    def take(self, fallback: str) -> str:
+    def take(self, fallback: str = "") -> str:
+        if self.range_mode:
+            value = self.peek()
+            if not value:
+                self.exhausted = True
+                return ""
+            self.last_used = value
+            nxt = int(self.current) + self.step
+            if nxt > 10**DIGIT_LEN - 1:
+                self.exhausted = True
+                return value
+            self.current = str(nxt).zfill(DIGIT_LEN)
+            if nxt > int(self.end):
+                self.exhausted = True
+            return value
         if not self.items:
             seed = "".join(ch for ch in fallback if ch.isdigit()) or fallback
             if not seed:
@@ -199,8 +274,8 @@ class NumberQueue:
         return value
 
     def flag(self, value: str | None = None) -> str | None:
-        """Keep the number that was on screen when the layout changed."""
-        chosen = "".join(ch for ch in str(value or self.last_used or self.peek()) if ch.isdigit())[:_MAX_DIGITS]
+        """Keep the code that was on screen when the layout changed."""
+        chosen = _clean_code(value or self.last_used or self.peek())
         if not chosen:
             return None
         if chosen not in self.flagged:
@@ -210,12 +285,16 @@ class NumberQueue:
         return chosen
 
 
-def _clean_numbers(raw: Any) -> list[str]:
+def _clean_code(raw: Any) -> str:
+    return "".join(ch for ch in str(raw or "") if ch.isalnum())[: PREFIX_LEN + DIGIT_LEN]
+
+
+def _clean_codes(raw: Any) -> list[str]:
     items: list[str] = []
     for item in raw or []:
-        digits = "".join(ch for ch in str(item) if ch.isdigit())[:_MAX_DIGITS]
-        if digits and digits not in items:
-            items.append(digits)
+        code = _clean_code(item)
+        if code and code not in items:
+            items.append(code)
         if len(items) >= _MAX_ITEMS:
             break
     return items

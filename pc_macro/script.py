@@ -136,9 +136,9 @@ def compile_script(steps: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], l
 
 
 def number_enter_steps(sample: str = "1") -> list[dict[str, Any]]:
-    """Default job: type one number into the focused field, then Enter."""
-    digits = "".join(ch for ch in sample if ch.isdigit()) or "1"
-    typed = new_step("number", value=digits)
+    """Type the current code (5 fixed chars + 5 digits), then Enter."""
+    text = "".join(ch for ch in sample if ch.isalnum()) or "1"
+    typed = new_step("type", value=text)
     enter = new_step("key", key="enter", wait=80)
     return [step for step in (typed, enter) if step]
 

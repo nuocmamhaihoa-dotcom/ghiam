@@ -134,7 +134,8 @@ VPS chỉ giữ kịch bản. Ghi phím/chuột và bấm Làm lại phải làm
 1. Cài Python 3.11+
 2. Mở PowerShell trong thư mục này:
    .\\Cai-dat.ps1
-3. Cửa sổ Ghi / Dừng / Làm lại hiện ra. Bấm Ghi, làm thao tác, Dừng, rồi Làm lại.
+3. Cửa sổ hiện ra. Nhập 5 ký tự cố định, số bắt đầu và số kết thúc (5 số).
+   Bấm vào ô cần nhập, Bắt đầu: máy gõ mã rồi Enter, cộng 1, lặp đến hết.
 
 Đồng bộ với VPS (sau khi đặt địa chỉ):
   python -m pc_macro pull

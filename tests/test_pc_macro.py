@@ -11,7 +11,17 @@ from pathlib import Path
 
 from pc_macro.desktop import key_name
 from pc_macro.events import default_title, point_in_box, sanitize_events, schedule, script_lines
-from pc_macro.numbers import NumberQueue, apply_turn, bump_number, digit_spans, parse_number_list, pick_span
+from pc_macro.numbers import (
+    NumberQueue,
+    apply_turn,
+    bump_number,
+    digit_spans,
+    make_code,
+    normalize_digits,
+    normalize_prefix,
+    parse_number_list,
+    pick_span,
+)
 from pc_macro.script import (
     compile_script,
     delete_step,
@@ -188,6 +198,71 @@ class NumberListTests(unittest.TestCase):
         self.assertEqual(result["loops"], 2)
 
 
+class PrefixRangeTests(unittest.TestCase):
+    def test_prefix_and_five_digits_walk_start_to_end(self) -> None:
+        self.assertEqual(normalize_prefix("spx-ab!!99"), "spxab")
+        self.assertEqual(normalize_digits("7"), "00007")
+        self.assertEqual(make_code("SPXAB", "1"), "SPXAB00001")
+        queue = NumberQueue(range_mode=True, prefix="SPXAB", start="00001", end="00003", step=1)
+        self.assertEqual(queue.peek(), "SPXAB00001")
+        self.assertEqual(queue.take(), "SPXAB00001")
+        self.assertEqual(queue.take(), "SPXAB00002")
+        self.assertEqual(queue.take(), "SPXAB00003")
+        self.assertEqual(queue.take(), "")
+        self.assertTrue(queue.exhausted)
+        self.assertEqual(queue.peek(), "")
+        again = NumberQueue.from_dict(queue.to_dict())
+        self.assertEqual(again.prefix, "SPXAB")
+        self.assertEqual(again.start, "00001")
+        self.assertEqual(again.end, "00003")
+        self.assertTrue(again.exhausted)
+        self.assertEqual(again.peek(), "")
+
+    def test_short_prefix_does_not_start_and_prefix_can_change(self) -> None:
+        queue = NumberQueue(range_mode=True, prefix="AB", start="00010", end="00012")
+        self.assertEqual(queue.peek(), "")
+        queue = NumberQueue(
+            range_mode=True,
+            prefix="XYZ12",
+            start="00010",
+            end="00012",
+            current="00011",
+            step=1,
+        )
+        self.assertEqual(queue.take(), "XYZ1200011")
+        self.assertEqual(queue.peek(), "XYZ1200012")
+        self.assertEqual(queue.flag(), "XYZ1200011")
+        self.assertEqual(queue.flagged, ["XYZ1200011"])
+
+    def test_wider_end_resumes_after_last_number(self) -> None:
+        queue = NumberQueue(range_mode=True, prefix="SPXAB", start="00008", end="00008")
+        self.assertEqual(queue.take(), "SPXAB00008")
+        self.assertTrue(queue.exhausted)
+        resumed = NumberQueue.from_dict({**queue.to_dict(), "end": "00010", "exhausted": False})
+        self.assertEqual(resumed.peek(), "SPXAB00009")
+        self.assertEqual(resumed.take(), "SPXAB00009")
+
+    def test_player_types_full_code_then_enter(self) -> None:
+        queue = NumberQueue(range_mode=True, prefix="SPXAB", start="00001", end="00002")
+        sent: list[str] = []
+
+        def prepare(_loop: int) -> list:
+            value = queue.take()
+            if not value:
+                return []
+            _script, batch = compile_script(number_enter_steps(value))
+            return batch
+
+        player = Player(
+            lambda event: sent.append(str(event["key"])) if event.get("action") == "down" else None,
+            lambda _s: None,
+        )
+        result = player.play([], times=0, gap_ms=0, prepare=prepare)
+        self.assertEqual(result["loops"], 2)
+        self.assertEqual(sent[:11], ["S", "P", "X", "A", "B", "0", "0", "0", "0", "1", "enter"])
+        self.assertEqual(sent[11:22], ["S", "P", "X", "A", "B", "0", "0", "0", "0", "2", "enter"])
+
+
 class ScriptStepTests(unittest.TestCase):
     def test_number_then_enter_is_the_default_job(self) -> None:
         steps, events = compile_script(number_enter_steps("1001"))
@@ -196,6 +271,11 @@ class ScriptStepTests(unittest.TestCase):
         self.assertEqual(steps[1]["key"], "enter")
         keys = [event["key"] for event in events if event.get("action") == "down"]
         self.assertEqual(keys, ["1", "0", "0", "1", "enter"])
+        coded, typed = compile_script(number_enter_steps("SPXAB00001"))
+        self.assertEqual([step["kind"] for step in coded], ["type", "key"])
+        self.assertEqual(coded[0]["value"], "SPXAB00001")
+        typed_keys = [event["key"] for event in typed if event.get("action") == "down"]
+        self.assertEqual(typed_keys, ["S", "P", "X", "A", "B", "0", "0", "0", "0", "1", "enter"])
 
     def test_collapses_and_compiles_back(self) -> None:
         events = sanitize_events(

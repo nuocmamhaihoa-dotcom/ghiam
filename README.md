@@ -22,7 +22,7 @@ Chi tiết vận hành 2 PC: [`deploy/PA1_RUNBOOK.md`](deploy/PA1_RUNBOOK.md).
 
 ## Ghi nhớ phím và chuột trên máy, rồi làm lại
 
-Phần mềm nhỏ **chạy trên máy tính của bạn**: dán dãy số, bấm vào ô cần nhập, **Bắt đầu**. Máy gõ số vào dòng cố định, **Enter**, rồi **cộng 1**, lặp lại. Thấy giao diện đổi thì **Giao diện đổi** (hoặc F9) để lưu số đó. F8 dừng. VPS `http://VPS:8088/` hiện cùng giao diện; Gõ/Enter thật trên máy Windows.
+Phần mềm nhỏ **chạy trên máy tính của bạn**: nhập **5 ký tự cố định** (đổi được), **số bắt đầu** và **số kết thúc** của 5 số phía sau, bấm vào ô cần nhập, **Bắt đầu**. Máy gõ mã (ví dụ `SPXAB00001`), **Enter**, rồi **cộng 1**, lặp đến số kết thúc. Thấy giao diện đổi thì **Giao diện đổi** (hoặc F9) để lưu mã đó. F8 dừng. VPS `http://VPS:8088/` hiện cùng giao diện; Gõ/Enter thật trên máy Windows.
 
 ```bash
 pip install pynput          # hoặc: pip install -e ".[macro]"
@@ -44,7 +44,7 @@ Windows (đã có venv của agent):
 
 **Kịch bản từng bước:** sau khi Dừng, bản ghi tách thành bước (gõ chữ, gõ số, phím, bấm, cuộn, chờ). Sửa / xoá / lên / xuống / thêm từng bước, hoặc **Ghi thêm** để nối thao tác mới. **Chèn vào kịch bản** ghép một bản đã lưu vào kịch bản đang sửa. Lưu rồi lần sau **Mở** lại đúng thứ tự đã chỉnh.
 
-**Dãy số:** lúc ghi, gõ một số mẫu (ví dụ `1001`), hoặc thêm bước **Gõ số**. Ô **Dãy số** nhận danh sách — mỗi dòng một số, hoặc dán `1001, 2050, 3300`. Máy tự chọn dãy số dài nhất trong kịch bản để thay; đổi ô **Số sẽ thay** nếu chọn nhầm. Mặc định: mỗi lần làm lại lấy số tiếp theo, rồi **cộng 1** vào đúng dòng vừa dùng. Bỏ tick nếu chỉ muốn đi hết danh sách, không tăng.
+**Dãy số:** mỗi mã gồm **5 ký tự cố định** đứng trước + **5 số** tăng dần. Ví dụ tiền tố `SPXAB`, bắt đầu `00001`, kết thúc `00100` → máy gõ `SPXAB00001` rồi Enter, sau đó `SPXAB00002` … đến `SPXAB00100`. Đổi 5 ký tự cố định bất cứ lúc nào; dãy không bung thành hàng vạn dòng. F9 lưu mã đang dùng khi giao diện đổi.
 
 ## Cài đặt trên PC (dùng tài nguyên máy local)
 

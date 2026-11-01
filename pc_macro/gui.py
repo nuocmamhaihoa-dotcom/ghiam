@@ -10,7 +10,7 @@ from typing import Any
 
 from pc_macro.desktop import Desktop, available, install_hint
 from pc_macro.hub import HubError, configured, describe, pull, push
-from pc_macro.numbers import NumberQueue, apply_turn, digit_spans, parse_number_list
+from pc_macro.numbers import NumberQueue, make_code, normalize_digits, normalize_prefix
 from pc_macro.script import compile_script, number_enter_steps
 from pc_macro.session import Player, Recorder, ignore_window
 from pc_macro.store import MacroStore
@@ -31,19 +31,26 @@ class App:
         self.root.geometry("400x620")
         self.root.minsize(360, 560)
         self.root.attributes("-topmost", True)
-        self.status = tk.StringVar(value="Dán số. Bấm vào ô cần nhập trên máy. Bắt đầu: gõ số, Enter, cộng 1.")
-        self.current_label = tk.StringVar(value="Số sẽ gõ: —")
+        self.status = tk.StringVar(value="Nhập 5 ký tự cố định, số bắt đầu và số kết thúc. Bấm vào ô, rồi Bắt đầu.")
+        self.current_label = tk.StringVar(value="Sẽ gõ: —")
+        self.prefix = tk.StringVar(value="")
+        self.start = tk.StringVar(value="00001")
+        self.end = tk.StringVar(value="00010")
         self.delay = tk.StringVar(value="2")
         self.step = tk.StringVar(value="1")
         self.recorder = Recorder(ignore_point=ignore_window(self._window_box))
         self.player: Player | None = None
         self.click: dict[str, Any] | None = None
         self.current_slug = "day-so-enter"
-        self.queue = NumberQueue(bump=True, step=1, span=0)
+        self.queue = NumberQueue(range_mode=True, prefix="", start="00001", end="00010", step=1)
         self.desktop = Desktop(self._on_desktop, _now_ms)
         self._play_thread: threading.Thread | None = None
         self._build()
         self._load_or_empty()
+        self.prefix.trace_add("write", self._on_fields)
+        self.start.trace_add("write", self._on_fields)
+        self.end.trace_add("write", self._on_fields)
+        self.step.trace_add("write", self._on_fields)
         self.root.protocol("WM_DELETE_WINDOW", self._close)
 
     def run(self) -> None:
@@ -54,18 +61,27 @@ class App:
         pad = {"padx": 12, "pady": 5}
         ttk.Label(self.root, textvariable=self.status, wraplength=370).pack(anchor="w", **pad)
 
-        ttk.Label(self.root, text="Dãy số — mỗi dòng một số. Máy gõ dòng đang dùng vào ô đang mở.").pack(anchor="w", padx=12)
-        self.number_text = tk.Text(self.root, height=7, wrap="word", font=("Segoe UI", 14))
-        self.number_text.pack(fill="x", padx=12, pady=4)
-        self.number_text.bind("<FocusOut>", lambda _event: self._sync_queue())
+        ttk.Label(self.root, text="5 ký tự cố định (đứng trước, đổi được)").pack(anchor="w", padx=12)
+        ttk.Entry(self.root, textvariable=self.prefix, width=8, font=("Segoe UI", 18)).pack(anchor="w", padx=12, pady=4)
 
-        ttk.Label(self.root, textvariable=self.current_label, font=("Segoe UI", 16, "bold")).pack(anchor="w", padx=12, pady=6)
+        row = ttk.Frame(self.root)
+        row.pack(fill="x", **pad)
+        left = ttk.Frame(row)
+        left.pack(side="left", fill="x", expand=True)
+        ttk.Label(left, text="Số bắt đầu (5 số)").pack(anchor="w")
+        ttk.Entry(left, textvariable=self.start, width=8, font=("Segoe UI", 16)).pack(anchor="w", pady=2)
+        right = ttk.Frame(row)
+        right.pack(side="left", fill="x", expand=True, padx=(12, 0))
+        ttk.Label(right, text="Số kết thúc (5 số)").pack(anchor="w")
+        ttk.Entry(right, textvariable=self.end, width=8, font=("Segoe UI", 16)).pack(anchor="w", pady=2)
+
+        ttk.Label(self.root, textvariable=self.current_label, font=("Segoe UI", 16, "bold")).pack(anchor="w", padx=12, pady=8)
 
         opts = ttk.Frame(self.root)
         opts.pack(fill="x", **pad)
         ttk.Label(opts, text="Chờ (giây)").pack(side="left")
         ttk.Entry(opts, textvariable=self.delay, width=5).pack(side="left", padx=(6, 14))
-        ttk.Label(opts, text="Sau Enter, cộng").pack(side="left")
+        ttk.Label(opts, text="Mỗi lần cộng").pack(side="left")
         ttk.Entry(opts, textvariable=self.step, width=5).pack(side="left", padx=6)
 
         buttons = ttk.Frame(self.root)
@@ -98,9 +114,9 @@ class App:
             return
         if self._playing():
             return
-        self._sync_queue()
-        if not self.queue.items:
-            self.status.set("Dán ít nhất một số vào ô dãy số.")
+        self._sync_queue(write_back=True)
+        if not self.queue.peek():
+            self.status.set("Nhập đủ 5 ký tự cố định, rồi số bắt đầu và số kết thúc.")
             return
         try:
             delay = float(self.delay.get().strip() or "0")
@@ -110,13 +126,9 @@ class App:
         if delay < 0:
             self.status.set("Chờ không được âm.")
             return
-        sample = self.queue.peek()
-        self.script, events = compile_script(self._job_steps(sample))
-        self.spans = digit_spans(events)
-        self.queue.span = 0 if self.spans else None
         self.player = Player(self.desktop.send, time.sleep)
         self.status.set("Chuẩn bị… chuyển sang ô cần nhập.")
-        self._play_thread = threading.Thread(target=self._run_play, args=(events, delay), daemon=True)
+        self._play_thread = threading.Thread(target=self._run_play, args=(delay,), daemon=True)
         self._play_thread.start()
 
     def stop_all(self) -> None:
@@ -174,7 +186,7 @@ class App:
         self.root.after(0, self._load_or_empty)
         self._set_status(f"Đã lấy {result['count']} bản từ {describe()}.")
 
-    def _run_play(self, events: list[dict[str, Any]], delay: float) -> None:
+    def _run_play(self, delay: float) -> None:
         remaining = delay
         while remaining > 0 and self.player is not None and not self.player.cancelled:
             self._set_status(f"Bắt đầu sau {int(remaining)} giây… bấm vào dòng cố định.")
@@ -186,14 +198,16 @@ class App:
             return
 
         def prepare(_loop: int) -> list[dict[str, Any]]:
-            batch, value = apply_turn(events, self.spans, self.queue)
-            if value:
-                self._set_status(f"Đang gõ {value} rồi Enter.")
-            self.root.after(0, self._refresh_number_view)
+            value = self.queue.take()
+            if not value:
+                return []
+            _script, batch = compile_script(self._job_steps(value))
+            self._set_status(f"Đang gõ {value} rồi Enter.")
+            self.root.after(0, self._refresh_current)
             self.root.after(0, lambda: self._persist(silent=True))
             return batch
 
-        result = self.player.play(events, times=0, prepare=prepare)
+        result = self.player.play([], times=0, prepare=prepare)
         self.root.after(0, self._refresh_number_view)
         self.root.after(0, lambda: self._persist(silent=True))
         if result["stopped"]:
@@ -244,23 +258,57 @@ class App:
         steps.extend(number_enter_steps(sample))
         return steps
 
-    def _sync_queue(self) -> None:
-        items = parse_number_list(self.number_text.get("1.0", tk.END))
+    def _on_fields(self, *_args: Any) -> None:
+        cleaned = normalize_prefix(self.prefix.get())
+        if cleaned != self.prefix.get():
+            self.prefix.set(cleaned)
+            return
+        self._sync_queue(write_back=False)
+
+    def _sync_queue(self, *, write_back: bool = False) -> None:
         try:
             step = int(self.step.get().strip() or "1")
         except ValueError:
             step = 1
             self.step.set("1")
-        flagged = list(self.queue.flagged)
-        last_used = self.queue.last_used
-        self.queue = NumberQueue(items, step=step, bump=True, span=0, flagged=flagged, last_used=last_used)
-        if self.queue.items:
-            self.queue.index = min(self.queue.index, len(self.queue.items) - 1)
+        if step < 1:
+            step = 1
+            self.step.set("1")
+        prefix = normalize_prefix(self.prefix.get())
+        start = normalize_digits(self.start.get() or "00001")
+        end = normalize_digits(self.end.get() or start)
+        current = self.queue.current if self.queue.range_mode else start
+        exhausted = self.queue.exhausted if self.queue.range_mode else False
+        if self.queue.range_mode and start != self.queue.start and not self._playing():
+            current = start
+            exhausted = False
+        self.queue = NumberQueue(
+            range_mode=True,
+            prefix=prefix,
+            start=start,
+            end=end,
+            current=current,
+            step=step,
+            flagged=list(self.queue.flagged),
+            last_used=self.queue.last_used,
+            exhausted=exhausted,
+        )
+        if write_back:
+            self._write_fields()
         self._refresh_current()
 
+    def _write_fields(self) -> None:
+        if self.prefix.get() != self.queue.prefix:
+            self.prefix.set(self.queue.prefix)
+        if self.start.get() != self.queue.start:
+            self.start.set(self.queue.start)
+        if self.end.get() != self.queue.end:
+            self.end.set(self.queue.end)
+        if self.step.get() != str(self.queue.step):
+            self.step.set(str(self.queue.step))
+
     def _refresh_number_view(self) -> None:
-        self._write_numbers(self.queue.items)
-        self.step.set(str(self.queue.step))
+        self._write_fields()
         self._refresh_current()
         self._refresh_flags()
 
@@ -268,24 +316,16 @@ class App:
         nxt = self.queue.peek()
         last = self.queue.last_used
         if nxt and last:
-            self.current_label.set(f"Số sẽ gõ: {nxt}   (vừa xong: {last})")
+            self.current_label.set(f"Sẽ gõ: {nxt}   (vừa xong: {last})")
         elif nxt:
-            self.current_label.set(f"Số sẽ gõ: {nxt}")
+            self.current_label.set(f"Sẽ gõ: {nxt}")
         else:
-            self.current_label.set("Số sẽ gõ: —")
+            self.current_label.set("Sẽ gõ: —")
 
     def _refresh_flags(self) -> None:
         self.flag_box.delete(0, tk.END)
         for value in self.queue.flagged:
             self.flag_box.insert(tk.END, value)
-
-    def _write_numbers(self, items: list[str]) -> None:
-        text = "\n".join(items)
-        current = self.number_text.get("1.0", "end-1c")
-        if current == text:
-            return
-        self.number_text.delete("1.0", tk.END)
-        self.number_text.insert("1.0", text)
 
     def _load_or_empty(self) -> None:
         item = self.store.get(self.current_slug)
@@ -295,22 +335,23 @@ class App:
                 self.current_slug = str(row.get("slug") or self.current_slug)
                 break
         if item:
-            self.queue = NumberQueue.from_dict(item.get("numbers"))
+            loaded = NumberQueue.from_dict(item.get("numbers"))
+            if loaded.range_mode or loaded.prefix or loaded.start:
+                self.queue = loaded
+            self.queue.range_mode = True
             self.queue.bump = True
-            if self.queue.span is None:
-                self.queue.span = 0
             self.click = _click_from_steps(item.get("steps") or [])
         self._refresh_number_view()
-        if self.queue.items:
-            self.status.set("Đã mở dãy số đã lưu. Bấm vào ô cần nhập, rồi Bắt đầu.")
+        if self.queue.prefix or self.queue.last_used:
+            self.status.set("Đã mở dãy đã lưu. Bấm vào ô cần nhập, rồi Bắt đầu.")
 
     def _persist(self, *, silent: bool) -> None:
         self._sync_queue()
-        if not self.queue.items and not self.queue.flagged and not self.queue.last_used:
+        if not self.queue.prefix and not self.queue.flagged and not self.queue.last_used:
             if not silent:
-                self.status.set("Chưa có số để lưu.")
+                self.status.set("Nhập 5 ký tự cố định rồi lưu.")
             return
-        sample = self.queue.peek() or self.queue.last_used or "1"
+        sample = self.queue.peek() or self.queue.last_used or make_code(self.queue.prefix, self.queue.current) or "1"
         try:
             saved = self.store.save(
                 "Dãy số rồi Enter",
@@ -325,7 +366,7 @@ class App:
             return
         self.current_slug = str(saved["slug"])
         if not silent:
-            self.status.set(f"Đã lưu dãy số. Số tiếp theo: {self.queue.peek() or '—'}.")
+            self.status.set(f"Đã lưu dãy. Số tiếp theo: {self.queue.peek() or '—'}.")
 
     def _set_status(self, text: str) -> None:
         self.root.after(0, lambda: self.status.set(text))

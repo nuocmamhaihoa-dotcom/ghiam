@@ -33,15 +33,16 @@
       margin: 0 0 12px;
     }
     label { display: block; font-weight: 700; margin: 0 0 6px; }
-    textarea, input[type="text"], input[type="number"] {
+    input[type="text"], input[type="number"] {
       width: 100%;
       font: inherit;
       padding: 10px;
       border: 1px solid #c5ccd4;
       border-radius: 8px;
       background: #fff;
+      box-sizing: border-box;
     }
-    textarea { min-height: 150px; resize: vertical; }
+    input.wide { font-size: 1.35rem; letter-spacing: 0.08em; }
     .now {
       font-size: 1.35rem;
       font-weight: 700;
@@ -94,20 +95,30 @@
 <main translate="no">
   <p id="translateWarn" hidden></p>
   <h1><span class="w">Gõ</span><span class="w">số</span><span class="w">rồi</span><span class="w">Enter</span></h1>
-  <p class="status" id="status"><span class="w">Dán</span><span class="w">số.</span><span class="w">Bắt</span><span class="w">đầu:</span><span class="w">gõ</span><span class="w">vào</span><span class="w">dòng</span><span class="w">cố</span><span class="w">định,</span><span class="w">Enter,</span><span class="w">cộng</span><span class="w">1.</span></p>
+  <p class="status" id="status"><span class="w">Nhập</span><span class="w">5</span><span class="w">ký</span><span class="w">tự</span><span class="w">cố</span><span class="w">định,</span><span class="w">số</span><span class="w">bắt</span><span class="w">đầu</span><span class="w">và</span><span class="w">số</span><span class="w">kết</span><span class="w">thúc.</span><span class="w">Bắt</span><span class="w">đầu:</span><span class="w">gõ</span><span class="w">mã,</span><span class="w">Enter,</span><span class="w">cộng</span><span class="w">1.</span></p>
 
   <section class="card">
-    <label for="numbers"><span class="w">Dãy</span><span class="w">số</span></label>
-    <p class="hint"><span class="w">Mỗi</span><span class="w">dòng</span><span class="w">một</span><span class="w">số.</span><span class="w">Máy</span><span class="w">gõ</span><span class="w">số</span><span class="w">đang</span><span class="w">dùng</span><span class="w">vào</span><span class="w">một</span><span class="w">dòng</span><span class="w">cố</span><span class="w">định.</span></p>
-    <textarea id="numbers" placeholder="1001&#10;1002&#10;1003"></textarea>
-    <p class="now" id="current"><span class="w">Số</span><span class="w">sẽ</span><span class="w">gõ:</span> —</p>
+    <label for="prefix"><span class="w">5</span><span class="w">ký</span><span class="w">tự</span><span class="w">cố</span><span class="w">định</span></label>
+    <p class="hint"><span class="w">Đứng</span><span class="w">trước,</span><span class="w">đổi</span><span class="w">được</span><span class="w">bất</span><span class="w">cứ</span><span class="w">lúc</span><span class="w">nào.</span></p>
+    <input id="prefix" class="wide" type="text" maxlength="5" autocomplete="off" spellcheck="false" placeholder="SPXAB" />
+    <div class="pair">
+      <div>
+        <label for="start"><span class="w">Số</span><span class="w">bắt</span><span class="w">đầu</span></label>
+        <input id="start" class="wide" type="text" inputmode="numeric" maxlength="5" autocomplete="off" value="00001" />
+      </div>
+      <div>
+        <label for="end"><span class="w">Số</span><span class="w">kết</span><span class="w">thúc</span></label>
+        <input id="end" class="wide" type="text" inputmode="numeric" maxlength="5" autocomplete="off" value="00010" />
+      </div>
+    </div>
+    <p class="now" id="current"><span class="w">Sẽ</span><span class="w">gõ:</span> —</p>
     <div class="pair">
       <div>
         <label for="delay"><span class="w">Chờ</span><span class="w">(giây)</span></label>
         <input id="delay" type="number" value="2" min="0" />
       </div>
       <div>
-        <label for="step"><span class="w">Sau</span><span class="w">Enter,</span><span class="w">cộng</span></label>
+        <label for="step"><span class="w">Mỗi</span><span class="w">lần</span><span class="w">cộng</span></label>
         <input id="step" type="number" value="1" />
       </div>
     </div>
@@ -126,14 +137,15 @@
 
   <section class="card">
     <label><span class="w">Số</span><span class="w">lúc</span><span class="w">giao</span><span class="w">diện</span><span class="w">đổi</span></label>
-    <p class="hint"><span class="w">Bấm</span><span class="w">Giao</span><span class="w">diện</span><span class="w">đổi</span><span class="w">hoặc</span><span class="w">F9</span><span class="w">để</span><span class="w">giữ</span><span class="w">số</span><span class="w">đang</span><span class="w">dùng.</span></p>
+    <p class="hint"><span class="w">Bấm</span><span class="w">Giao</span><span class="w">diện</span><span class="w">đổi</span><span class="w">hoặc</span><span class="w">F9</span><span class="w">để</span><span class="w">giữ</span><span class="w">mã</span><span class="w">đang</span><span class="w">dùng.</span></p>
     <ul class="flags" id="flags"></ul>
   </section>
 
   <section class="card">
-    <p class="hint"><span class="w">1.</span><span class="w">Dán</span><span class="w">dãy</span><span class="w">số.</span></p>
-    <p class="hint"><span class="w">2.</span><span class="w">Bấm</span><span class="w">Bắt</span><span class="w">đầu.</span><span class="w">Máy</span><span class="w">gõ</span><span class="w">số,</span><span class="w">Enter,</span><span class="w">cộng</span><span class="w">1,</span><span class="w">lặp.</span></p>
-    <p class="hint"><span class="w">3.</span><span class="w">Thấy</span><span class="w">giao</span><span class="w">diện</span><span class="w">đổi</span><span class="w">thì</span><span class="w">bấm</span><span class="w">Giao</span><span class="w">diện</span><span class="w">đổi</span><span class="w">—</span><span class="w">số</span><span class="w">đó</span><span class="w">được</span><span class="w">lưu.</span></p>
+    <p class="hint"><span class="w">1.</span><span class="w">Nhập</span><span class="w">5</span><span class="w">ký</span><span class="w">tự</span><span class="w">cố</span><span class="w">định.</span></p>
+    <p class="hint"><span class="w">2.</span><span class="w">Nhập</span><span class="w">số</span><span class="w">bắt</span><span class="w">đầu</span><span class="w">và</span><span class="w">số</span><span class="w">kết</span><span class="w">thúc</span><span class="w">của</span><span class="w">5</span><span class="w">số</span><span class="w">sau.</span></p>
+    <p class="hint"><span class="w">3.</span><span class="w">Bắt</span><span class="w">đầu:</span><span class="w">gõ</span><span class="w">mã,</span><span class="w">Enter,</span><span class="w">cộng</span><span class="w">1,</span><span class="w">lặp</span><span class="w">đến</span><span class="w">số</span><span class="w">kết</span><span class="w">thúc.</span></p>
+    <p class="hint"><span class="w">4.</span><span class="w">Thấy</span><span class="w">giao</span><span class="w">diện</span><span class="w">đổi</span><span class="w">thì</span><span class="w">bấm</span><span class="w">Giao</span><span class="w">diện</span><span class="w">đổi</span><span class="w">—</span><span class="w">mã</span><span class="w">đó</span><span class="w">được</span><span class="w">lưu.</span></p>
     <div class="row">
       <button type="button" id="btnSave"><span class="w">Lưu</span></button>
       <a class="btn" href="/tai/pc-macro.zip"><span class="w">Tải</span><span class="w">phần</span><span class="w">mềm</span><span class="w">PC</span></a>
@@ -146,6 +158,8 @@
   var playing = false;
   var timer = 0;
   var lastUsed = "";
+  var currentDigits = "00001";
+  var exhausted = false;
 
   function $(id) { return document.getElementById(id); }
   function headers() {
@@ -153,10 +167,32 @@
     if (serverToken) out.Authorization = "Bearer " + serverToken;
     return out;
   }
-  function items() {
-    return $("numbers").value.split(/\s+/).map(function (part) {
-      return part.replace(/\D/g, "");
-    }).filter(Boolean);
+  function prefix() {
+    return $("prefix").value.replace(/[^A-Za-z0-9]/g, "").slice(0, 5);
+  }
+  function pad5(raw) {
+    var digits = String(raw == null ? "" : raw).replace(/\D/g, "");
+    if (!digits) return "00000";
+    var n = parseInt(digits, 10);
+    if (n < 0) n = 0;
+    if (n > 99999) n = 99999;
+    return String(n).padStart(5, "0");
+  }
+  function bounds() {
+    var start = pad5($("start").value);
+    var end = pad5($("end").value);
+    if (parseInt(end, 10) < parseInt(start, 10)) {
+      var tmp = start;
+      start = end;
+      end = tmp;
+    }
+    return { start: start, end: end };
+  }
+  function nextCode() {
+    if (exhausted || prefix().length !== 5) return "";
+    var range = bounds();
+    if (parseInt(currentDigits, 10) > parseInt(range.end, 10)) return "";
+    return prefix() + pad5(currentDigits);
   }
   function flags() {
     return Array.prototype.map.call($("flags").querySelectorAll("li"), function (li) { return li.textContent; });
@@ -166,9 +202,9 @@
     $("status").className = "status" + (kind ? " " + kind : "");
   }
   function showCurrent() {
-    var list = items();
-    var now = list[0] || "—";
-    $("current").textContent = lastUsed ? ("Số sẽ gõ: " + now + "   (vừa xong: " + lastUsed + ")") : ("Số sẽ gõ: " + now);
+    if ($("prefix").value !== prefix()) $("prefix").value = prefix();
+    var now = nextCode() || "—";
+    $("current").textContent = lastUsed ? ("Sẽ gõ: " + now + "   (vừa xong: " + lastUsed + ")") : ("Sẽ gõ: " + now);
   }
   function renderFlags(values) {
     $("flags").innerHTML = "";
@@ -185,28 +221,28 @@
     have.push(value);
     renderFlags(have);
   }
-  function bump(value, step) {
-    var next = String(Math.max(0, parseInt(value, 10) + step));
-    if (/^0/.test(value) && next.length <= value.length) next = next.padStart(value.length, "0");
-    return next;
-  }
   function persist() {
-    var list = items();
-    var sample = list[0] || lastUsed || "1";
+    var range = bounds();
+    var sample = nextCode() || lastUsed || (prefix() + pad5(currentDigits)) || "1";
     var body = {
       name: "Dãy số rồi Enter",
       slug: SLUG,
       steps: [
-        { kind: "number", value: sample },
+        { kind: sample.replace(/\D/g, "").length === sample.length ? "number" : "type", value: sample },
         { kind: "key", key: "enter", wait: 80 }
       ],
       numbers: {
-        items: list,
+        range_mode: true,
+        prefix: prefix(),
+        start: range.start,
+        end: range.end,
+        current: pad5(currentDigits),
+        exhausted: exhausted,
         bump: true,
         step: parseInt($("step").value || "1", 10) || 1,
-        span: 0,
         flagged: flags(),
-        last_used: lastUsed
+        last_used: lastUsed,
+        items: []
       }
     };
     return fetch("/v1/macros", { method: "POST", headers: headers(), body: JSON.stringify(body) })
@@ -214,24 +250,36 @@
   }
   function oneTurn() {
     if (!playing) return;
-    var list = items();
-    if (!list.length) { playing = false; setStatus("Hết số."); return; }
-    var value = list[0];
+    var value = nextCode();
+    if (!value) { playing = false; setStatus("Hết dãy số."); return; }
     var step = parseInt($("step").value || "1", 10) || 1;
+    if (step < 1) step = 1;
     $("line").textContent = value;
     lastUsed = value;
-    list[0] = bump(value, step);
-    $("numbers").value = list.join("\n");
+    var nxt = parseInt(currentDigits, 10) + step;
+    var endN = parseInt(bounds().end, 10);
+    if (nxt > 99999) {
+      exhausted = true;
+    } else {
+      currentDigits = String(nxt).padStart(5, "0");
+      if (nxt > endN) exhausted = true;
+    }
     showCurrent();
     persist().catch(function () {});
-    setStatus("Đã gõ " + value + ", Enter, cộng " + step + ". Số tiếp theo: " + list[0] + ".");
+    setStatus("Đã gõ " + value + ", Enter, cộng " + step + ". Tiếp theo: " + (nextCode() || "—") + ".");
     var wait = Math.max(800, (parseFloat($("delay").value || "1") || 1) * 1000);
     timer = window.setTimeout(oneTurn, wait);
   }
   function startPlay() {
     if (playing) return;
-    var list = items();
-    if (!list.length) { setStatus("Dán ít nhất một số.", "err"); return; }
+    var range = bounds();
+    $("start").value = range.start;
+    $("end").value = range.end;
+    $("prefix").value = prefix();
+    if (parseInt(currentDigits, 10) < parseInt(range.start, 10)) currentDigits = range.start;
+    if (parseInt(currentDigits, 10) > parseInt(range.end, 10)) exhausted = true;
+    if (prefix().length !== 5) { setStatus("Nhập đủ 5 ký tự cố định.", "err"); return; }
+    if (exhausted) { setStatus("Đã hết dãy. Đổi số bắt đầu / kết thúc để chạy lại.", "err"); return; }
     playing = true;
     var delay = Math.max(0, parseFloat($("delay").value || "0") || 0);
     setStatus("Bắt đầu sau " + delay + " giây. Trên PC hãy bấm vào dòng cố định.");
@@ -245,10 +293,10 @@
     playing = false;
     if (timer) window.clearTimeout(timer);
     persist().catch(function () {});
-    setStatus("Đã dừng. Số tiếp theo: " + (items()[0] || "—") + ".");
+    setStatus("Đã dừng. Số tiếp theo: " + (nextCode() || "—") + ".");
   }
   function flagNow() {
-    var value = lastUsed || items()[0];
+    var value = lastUsed || nextCode();
     if (!value) { setStatus("Chưa có số để lưu.", "err"); return; }
     addFlag(value);
     persist().then(function () {
@@ -261,12 +309,16 @@
       .then(function (item) {
         if (!item || !item.numbers) return;
         lastUsed = item.numbers.last_used || "";
-        if (item.numbers.items && item.numbers.items.length) $("numbers").value = item.numbers.items.join("\n");
+        if (item.numbers.prefix) $("prefix").value = item.numbers.prefix;
+        if (item.numbers.start) $("start").value = item.numbers.start;
+        if (item.numbers.end) $("end").value = item.numbers.end;
+        currentDigits = pad5(item.numbers.current || item.numbers.start || "00001");
+        exhausted = !!item.numbers.exhausted && parseInt(currentDigits, 10) >= parseInt(pad5(item.numbers.end || currentDigits), 10);
         if (item.numbers.step) $("step").value = item.numbers.step;
         renderFlags(item.numbers.flagged || []);
         showCurrent();
-        if (item.numbers.items && item.numbers.items.length) {
-          setStatus("Đã mở dãy số đã lưu. Bấm Bắt đầu, hoặc Giao diện đổi để giữ số.");
+        if (item.numbers.prefix) {
+          setStatus("Đã mở dãy đã lưu. Bấm Bắt đầu, hoặc Giao diện đổi để giữ số.");
         }
       })
       .catch(function () {});
@@ -276,10 +328,28 @@
   $("btnStop").onclick = stopPlay;
   $("btnFlag").onclick = flagNow;
   $("btnSave").onclick = function () {
-    persist().then(function () { setStatus("Đã lưu dãy số và các số lúc giao diện đổi.", "ok"); showCurrent(); })
+    if (prefix().length !== 5) { setStatus("Nhập đủ 5 ký tự cố định rồi lưu.", "err"); return; }
+    persist().then(function () { setStatus("Đã lưu dãy và các số lúc giao diện đổi.", "ok"); showCurrent(); })
       .catch(function (err) { setStatus(err.message, "err"); });
   };
-  $("numbers").oninput = showCurrent;
+  $("prefix").oninput = showCurrent;
+  $("start").oninput = function () {
+    var range = bounds();
+    if (!playing) {
+      currentDigits = range.start;
+      exhausted = false;
+    } else if (parseInt(currentDigits, 10) < parseInt(range.start, 10)) {
+      currentDigits = range.start;
+    }
+    if (parseInt(currentDigits, 10) <= parseInt(range.end, 10)) exhausted = false;
+    showCurrent();
+  };
+  $("end").oninput = function () {
+    var range = bounds();
+    if (parseInt(currentDigits, 10) <= parseInt(range.end, 10)) exhausted = false;
+    else exhausted = true;
+    showCurrent();
+  };
   document.addEventListener("keydown", function (ev) {
     if (ev.key === "F8") { ev.preventDefault(); stopPlay(); }
     if (ev.key === "F9") { ev.preventDefault(); flagNow(); }
