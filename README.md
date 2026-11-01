@@ -22,7 +22,7 @@ Chi tiết vận hành 2 PC: [`deploy/PA1_RUNBOOK.md`](deploy/PA1_RUNBOOK.md).
 
 ## Ghi nhớ phím và chuột trên máy, rồi làm lại
 
-Phần mềm nhỏ **chạy trên máy tính của bạn** (Windows / Linux có màn hình và bàn phím): bấm **Ghi**, làm thao tác trên máy (gõ phím, bấm chuột), bấm **Dừng**, rồi bấm **Làm lại**. F8 cũng dừng. VPS chỉ là **kho kịch bản** — trang chủ `http://VPS:8088/` để tải phần mềm và xem bản đã đưa lên, không ghi/click hộ trên máy chủ không màn hình.
+Phần mềm nhỏ **chạy trên máy tính của bạn**: dán dãy số, bấm vào ô cần nhập, **Bắt đầu**. Máy gõ số vào dòng cố định, **Enter**, rồi **cộng 1**, lặp lại. Thấy giao diện đổi thì **Giao diện đổi** (hoặc F9) để lưu số đó. F8 dừng. VPS `http://VPS:8088/` hiện cùng giao diện; Gõ/Enter thật trên máy Windows.
 
 ```bash
 pip install pynput          # hoặc: pip install -e ".[macro]"
