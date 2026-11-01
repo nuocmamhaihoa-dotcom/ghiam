@@ -142,6 +142,81 @@ class RecorderPlayerTests(unittest.TestCase):
         self.assertEqual(result["loops"], 1)
         self.assertGreaterEqual(len(slept), 1)
 
+    def test_player_after_error_keeps_next_number(self) -> None:
+        sent: list[str] = []
+        turns = {"n": 0}
+
+        def prepare(_loop: int) -> list:
+            turns["n"] += 1
+            if turns["n"] > 2:
+                return []
+            return [{"t": 0, "kind": "key", "action": "down", "key": str(turns["n"])}]
+
+        def after(_loop: int) -> list:
+            if turns["n"] == 1:
+                raise RuntimeError("click failed")
+            return []
+
+        player = Player(lambda event: sent.append(str(event.get("key"))), lambda _s: None)
+        result = player.play([], times=0, gap_ms=0, prepare=prepare, after=after)
+        self.assertEqual(result["loops"], 2)
+        self.assertFalse(result["stopped"])
+        self.assertEqual(sent, ["1", "2"])
+
+    def test_player_send_error_keeps_loop(self) -> None:
+        sent: list[str] = []
+
+        def send(event: dict) -> None:
+            key = str(event.get("key") or "")
+            if key == "x":
+                raise RuntimeError("send failed")
+            if event.get("action") == "down":
+                sent.append(key)
+
+        turns = {"n": 0}
+
+        def prepare(_loop: int) -> list:
+            turns["n"] += 1
+            if turns["n"] == 1:
+                return [
+                    {"t": 0, "kind": "key", "action": "down", "key": "x"},
+                    {"t": 1, "kind": "key", "action": "down", "key": "a"},
+                ]
+            if turns["n"] == 2:
+                return [{"t": 0, "kind": "key", "action": "down", "key": "b"}]
+            return []
+
+        player = Player(send, lambda _s: None)
+        result = player.play([], times=0, gap_ms=0, prepare=prepare)
+        self.assertEqual(result["loops"], 2)
+        self.assertFalse(result["stopped"])
+        self.assertEqual(sent, ["a", "b"])
+
+    def test_named_click_send_error_retries_then_continues(self) -> None:
+        sent: list[str] = []
+        blows = {"n": 0}
+
+        def send(event: dict) -> None:
+            if event.get("action") != "down":
+                return
+            if event.get("x") == 1 and blows["n"] < 1:
+                blows["n"] += 1
+                raise RuntimeError("click dropped")
+            sent.append(str(event.get("x")))
+
+        still = make_grid((10, 10, 10))
+        results = play_named_clicks(
+            [{"x": 1, "y": 2, "name": "Mở"}, {"x": 3, "y": 4, "name": "Đóng"}],
+            send,
+            lambda _s: None,
+            capture=lambda _x, _y: still,
+            compile_events=lambda step: [{"kind": "click", "action": "down", "x": step["x"], "y": step["y"]}],
+        )
+        self.assertEqual([item["name"] for item in results], ["Mở", "Đóng"])
+        self.assertGreaterEqual(results[0]["attempts"], 2)
+        self.assertIn("1", sent)
+        self.assertIn("3", sent)
+
     def test_player_runs_requested_times(self) -> None:
         sent: list[str] = []
         player = Player(lambda event: sent.append(str(event["key"])), lambda _s: None)

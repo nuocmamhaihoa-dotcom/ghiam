@@ -385,27 +385,37 @@ class App:
             time.sleep(0.5)
             if self.player is None or self.player.cancelled:
                 return []
-            forced = self._force_recover
-            changed, percent, _clicks = recover_after_enter(
-                self._before_grid,
-                capture_grid(),
-                self.queue.change_threshold,
-                self.queue.recover_clicks,
-                forced=forced,
-            )
-            if not changed:
-                self._set_status(f"Đã Enter {self.queue.last_used}. Đổi màn {percent:.0f}% — tiếp tục gõ số.")
+            try:
+                forced = self._force_recover
+                changed, percent, _clicks = recover_after_enter(
+                    self._before_grid,
+                    capture_grid(),
+                    self.queue.change_threshold,
+                    self.queue.recover_clicks,
+                    forced=forced,
+                )
+                if not changed:
+                    self._set_status(f"Đã Enter {self.queue.last_used}. Đổi màn {percent:.0f}% — tiếp tục gõ số.")
+                    return []
+                return self._consume_recover("F9" if forced else f"{percent:.0f}%")
+            except Exception as exc:
+                self._set_status(f"Lỗi khi bấm 4 nút: {exc}. Tiếp tục gõ số.")
+                self._force_recover = False
                 return []
-            return self._consume_recover("F9" if forced else f"{percent:.0f}%")
 
-        result = self.player.play([], times=0, prepare=prepare, after=after)
+        try:
+            result = self.player.play([], times=0, prepare=prepare, after=after)
+        except Exception as exc:
+            result = {"loops": 0, "played": 0, "stopped": True}
+            self._set_status(f"Đã dừng vì lỗi: {exc}.")
+        finally:
+            self.player = None
         self.root.after(0, self._refresh_number_view)
         self.root.after(0, lambda: self._persist(silent=True))
         if result["stopped"]:
             self._set_status(f"Đã dừng sau {result['loops']} lần. Số tiếp theo: {self.queue.peek() or '—'}.")
         else:
             self._set_status(f"Đã xong {result['loops']} lần.")
-        self.player = None
 
     def _on_desktop(self, now_ms: int, raw: dict[str, Any]) -> None:
         key = str(raw.get("key") or "").lower()
@@ -562,11 +572,15 @@ class App:
         def cancelled() -> bool:
             return self.player is None or self.player.cancelled
 
-        results = play_named_clicks(clicks, self.desktop.send, time.sleep, cancelled=cancelled)
-        if self.click and not cancelled():
-            extra = scale_clicks([self.click], sw, sh)
-            if extra:
-                play_named_clicks(extra, self.desktop.send, time.sleep, cancelled=cancelled, retries=0)
+        try:
+            results = play_named_clicks(clicks, self.desktop.send, time.sleep, cancelled=cancelled)
+            if self.click and not cancelled():
+                extra = scale_clicks([self.click], sw, sh)
+                if extra:
+                    play_named_clicks(extra, self.desktop.send, time.sleep, cancelled=cancelled, retries=0)
+        except Exception as exc:
+            self._set_status(f"Lỗi khi bấm 4 nút: {exc}. Tiếp tục gõ số.")
+            return
         retried = [item for item in results if item["attempts"] > 1]
         if retried:
             names = ", ".join(item["name"] for item in retried)
@@ -745,6 +759,8 @@ class App:
         return left, top, right, bottom
 
     def _playing(self) -> bool:
+        if self.player is not None and not self.player.cancelled:
+            return True
         return self._play_thread is not None and self._play_thread.is_alive()
 
     def _busy(self) -> bool:

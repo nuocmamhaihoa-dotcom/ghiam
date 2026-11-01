@@ -278,6 +278,7 @@
   var currentDigits = "00001";
   var exhausted = false;
   var recoverClicks = [null, null, null, null];
+  var clickNames = ["", "", "", ""];
   var recordingRecover = false;
   var forceRecover = false;
   var paintStep = -1;
@@ -422,7 +423,8 @@
       setStatus("Bắt đầu gõ mã + Enter. Chưa đủ 4 nút — khi màn đổi ≥ " + bar + "% sẽ chưa bấm được.");
     }
     $("line").textContent = "";
-    window.setTimeout(function () {
+    if (timer) window.clearTimeout(timer);
+    timer = window.setTimeout(function () {
       if (!playing) return;
       oneTurn();
     }, delay * 1000);
@@ -430,6 +432,7 @@
   function stopPlay() {
     playing = false;
     if (timer) window.clearTimeout(timer);
+    timer = 0;
     persist().catch(function () {});
     setStatus("Đã dừng. Số tiếp theo: " + (nextCode() || "—") + ".");
   }
@@ -440,14 +443,21 @@
     return n;
   }
   function emptySlots() { return [null, null, null, null]; }
+  function slotFilled(click) {
+    return !!(click && isFinite(click.x) && isFinite(click.y) && (click.sw > 1 || click.sh > 1 || click.via || click.x > 0 || click.y > 0));
+  }
+  function clickNameAt(index) {
+    var fromSlot = recoverClicks[index] && recoverClicks[index].name ? recoverClicks[index].name : "";
+    return fromSlot || clickNames[index] || "";
+  }
   function filledClicks() {
     var out = [];
-    for (var i = 0; i < 4; i++) if (recoverClicks[i]) out.push(recoverClicks[i]);
+    for (var i = 0; i < 4; i++) if (slotFilled(recoverClicks[i])) out.push(recoverClicks[i]);
     return out;
   }
   function filledCount() { return filledClicks().length; }
   function upsertClick(step, point) {
-    var name = recoverClicks[step] && recoverClicks[step].name ? recoverClicks[step].name : "";
+    var name = clickNameAt(step);
     recoverClicks[step] = {
       x: point.x,
       y: point.y,
@@ -464,7 +474,7 @@
     return Math.abs(r - PAINT.r) + Math.abs(g - PAINT.g) + Math.abs(b - PAINT.b) <= 70;
   }
   function paintCentroid(canvas) {
-    var ctx = canvas.getContext("2d");
+    var ctx = canvas.getContext("2d", { willReadFrequently: true });
     var data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
     var sumX = 0, sumY = 0, n = 0, w = canvas.width;
     for (var i = 0; i < data.length; i += 4) {
@@ -498,7 +508,7 @@
     var scale = maxW / (paintImage.naturalWidth || paintImage.width);
     canvas.width = Math.round((paintImage.naturalWidth || paintImage.width) * scale);
     canvas.height = Math.round((paintImage.naturalHeight || paintImage.height) * scale);
-    var ctx = canvas.getContext("2d");
+    var ctx = canvas.getContext("2d", { willReadFrequently: true });
     ctx.drawImage(paintImage, 0, 0, canvas.width, canvas.height);
     paintDirty = false;
   }
@@ -514,7 +524,7 @@
     if (paintStep < 0 || !paintImage) return;
     ev.preventDefault();
     var canvas = $("paintCanvas");
-    var ctx = canvas.getContext("2d");
+    var ctx = canvas.getContext("2d", { willReadFrequently: true });
     var point = canvasPoint(ev);
     if (paintMode === "pick") {
       ctx.fillStyle = "#ff00aa";
@@ -557,7 +567,7 @@
     for (var index = 0; index < 4; index++) {
       var click = recoverClicks[index];
       var card = document.createElement("div");
-      card.className = "mark" + (click ? "" : " empty");
+      card.className = "mark" + (slotFilled(click) ? "" : " empty");
       card.id = "mark" + index;
       var title = document.createElement("b");
       title.textContent = String(index + 1);
@@ -565,12 +575,13 @@
       name.type = "text";
       name.maxLength = 40;
       name.placeholder = "Tên vị trí bước " + (index + 1);
-      name.value = click && click.name ? click.name : "";
+      name.value = clickNameAt(index);
       name.setAttribute("data-index", String(index));
       name.oninput = function () {
         var at = parseInt(this.getAttribute("data-index"), 10);
-        if (!recoverClicks[at]) return;
-        recoverClicks[at].name = this.value.replace(/\s+/g, " ").slice(0, 40);
+        var cleaned = this.value.replace(/\s+/g, " ").slice(0, 40);
+        clickNames[at] = cleaned;
+        if (recoverClicks[at]) recoverClicks[at].name = cleaned;
       };
       var detail = document.createElement("span");
       if (!click || click.x == null || (click.x === 0 && click.y === 0 && !click.sw)) {
@@ -641,13 +652,14 @@
   function flashDots(index, done, retry) {
     if (!playing) { done(); return; }
     if (index >= 4) {
-      renderRecover();
+      for (var i = 0; i < 4; i++) {
+        var reset = $("mark" + i);
+        if (reset) reset.className = "mark" + (slotFilled(recoverClicks[i]) ? "" : " empty");
+      }
       done();
       return;
     }
-    renderRecover();
     var card = $("mark" + index);
-    if (card) card.className = "mark on";
     var label = recoverClicks[index] && recoverClicks[index].name;
     if (label) setStatus("Đang bấm «" + label + "»" + (retry ? " — nếu chưa nhận sẽ bấm lại." : "."));
     timer = window.setTimeout(function () {
@@ -672,8 +684,14 @@
     }).catch(function (err) { setStatus(err.message, "err"); });
   }
   function loadSaved() {
-    fetch("/v1/macros/" + SLUG, { headers: headers() })
-      .then(function (res) { return res.status === 404 ? null : res.json(); })
+    fetch("/v1/macros", { headers: headers() })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (body) {
+        var items = (body && body.items) || [];
+        var found = items.some(function (it) { return it.slug === SLUG; });
+        if (!found) return null;
+        return fetch("/v1/macros/" + SLUG, { headers: headers() }).then(function (res) { return res.ok ? res.json() : null; });
+      })
       .then(function (item) {
         if (!item || !item.numbers) return;
         lastUsed = item.numbers.last_used || "";
@@ -685,6 +703,7 @@
         if (item.numbers.step) $("step").value = item.numbers.step;
         if (item.numbers.change_threshold) $("threshold").value = item.numbers.change_threshold;
         recoverClicks = emptySlots();
+        clickNames = ["", "", "", ""];
         (item.numbers.recover_clicks || []).forEach(function (click, index) {
           var step = (click.step >= 0 && click.step < 4) ? click.step : index;
           if (step >= 4) return;
@@ -692,6 +711,7 @@
             x: click.x, y: click.y, sw: click.sw, sh: click.sh,
             rx: click.rx, ry: click.ry, name: click.name || "", step: step, via: click.via || ""
           };
+          clickNames[step] = recoverClicks[step].name || "";
         });
         renderFlags(item.numbers.flagged || []);
         renderRecover();
@@ -722,6 +742,7 @@
   };
   $("btnClearRecover").onclick = function () {
     recoverClicks = emptySlots();
+    clickNames = ["", "", "", ""];
     recordingRecover = false;
     renderRecover();
     persist().catch(function () {});

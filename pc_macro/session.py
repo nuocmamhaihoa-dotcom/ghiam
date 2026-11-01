@@ -86,7 +86,10 @@ class Player:
         if not cleaned and prepare is None:
             return {"loops": 0, "played": 0, "stopped": False}
         while not self.cancelled:
-            batch = sanitize_events(prepare(loops) if prepare is not None else cleaned)
+            try:
+                batch = sanitize_events(prepare(loops) if prepare is not None else cleaned)
+            except Exception:
+                return {"loops": loops, "played": played, "stopped": True}
             if not batch:
                 break
             played += self._emit(batch, speed)
@@ -94,7 +97,10 @@ class Player:
                 return {"loops": loops, "played": played, "stopped": True}
             loops += 1
             if after is not None and not self.cancelled:
-                extra = sanitize_events(after(loops) or [])
+                try:
+                    extra = sanitize_events(after(loops) or [])
+                except Exception:
+                    extra = []
                 if extra:
                     played += self._emit(extra, speed)
                     if self.cancelled:
@@ -114,7 +120,10 @@ class Player:
                 self._sleep(wait_ms / 1000.0)
             if self.cancelled:
                 return played
-            self._send(event)
+            try:
+                self._send(event)
+            except Exception:
+                continue
             played += 1
         return played
 

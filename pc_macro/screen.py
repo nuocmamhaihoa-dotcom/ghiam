@@ -358,7 +358,7 @@ def capture_grid() -> Grid | None:
     if image.mode != "RGB":
         image = image.convert("RGB")
     small = image.resize((GRID_W, GRID_H), Image.Resampling.BOX)
-    pixels = tuple((int(r), int(g), int(b)) for r, g, b in small.getdata())
+    pixels = _pixels(small)
     if len(pixels) != GRID_W * GRID_H:
         return None
     return pixels
@@ -426,7 +426,7 @@ def capture_patch(x: int, y: int, size: int = PATCH_SIZE) -> Grid | None:
     if image.mode != "RGB":
         image = image.convert("RGB")
     small = image.resize((PATCH_GRID, PATCH_GRID), Image.Resampling.BOX)
-    pixels = tuple((int(r), int(g), int(b)) for r, g, b in small.getdata())
+    pixels = _pixels(small)
     if len(pixels) != PATCH_GRID * PATCH_GRID:
         return None
     return pixels
@@ -462,10 +462,14 @@ def play_click_until_landed(
         if cancelled and cancelled():
             return {"landed": False, "attempts": attempts, "name": name, "percent": last_percent}
         before = take(int(click["x"]), int(click["y"]))
-        for event in to_events(click):
-            if cancelled and cancelled():
-                return {"landed": False, "attempts": attempts, "name": name, "percent": last_percent}
-            send(event)
+        try:
+            for event in to_events(click):
+                if cancelled and cancelled():
+                    return {"landed": False, "attempts": attempts, "name": name, "percent": last_percent}
+                send(event)
+        except Exception:
+            attempts += 1
+            continue
         sleep(0.28)
         after = take(int(click["x"]), int(click["y"]))
         attempts += 1
@@ -488,18 +492,21 @@ def play_named_clicks(
     """Play the four recover clicks, retrying any named point that did not land."""
     results: list[dict[str, Any]] = []
     for index, click in enumerate(sanitize_clicks(clicks)):
-        results.append(
-            play_click_until_landed(
-                send,
-                sleep,
-                click,
-                retries=retries,
-                index=index,
-                cancelled=cancelled,
-                capture=capture,
-                compile_events=compile_events,
+        try:
+            results.append(
+                play_click_until_landed(
+                    send,
+                    sleep,
+                    click,
+                    retries=retries,
+                    index=index,
+                    cancelled=cancelled,
+                    capture=capture,
+                    compile_events=compile_events,
+                )
             )
-        )
+        except Exception:
+            results.append({"landed": False, "attempts": 0, "name": click_name(click, index), "percent": 0.0})
         if cancelled and cancelled():
             break
     return results
@@ -512,4 +519,16 @@ def make_grid(fill: tuple[int, int, int], *, flip: int = 0, color: tuple[int, in
     changed = max(0, min(total, flip))
     for index in range(total):
         cells.append(color if index < changed else fill)
+    return tuple(cells)
+
+
+def _pixels(image: Image.Image) -> Grid:
+    """Read RGB cells without Image.getdata(), which Pillow now warns about."""
+    width, height = image.size
+    loaded = image.load()
+    cells: list[tuple[int, int, int]] = []
+    for top in range(height):
+        for left in range(width):
+            pixel = loaded[left, top]
+            cells.append((int(pixel[0]), int(pixel[1]), int(pixel[2])))
     return tuple(cells)
