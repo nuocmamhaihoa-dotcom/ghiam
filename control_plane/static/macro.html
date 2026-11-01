@@ -314,7 +314,7 @@
       opt.textContent = (i + 1) + ". " + num;
       box.appendChild(opt);
     });
-    if (current && Array.prototype.some.call(box.options, function (o) { return o.value === current; })) {
+    if (current && current !== NONE && Array.prototype.some.call(box.options, function (o) { return o.value === current; })) {
       box.value = current;
     } else if (numbers.length) {
       box.selectedIndex = 1;
