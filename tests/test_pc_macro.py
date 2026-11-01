@@ -17,6 +17,7 @@ from pc_macro.script import (
     delete_step,
     events_to_steps,
     insert_steps,
+    merge_recording,
     move_step,
     new_step,
     replace_step,
@@ -252,6 +253,96 @@ class ScriptStepTests(unittest.TestCase):
         self.assertEqual(events[0]["key"], "a")
         self.assertIsNone(new_step("nope"))
         self.assertEqual(move_step([{"kind": "key", "key": "a"}], 0, -1)[0]["key"], "a")
+
+    def test_merge_recording_appends_only_the_new_clip(self) -> None:
+        first = sanitize_events(
+            [
+                {"t": 0, "kind": "key", "action": "down", "key": "1"},
+                {"t": 1, "kind": "key", "action": "up", "key": "1"},
+                {"t": 2, "kind": "key", "action": "down", "key": "0"},
+                {"t": 3, "kind": "key", "action": "up", "key": "0"},
+                {"t": 4, "kind": "key", "action": "down", "key": "0"},
+                {"t": 5, "kind": "key", "action": "up", "key": "0"},
+                {"t": 6, "kind": "key", "action": "down", "key": "1"},
+                {"t": 7, "kind": "key", "action": "up", "key": "1"},
+                {"t": 20, "kind": "key", "action": "down", "key": "Enter"},
+            ]
+        )
+        extra = sanitize_events(
+            [
+                {"t": 0, "kind": "click", "action": "down", "button": "left", "x": 40, "y": 80},
+                {"t": 10, "kind": "click", "action": "up", "button": "left", "x": 40, "y": 80},
+            ]
+        )
+        script = events_to_steps(first)
+        # Ghi mới replaces. Ghi thêm / F8 must use only the just-stopped clip.
+        self.assertEqual([step["kind"] for step in merge_recording(script, extra, appending=False)], ["click"])
+        appended = merge_recording(script, extra, appending=True)
+        self.assertEqual([step["kind"] for step in appended], ["number", "key", "click"])
+        self.assertEqual(appended[0]["value"], "1001")
+        self.assertEqual(appended[2]["x"], 40)
+        # Passing the old script events as "recorded" would duplicate — that was the F8 bug.
+        duplicated = merge_recording(script, first, appending=True)
+        self.assertEqual([step["kind"] for step in duplicated], ["number", "key", "number", "key"])
+        self.assertEqual(merge_recording(script, [], appending=True), script)
+        inserted = merge_recording(script, extra, appending=True, at=0)
+        self.assertEqual([step["kind"] for step in inserted], ["number", "click", "key"])
+
+    def test_record_edit_number_then_play(self) -> None:
+        recorder = Recorder()
+        recorder.start(1000)
+        for offset, key, action in (
+            (0, "1", "down"),
+            (5, "1", "up"),
+            (10, "0", "down"),
+            (15, "0", "up"),
+            (20, "0", "down"),
+            (25, "0", "up"),
+            (30, "1", "down"),
+            (35, "1", "up"),
+            (50, "Enter", "down"),
+            (55, "Enter", "up"),
+            (80, "f8", "down"),
+        ):
+            keep = recorder.add(1000 + offset, {"kind": "key", "action": action, "key": key})
+            if key.lower() == "f8":
+                self.assertFalse(keep)
+        self.assertFalse(recorder.on)
+        script = merge_recording([], recorder.events, appending=False)
+        self.assertEqual([step["kind"] for step in script], ["number", "key"])
+        self.assertNotIn("f8", [step.get("key") for step in script])
+
+        extra = Recorder()
+        extra.start(2000)
+        extra.add(2050, {"kind": "click", "action": "down", "button": "left", "x": 12, "y": 24})
+        extra.add(2080, {"kind": "click", "action": "up", "button": "left", "x": 12, "y": 24})
+        clip = extra.stop()
+        script = merge_recording(script, clip, appending=True)
+        script = replace_step(script, 0, {"kind": "number", "value": "2050", "wait": 0})
+        compiled, replayed = compile_script(script)
+        self.assertEqual([step["kind"] for step in compiled], ["number", "key", "click"])
+        spans = digit_spans(replayed)
+        self.assertEqual([span["value"] for span in spans], ["2050"])
+        queue = NumberQueue(["3300", "4400"], bump=True, step=1, span=0)
+        sent: list[str] = []
+
+        def prepare(_loop: int) -> list:
+            batch, _used = apply_turn(replayed, spans, queue)
+            return batch
+
+        def send(event: dict) -> None:
+            kind = event.get("kind")
+            if kind == "key" and event.get("action") == "down":
+                sent.append(str(event["key"]))
+            elif kind == "click" and event.get("action") == "down":
+                sent.append(str(event.get("button") or "left"))
+
+        player = Player(send, lambda _s: None)
+        result = player.play(replayed, times=2, gap_ms=0, prepare=prepare)
+        self.assertEqual(sent[:6], ["3", "3", "0", "0", "enter", "left"])
+        self.assertEqual(sent[6:12], ["4", "4", "0", "0", "enter", "left"])
+        self.assertEqual(result["loops"], 2)
+        self.assertEqual(queue.items, ["3301", "4401"])
 
 
 class StoreTests(unittest.TestCase):

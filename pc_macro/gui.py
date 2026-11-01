@@ -16,6 +16,7 @@ from pc_macro.script import (
     delete_step,
     events_to_steps,
     insert_steps,
+    merge_recording,
     move_step,
     new_step,
     replace_step,
@@ -243,9 +244,10 @@ class App:
     def stop_all(self) -> None:
         if self.player is not None:
             self.player.cancel()
-        if self.recorder.on:
-            self.current = self.recorder.stop()
-            self._after_record()
+        if not self.recorder.on:
+            return
+        recorded = self.recorder.stop()
+        self._after_record(recorded)
 
     def start_play(self) -> None:
         if self.recorder.on or self._playing():
@@ -392,6 +394,7 @@ class App:
             remaining -= 1
         if self.player is None or self.player.cancelled:
             self._set_status("Đã dừng.")
+            self.player = None
             return
         used: list[str] = []
 
@@ -417,9 +420,12 @@ class App:
     def _on_desktop(self, now_ms: int, raw: dict[str, Any]) -> None:
         key = str(raw.get("key") or "").lower()
         if raw.get("kind") == "key" and key in {"f8"} and raw.get("action") == "down":
-            self.root.after(0, self.stop_all)
+            if self.player is not None:
+                self.player.cancel()
             if self.recorder.on:
-                self.recorder.add(now_ms, raw)
+                # Stop on this listener thread so keys after F8 are not kept.
+                recorded = self.recorder.stop()
+                self.root.after(0, lambda ev=recorded: self._after_record(ev))
             return
         if not self.recorder.on:
             return
@@ -427,27 +433,27 @@ class App:
         count = len(self.recorder.events)
         self.root.after(0, lambda: self.status.set(f"Đang ghi {count} thao tác…"))
         if not keep:
-            self.root.after(0, self._after_record)
+            self.root.after(0, lambda ev=list(self.recorder.events): self._after_record(ev))
 
-    def _after_record(self) -> None:
-        events = self.current or self.recorder.events
-        incoming = events_to_steps(events)
-        if self.appending:
-            at = self._selected_script_index()
-            point = len(self.script) if at is None else at + 1
-            self.script = insert_steps(self.script, point, incoming)
-            self.appending = False
-            select = min(point, max(0, len(self.script) - 1)) if self.script else None
-        else:
-            self.script = incoming
-            select = 0 if self.script else None
+    def _after_record(self, recorded: list[dict[str, Any]] | None = None) -> None:
+        events = recorded if recorded is not None else self.recorder.events
+        appending = self.appending
+        at = self._selected_script_index() if appending else None
+        old_len = len(self.script)
+        self.script = merge_recording(self.script, events, appending=appending, at=at)
+        self.appending = False
         if not self.script:
             self.current = []
             self.status.set("Không có phím hay bấm để lưu. Bấm Ghi rồi làm trên máy.")
             self._refresh_script_box()
             self._set_spans([])
             return
-        self._apply_script(select=select, prefer_longest=True)
+        if appending:
+            point = old_len if at is None else at + 1
+            select = min(point, len(self.script) - 1)
+        else:
+            select = 0
+        self._apply_script(select=select, prefer_longest=not (appending and self.queue.span is not None))
         if not self.name.get().strip() and self.current:
             self.name.set(default_title(self.current))
         self.status.set(f"Kịch bản {len(self.script)} bước. Sửa lần lượt, rồi Làm lại hoặc Lưu.")

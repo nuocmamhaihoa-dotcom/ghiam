@@ -204,6 +204,23 @@ def delete_step(steps: list[dict[str, Any]], index: int) -> list[dict[str, Any]]
     return [*cleaned[:index], *cleaned[index + 1 :]]
 
 
+def merge_recording(
+    script: list[dict[str, Any]],
+    recorded: list[dict[str, Any]],
+    *,
+    appending: bool,
+    at: int | None = None,
+) -> list[dict[str, Any]]:
+    """Turn a just-stopped recording into steps. Append after `at`, or replace."""
+    incoming = events_to_steps(recorded)
+    if appending:
+        if not incoming:
+            return sanitize_steps(script)
+        point = len(sanitize_steps(script)) if at is None else at + 1
+        return insert_steps(script, point, incoming)
+    return incoming
+
+
 def _collect_text(events: list[dict[str, Any]], start: int) -> tuple[str, int, int]:
     chars: list[str] = []
     index = start

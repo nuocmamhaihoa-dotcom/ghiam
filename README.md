@@ -22,7 +22,7 @@ Chi tiết vận hành 2 PC: [`deploy/PA1_RUNBOOK.md`](deploy/PA1_RUNBOOK.md).
 
 ## Ghi nhớ phím và chuột trên máy, rồi làm lại
 
-Phần mềm nhỏ trên PC: bấm **Ghi**, làm thao tác trên máy (gõ phím, bấm chuột), bấm **Dừng**, rồi bấm **Làm lại** bao nhiêu lần cần. F8 cũng dừng. Bản ghi lưu local trong `data/macros/`, không gửi lên hub.
+Phần mềm nhỏ **chạy trên máy tính của bạn** (Windows / Linux có màn hình và bàn phím), không phải trên VPS hub: bấm **Ghi**, làm thao tác trên máy (gõ phím, bấm chuột), bấm **Dừng**, rồi bấm **Làm lại** bao nhiêu lần cần. F8 cũng dừng. Bản ghi lưu local trong `data/macros/`, không gửi lên hub.
 
 Đây khác tab **Kịch bản** trên dashboard — tab đó chỉ nhớ thao tác *trong trang web*. `pc-macro` nhớ thao tác *cả máy*.
 
