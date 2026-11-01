@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from pc_macro.screen import DEFAULT_THRESHOLD, normalize_threshold, sanitize_clicks
+
 _SPLIT = re.compile(r"[\n,;\s]+")
 _MAX_ITEMS = 500
 _MAX_DIGITS = 40
@@ -153,6 +155,8 @@ class NumberQueue:
         current: str = "",
         range_mode: bool = False,
         exhausted: bool = False,
+        recover_clicks: list[dict[str, Any]] | None = None,
+        change_threshold: int = DEFAULT_THRESHOLD,
     ) -> None:
         self.items = [item for item in (items or []) if item][:_MAX_ITEMS]
         self.index = index if self.items and 0 <= index < len(self.items) else 0
@@ -176,6 +180,8 @@ class NumberQueue:
         past_end = int(self.current) > int(self.end)
         finished_last = bool(exhausted) and int(self.current) == int(self.end)
         self.exhausted = self.range_mode and (past_end or finished_last)
+        self.recover_clicks = sanitize_clicks(recover_clicks)
+        self.change_threshold = normalize_threshold(change_threshold)
 
     @classmethod
     def from_dict(cls, raw: Any) -> NumberQueue:
@@ -212,6 +218,8 @@ class NumberQueue:
             current=str(data.get("current") or ""),
             range_mode=bool(data.get("range_mode") or data.get("prefix") or data.get("start") or data.get("end")),
             exhausted=bool(data.get("exhausted")),
+            recover_clicks=data.get("recover_clicks") or [],
+            change_threshold=data.get("change_threshold") if data.get("change_threshold") is not None else DEFAULT_THRESHOLD,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -228,6 +236,8 @@ class NumberQueue:
             "current": self.current,
             "range_mode": self.range_mode,
             "exhausted": self.exhausted,
+            "recover_clicks": list(self.recover_clicks),
+            "change_threshold": self.change_threshold,
         }
         if self.span is not None:
             payload["span"] = self.span

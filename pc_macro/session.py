@@ -10,6 +10,7 @@ SendFn = Callable[[dict[str, Any]], None]
 SleepFn = Callable[[float], None]
 IgnoreFn = Callable[[float, float], bool]
 PrepareFn = Callable[[int], list[dict[str, Any]]]
+AfterFn = Callable[[int], list[dict[str, Any]] | None]
 
 
 class Recorder:
@@ -77,6 +78,7 @@ class Player:
         gap_ms: int = 400,
         speed: float = 1.0,
         prepare: PrepareFn | None = None,
+        after: AfterFn | None = None,
     ) -> dict[str, Any]:
         cleaned = sanitize_events(events)
         loops = 0
@@ -87,21 +89,34 @@ class Player:
             batch = sanitize_events(prepare(loops) if prepare is not None else cleaned)
             if not batch:
                 break
-            for wait_ms, event in schedule(batch, speed):
-                if self.cancelled:
-                    return {"loops": loops, "played": played, "stopped": True}
-                if wait_ms:
-                    self._sleep(wait_ms / 1000.0)
-                if self.cancelled:
-                    return {"loops": loops, "played": played, "stopped": True}
-                self._send(event)
-                played += 1
+            played += self._emit(batch, speed)
+            if self.cancelled:
+                return {"loops": loops, "played": played, "stopped": True}
             loops += 1
+            if after is not None and not self.cancelled:
+                extra = sanitize_events(after(loops) or [])
+                if extra:
+                    played += self._emit(extra, speed)
+                    if self.cancelled:
+                        return {"loops": loops, "played": played, "stopped": True}
             if times > 0 and loops >= times:
                 break
             if gap_ms and not self.cancelled:
                 self._sleep(max(0, gap_ms) / 1000.0)
         return {"loops": loops, "played": played, "stopped": self.cancelled}
+
+    def _emit(self, events: list[dict[str, Any]], speed: float) -> int:
+        played = 0
+        for wait_ms, event in schedule(events, speed):
+            if self.cancelled:
+                return played
+            if wait_ms:
+                self._sleep(wait_ms / 1000.0)
+            if self.cancelled:
+                return played
+            self._send(event)
+            played += 1
+        return played
 
 
 def ignore_window(box_fn: Callable[[], tuple[float, float, float, float] | None]) -> IgnoreFn:

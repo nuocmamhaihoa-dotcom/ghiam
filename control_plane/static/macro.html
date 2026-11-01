@@ -77,6 +77,31 @@
       font-family: ui-monospace, Consolas, monospace;
       font-size: 1.2rem;
     }
+    .stage {
+      position: relative;
+      height: 140px;
+      border: 1.5px dashed #9aa4b0;
+      border-radius: 8px;
+      background: #f7f9fb;
+      overflow: hidden;
+    }
+    .dot {
+      position: absolute;
+      width: 28px;
+      height: 28px;
+      margin: -14px 0 0 -14px;
+      border-radius: 50%;
+      background: #0b6bcb;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+    .dot.on { background: #c2410c; transform: scale(1.15); }
+    .coords { font-family: ui-monospace, Consolas, monospace; font-size: 0.95rem; }
     .flags { list-style: none; margin: 0; padding: 0; }
     .flags li {
       padding: 8px 0;
@@ -122,10 +147,27 @@
         <input id="step" type="number" value="1" />
       </div>
     </div>
+    <div class="pair" style="margin-top:10px">
+      <div>
+        <label for="threshold"><span class="w">Đổi</span><span class="w">màn</span><span class="w">≥</span><span class="w">%</span></label>
+        <input id="threshold" type="number" min="1" max="100" value="80" />
+      </div>
+    </div>
     <div class="row">
       <button type="button" class="go" id="btnStart"><span class="w">Bắt</span><span class="w">đầu</span></button>
       <button type="button" id="btnStop"><span class="w">Dừng</span></button>
       <button type="button" class="warn" id="btnFlag"><span class="w">Giao</span><span class="w">diện</span><span class="w">đổi</span></button>
+    </div>
+  </section>
+
+  <section class="card">
+    <label><span class="w">4</span><span class="w">nút</span><span class="w">chuột</span><span class="w">trái</span></label>
+    <p class="hint"><span class="w">Trên</span><span class="w">PC:</span><span class="w">Ghi</span><span class="w">4</span><span class="w">nút</span><span class="w">rồi</span><span class="w">bấm</span><span class="w">đúng</span><span class="w">4</span><span class="w">vị</span><span class="w">trí.</span><span class="w">Ở</span><span class="w">đây</span><span class="w">bấm</span><span class="w">4</span><span class="w">điểm</span><span class="w">để</span><span class="w">tập,</span><span class="w">hoặc</span><span class="w">gõ</span><span class="w">tọa</span><span class="w">độ.</span></p>
+    <p class="hint coords" id="recoverLabel"><span class="w">4</span><span class="w">nút:</span><span class="w">chưa</span><span class="w">ghi</span></p>
+    <div class="stage" id="stage"></div>
+    <div class="row">
+      <button type="button" id="btnRecordRecover"><span class="w">Ghi</span><span class="w">4</span><span class="w">nút</span></button>
+      <button type="button" id="btnClearRecover"><span class="w">Xóa</span><span class="w">4</span><span class="w">nút</span></button>
     </div>
   </section>
 
@@ -145,7 +187,7 @@
     <p class="hint"><span class="w">1.</span><span class="w">Nhập</span><span class="w">5</span><span class="w">ký</span><span class="w">tự</span><span class="w">cố</span><span class="w">định.</span></p>
     <p class="hint"><span class="w">2.</span><span class="w">Nhập</span><span class="w">số</span><span class="w">bắt</span><span class="w">đầu</span><span class="w">và</span><span class="w">số</span><span class="w">kết</span><span class="w">thúc</span><span class="w">của</span><span class="w">5</span><span class="w">số</span><span class="w">sau.</span></p>
     <p class="hint"><span class="w">3.</span><span class="w">Bắt</span><span class="w">đầu:</span><span class="w">gõ</span><span class="w">mã,</span><span class="w">Enter,</span><span class="w">cộng</span><span class="w">1,</span><span class="w">lặp</span><span class="w">đến</span><span class="w">số</span><span class="w">kết</span><span class="w">thúc.</span></p>
-    <p class="hint"><span class="w">4.</span><span class="w">Thấy</span><span class="w">giao</span><span class="w">diện</span><span class="w">đổi</span><span class="w">thì</span><span class="w">bấm</span><span class="w">Giao</span><span class="w">diện</span><span class="w">đổi</span><span class="w">—</span><span class="w">mã</span><span class="w">đó</span><span class="w">được</span><span class="w">lưu.</span></p>
+    <p class="hint"><span class="w">4.</span><span class="w">Sau</span><span class="w">Enter,</span><span class="w">PC</span><span class="w">đo</span><span class="w">%</span><span class="w">đổi</span><span class="w">màn.</span><span class="w">Đủ</span><span class="w">ngưỡng:</span><span class="w">lưu</span><span class="w">số</span><span class="w">vừa</span><span class="w">gõ,</span><span class="w">bấm</span><span class="w">4</span><span class="w">nút,</span><span class="w">rồi</span><span class="w">gõ</span><span class="w">số</span><span class="w">tiếp.</span></p>
     <div class="row">
       <button type="button" id="btnSave"><span class="w">Lưu</span></button>
       <a class="btn" href="/tai/pc-macro.zip"><span class="w">Tải</span><span class="w">phần</span><span class="w">mềm</span><span class="w">PC</span></a>
@@ -160,6 +202,9 @@
   var lastUsed = "";
   var currentDigits = "00001";
   var exhausted = false;
+  var recoverClicks = [];
+  var recordingRecover = false;
+  var forceRecover = false;
 
   function $(id) { return document.getElementById(id); }
   function headers() {
@@ -242,7 +287,9 @@
         step: parseInt($("step").value || "1", 10) || 1,
         flagged: flags(),
         last_used: lastUsed,
-        items: []
+        items: [],
+        recover_clicks: recoverClicks.slice(0, 4),
+        change_threshold: threshold()
       }
     };
     return fetch("/v1/macros", { method: "POST", headers: headers(), body: JSON.stringify(body) })
@@ -266,9 +313,15 @@
     }
     showCurrent();
     persist().catch(function () {});
-    setStatus("Đã gõ " + value + ", Enter, cộng " + step + ". Tiếp theo: " + (nextCode() || "—") + ".");
     var wait = Math.max(800, (parseFloat($("delay").value || "1") || 1) * 1000);
-    timer = window.setTimeout(oneTurn, wait);
+    setStatus("Đã gõ " + value + ", Enter. Đợi đo đổi màn / 4 nút…");
+    timer = window.setTimeout(function () {
+      afterEnter(value, function () {
+        if (!playing) return;
+        setStatus("Đã gõ " + value + ", Enter, cộng " + step + ". Tiếp theo: " + (nextCode() || "—") + ".");
+        timer = window.setTimeout(oneTurn, wait);
+      });
+    }, 800);
   }
   function startPlay() {
     if (playing) return;
@@ -295,10 +348,71 @@
     persist().catch(function () {});
     setStatus("Đã dừng. Số tiếp theo: " + (nextCode() || "—") + ".");
   }
+  function threshold() {
+    var n = parseInt($("threshold").value || "80", 10);
+    if (!n || n < 1) n = 80;
+    if (n > 100) n = 100;
+    return n;
+  }
+  function renderRecover() {
+    var stage = $("stage");
+    stage.innerHTML = "";
+    recoverClicks.forEach(function (click, index) {
+      var dot = document.createElement("div");
+      dot.className = "dot";
+      dot.id = "dot" + index;
+      dot.textContent = String(index + 1);
+      var left = Math.max(14, Math.min(stage.clientWidth - 14, click.x > 400 ? 40 + index * 70 : click.x));
+      var top = Math.max(14, Math.min(stage.clientHeight - 14, click.y > 200 ? 40 : click.y));
+      if (click.sx != null) left = click.sx;
+      if (click.sy != null) top = click.sy;
+      dot.style.left = left + "px";
+      dot.style.top = top + "px";
+      stage.appendChild(dot);
+    });
+    if (!recoverClicks.length) {
+      $("recoverLabel").textContent = "4 nút: chưa ghi";
+      return;
+    }
+    $("recoverLabel").textContent = recoverClicks.map(function (click, index) {
+      return (index + 1) + ". " + click.x + "," + click.y;
+    }).join("  ·  ");
+  }
+  function afterEnter(value, done) {
+    if (!playing) { done(); return; }
+    if (!forceRecover) {
+      setStatus("Đã Enter " + value + ". Đổi màn dưới ngưỡng — tiếp tục.");
+      done();
+      return;
+    }
+    forceRecover = false;
+    addFlag(value);
+    persist().catch(function () {});
+    if (recoverClicks.length < 4) {
+      setStatus("Đã lưu " + value + ". Chưa đủ 4 nút — tiếp tục gõ số.", "ok");
+      done();
+      return;
+    }
+    setStatus("Đã lưu " + value + ". Đang bấm 4 nút rồi gõ số tiếp.", "ok");
+    flashDots(0, done);
+  }
+  function flashDots(index, done) {
+    if (!playing) { done(); return; }
+    if (index >= recoverClicks.length) {
+      renderRecover();
+      done();
+      return;
+    }
+    renderRecover();
+    var dot = $("dot" + index);
+    if (dot) dot.className = "dot on";
+    timer = window.setTimeout(function () { flashDots(index + 1, done); }, 220);
+  }
   function flagNow() {
     var value = lastUsed || nextCode();
     if (!value) { setStatus("Chưa có số để lưu.", "err"); return; }
     addFlag(value);
+    if (playing) forceRecover = true;
     persist().then(function () {
       setStatus("Đã lưu số " + value + " vì giao diện đổi.", "ok");
     }).catch(function (err) { setStatus(err.message, "err"); });
@@ -315,7 +429,12 @@
         currentDigits = pad5(item.numbers.current || item.numbers.start || "00001");
         exhausted = !!item.numbers.exhausted && parseInt(currentDigits, 10) >= parseInt(pad5(item.numbers.end || currentDigits), 10);
         if (item.numbers.step) $("step").value = item.numbers.step;
+        if (item.numbers.change_threshold) $("threshold").value = item.numbers.change_threshold;
+        recoverClicks = (item.numbers.recover_clicks || []).map(function (click) {
+          return { x: click.x, y: click.y, sx: click.sx, sy: click.sy };
+        }).slice(0, 4);
         renderFlags(item.numbers.flagged || []);
+        renderRecover();
         showCurrent();
         if (item.numbers.prefix) {
           setStatus("Đã mở dãy đã lưu. Bấm Bắt đầu, hoặc Giao diện đổi để giữ số.");
@@ -327,6 +446,34 @@
   $("btnStart").onclick = startPlay;
   $("btnStop").onclick = stopPlay;
   $("btnFlag").onclick = flagNow;
+  $("btnRecordRecover").onclick = function () {
+    recoverClicks = [];
+    recordingRecover = true;
+    renderRecover();
+    setStatus("Bấm 4 điểm trên khung tập, theo đúng thứ tự 4 nút.");
+  };
+  $("btnClearRecover").onclick = function () {
+    recoverClicks = [];
+    recordingRecover = false;
+    renderRecover();
+    persist().catch(function () {});
+    setStatus("Đã xóa 4 nút.");
+  };
+  $("stage").onclick = function (ev) {
+    if (!recordingRecover && recoverClicks.length >= 4) return;
+    if (!recordingRecover) recordingRecover = true;
+    var box = $("stage").getBoundingClientRect();
+    var x = Math.round(ev.clientX - box.left);
+    var y = Math.round(ev.clientY - box.top);
+    recoverClicks.push({ x: x, y: y, sx: x, sy: y });
+    if (recoverClicks.length >= 4) {
+      recordingRecover = false;
+      setStatus("Đã nhớ 4 nút tập. Trên PC hãy Ghi 4 nút vào vị trí thật.", "ok");
+    } else {
+      setStatus("Đã ghi " + recoverClicks.length + "/4 nút.");
+    }
+    renderRecover();
+  };
   $("btnSave").onclick = function () {
     if (prefix().length !== 5) { setStatus("Nhập đủ 5 ký tự cố định rồi lưu.", "err"); return; }
     persist().then(function () { setStatus("Đã lưu dãy và các số lúc giao diện đổi.", "ok"); showCurrent(); })
@@ -354,6 +501,7 @@
     if (ev.key === "F8") { ev.preventDefault(); stopPlay(); }
     if (ev.key === "F9") { ev.preventDefault(); flagNow(); }
   });
+  renderRecover();
   showCurrent();
   loadSaved();
 </script>

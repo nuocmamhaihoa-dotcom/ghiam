@@ -11,6 +11,7 @@ from typing import Any
 from pc_macro.desktop import Desktop, available, install_hint
 from pc_macro.hub import HubError, configured, describe, pull, push
 from pc_macro.numbers import NumberQueue, make_code, normalize_digits, normalize_prefix
+from pc_macro.screen import RECOVER_CLICKS, capture_grid, normalize_threshold, sanitize_clicks, should_recover
 from pc_macro.script import compile_script, number_enter_steps
 from pc_macro.session import Player, Recorder, ignore_window
 from pc_macro.store import MacroStore
@@ -28,16 +29,18 @@ class App:
         self.store = MacroStore()
         self.root = tk.Tk()
         self.root.title("Gõ số rồi Enter")
-        self.root.geometry("400x620")
-        self.root.minsize(360, 560)
+        self.root.geometry("420x760")
+        self.root.minsize(380, 680)
         self.root.attributes("-topmost", True)
-        self.status = tk.StringVar(value="Nhập 5 ký tự cố định, số bắt đầu và số kết thúc. Bấm vào ô, rồi Bắt đầu.")
+        self.status = tk.StringVar(value="Nhập 5 ký tự cố định, số bắt đầu / kết thúc, rồi ghi 4 nút nếu cần.")
         self.current_label = tk.StringVar(value="Sẽ gõ: —")
+        self.recover_label = tk.StringVar(value="4 nút: chưa ghi")
         self.prefix = tk.StringVar(value="")
         self.start = tk.StringVar(value="00001")
         self.end = tk.StringVar(value="00010")
         self.delay = tk.StringVar(value="2")
         self.step = tk.StringVar(value="1")
+        self.threshold = tk.StringVar(value="80")
         self.recorder = Recorder(ignore_point=ignore_window(self._window_box))
         self.player: Player | None = None
         self.click: dict[str, Any] | None = None
@@ -45,6 +48,11 @@ class App:
         self.queue = NumberQueue(range_mode=True, prefix="", start="00001", end="00010", step=1)
         self.desktop = Desktop(self._on_desktop, _now_ms)
         self._play_thread: threading.Thread | None = None
+        self._record_recover = False
+        self._recover_draft: list[dict[str, Any]] = []
+        self._force_recover = False
+        self._before_grid = None
+        self._capture_warned = False
         self._build()
         self._load_or_empty()
         self.prefix.trace_add("write", self._on_fields)
@@ -83,6 +91,8 @@ class App:
         ttk.Entry(opts, textvariable=self.delay, width=5).pack(side="left", padx=(6, 14))
         ttk.Label(opts, text="Mỗi lần cộng").pack(side="left")
         ttk.Entry(opts, textvariable=self.step, width=5).pack(side="left", padx=6)
+        ttk.Label(opts, text="Đổi màn ≥ %").pack(side="left", padx=(14, 0))
+        ttk.Entry(opts, textvariable=self.threshold, width=4).pack(side="left", padx=6)
 
         buttons = ttk.Frame(self.root)
         buttons.pack(fill="x", **pad)
@@ -93,20 +103,30 @@ class App:
         extra = ttk.Frame(self.root)
         extra.pack(fill="x", **pad)
         ttk.Button(extra, text="Ghi chỗ nhập", command=self.start_record).pack(side="left", padx=2)
+        ttk.Button(extra, text="Ghi 4 nút", command=self.start_record_recover).pack(side="left", padx=2)
         ttk.Button(extra, text="Lưu", command=self.save_current).pack(side="left", padx=2)
         ttk.Button(extra, text="Lên VPS", command=self.push_hub).pack(side="left", padx=2)
         ttk.Button(extra, text="Lấy VPS", command=self.pull_hub).pack(side="left", padx=2)
 
-        ttk.Label(self.root, text="Số lúc giao diện đổi — F9 cũng lưu số đang dùng.").pack(anchor="w", padx=12, pady=(8, 2))
-        self.flag_box = tk.Listbox(self.root, height=6, font=("Segoe UI", 12))
+        ttk.Label(self.root, textvariable=self.recover_label, wraplength=390).pack(anchor="w", padx=12, pady=(6, 2))
+        ttk.Label(self.root, text="Số lúc giao diện đổi ≥ ngưỡng — F9 cũng lưu số vừa Enter.").pack(anchor="w", padx=12, pady=(8, 2))
+        self.flag_box = tk.Listbox(self.root, height=5, font=("Segoe UI", 12))
         self.flag_box.pack(fill="both", expand=True, padx=12, pady=4)
-        ttk.Label(self.root, text="F8 dừng. F9 lưu số khi thấy màn hình đổi.").pack(anchor="w", padx=12, pady=(0, 8))
+        ttk.Label(self.root, text="F8 dừng. Sau Enter máy đo % đổi màn. Đủ ngưỡng: lưu số, bấm 4 nút, rồi gõ số tiếp.").pack(anchor="w", padx=12, pady=(0, 8))
 
     def start_record(self) -> None:
-        if self.recorder.on or self._playing():
+        if self.recorder.on or self._playing() or self._record_recover:
             return
         self.recorder.start(_now_ms())
         self.status.set("Bấm một lần vào ô cần nhập trên máy, rồi Dừng hoặc F8.")
+
+    def start_record_recover(self) -> None:
+        if self.recorder.on or self._playing() or self._record_recover:
+            return
+        self._recover_draft = []
+        self._record_recover = True
+        self.status.set("Bấm trái nút 1/4 trên màn hình (không bấm cửa sổ này).")
+        self._refresh_recover()
 
     def start_play(self) -> None:
         if self.recorder.on:
@@ -134,6 +154,8 @@ class App:
     def stop_all(self) -> None:
         if self.player is not None:
             self.player.cancel()
+        if self._record_recover:
+            self._finish_recover(keep=False)
         if not self.recorder.on:
             return
         recorded = self.recorder.stop()
@@ -145,6 +167,8 @@ class App:
         if not value:
             self.status.set("Chưa có số để lưu.")
             return
+        if self._playing():
+            self._force_recover = True
         self._refresh_flags()
         self._persist(silent=True)
         self.status.set(f"Đã lưu số {value} vì giao diện đổi.")
@@ -198,6 +222,13 @@ class App:
             return
 
         def prepare(_loop: int) -> list[dict[str, Any]]:
+            pending = []
+            if self._force_recover:
+                pending = self._consume_recover("F9")
+            self._before_grid = capture_grid()
+            if self._before_grid is None and not self._capture_warned:
+                self._capture_warned = True
+                self._set_status("Không chụp được màn hình — dùng F9 khi thấy đổi.")
             value = self.queue.take()
             if not value:
                 return []
@@ -205,9 +236,23 @@ class App:
             self._set_status(f"Đang gõ {value} rồi Enter.")
             self.root.after(0, self._refresh_current)
             self.root.after(0, lambda: self._persist(silent=True))
-            return batch
+            return pending + batch
 
-        result = self.player.play([], times=0, prepare=prepare)
+        def after(_loop: int) -> list[dict[str, Any]]:
+            if self.player is None or self.player.cancelled:
+                return []
+            time.sleep(0.5)
+            if self.player is None or self.player.cancelled:
+                return []
+            if self._force_recover:
+                return self._consume_recover("F9")
+            changed, percent = should_recover(self._before_grid, capture_grid(), self.queue.change_threshold)
+            if not changed:
+                self._set_status(f"Đã Enter {self.queue.last_used}. Đổi màn {percent:.0f}% — tiếp tục.")
+                return []
+            return self._consume_recover(f"{percent:.0f}%")
+
+        result = self.player.play([], times=0, prepare=prepare, after=after)
         self.root.after(0, self._refresh_number_view)
         self.root.after(0, lambda: self._persist(silent=True))
         if result["stopped"]:
@@ -224,9 +269,15 @@ class App:
         if raw.get("kind") == "key" and raw.get("action") == "down" and key == "f8":
             if self.player is not None:
                 self.player.cancel()
+            if self._record_recover:
+                self.root.after(0, lambda: self._finish_recover(keep=False))
             if self.recorder.on:
                 recorded = self.recorder.stop()
                 self.root.after(0, lambda ev=recorded: self._after_record(ev))
+            return
+        if self._record_recover:
+            if raw.get("kind") == "click" and raw.get("action") == "up":
+                self.root.after(0, lambda ev=dict(raw): self._add_recover_click(ev))
             return
         if not self.recorder.on:
             return
@@ -257,6 +308,68 @@ class App:
             steps.append(self.click)
         steps.extend(number_enter_steps(sample))
         return steps
+
+    def _add_recover_click(self, raw: dict[str, Any]) -> None:
+        if not self._record_recover:
+            return
+        try:
+            x = float(raw.get("x"))
+            y = float(raw.get("y"))
+        except (TypeError, ValueError):
+            return
+        box = self._window_box()
+        if box and box[0] <= x <= box[2] and box[1] <= y <= box[3]:
+            return
+        clicks = sanitize_clicks([*self._recover_draft, {"x": x, "y": y}])
+        if len(clicks) == len(self._recover_draft):
+            return
+        self._recover_draft = clicks
+        if len(self._recover_draft) >= RECOVER_CLICKS:
+            self._finish_recover(keep=True)
+            return
+        self.status.set(f"Đã ghi {len(self._recover_draft)}/4 nút. Bấm nút trái tiếp theo.")
+        self._refresh_recover()
+
+    def _finish_recover(self, *, keep: bool) -> None:
+        self._record_recover = False
+        if keep and len(self._recover_draft) >= RECOVER_CLICKS:
+            self.queue.recover_clicks = sanitize_clicks(self._recover_draft)
+            self._persist(silent=True)
+            self.status.set("Đã nhớ 4 nút. Sau Enter, nếu màn đổi đủ ngưỡng máy sẽ bấm 4 nút rồi gõ số tiếp.")
+        elif keep:
+            self.status.set("Chưa đủ 4 nút. Bấm Ghi 4 nút rồi chỉ đúng 4 vị trí.")
+        else:
+            self.status.set("Đã hủy ghi 4 nút.")
+        self._recover_draft = []
+        self._refresh_recover()
+
+    def _consume_recover(self, reason: str) -> list[dict[str, Any]]:
+        self._force_recover = False
+        value = self.queue.flag(self.queue.last_used)
+        self.root.after(0, self._refresh_flags)
+        self.root.after(0, lambda: self._persist(silent=True))
+        if not value:
+            return []
+        if len(self.queue.recover_clicks) < RECOVER_CLICKS:
+            self._set_status(f"Đã lưu {value} ({reason}). Chưa đủ 4 nút — tiếp tục gõ số.")
+            return []
+        self._set_status(f"Đã lưu {value} ({reason}). Đang bấm 4 nút rồi gõ số tiếp.")
+        return self._recover_events()
+
+    def _recover_events(self) -> list[dict[str, Any]]:
+        steps = list(self.queue.recover_clicks)
+        if self.click:
+            steps.append(self.click)
+        _script, events = compile_script(steps)
+        return events
+
+    def _refresh_recover(self) -> None:
+        clicks = self._recover_draft if self._record_recover else self.queue.recover_clicks
+        if not clicks:
+            self.recover_label.set("4 nút: chưa ghi — bấm Ghi 4 nút rồi chỉ 4 vị trí.")
+            return
+        points = " · ".join(f"{item['x']},{item['y']}" for item in clicks)
+        self.recover_label.set(f"4 nút ({len(clicks)}/4): {points}")
 
     def _on_fields(self, *_args: Any) -> None:
         cleaned = normalize_prefix(self.prefix.get())
@@ -292,6 +405,8 @@ class App:
             flagged=list(self.queue.flagged),
             last_used=self.queue.last_used,
             exhausted=exhausted,
+            recover_clicks=list(self.queue.recover_clicks),
+            change_threshold=normalize_threshold(self.threshold.get()),
         )
         if write_back:
             self._write_fields()
@@ -306,11 +421,14 @@ class App:
             self.end.set(self.queue.end)
         if self.step.get() != str(self.queue.step):
             self.step.set(str(self.queue.step))
+        if self.threshold.get() != str(self.queue.change_threshold):
+            self.threshold.set(str(self.queue.change_threshold))
 
     def _refresh_number_view(self) -> None:
         self._write_fields()
         self._refresh_current()
         self._refresh_flags()
+        self._refresh_recover()
 
     def _refresh_current(self) -> None:
         nxt = self.queue.peek()
@@ -347,7 +465,7 @@ class App:
 
     def _persist(self, *, silent: bool) -> None:
         self._sync_queue()
-        if not self.queue.prefix and not self.queue.flagged and not self.queue.last_used:
+        if not self.queue.prefix and not self.queue.flagged and not self.queue.last_used and not self.queue.recover_clicks:
             if not silent:
                 self.status.set("Nhập 5 ký tự cố định rồi lưu.")
             return
@@ -386,7 +504,7 @@ class App:
         return self._play_thread is not None and self._play_thread.is_alive()
 
     def _busy(self) -> bool:
-        return self.recorder.on or self._playing()
+        return self.recorder.on or self._playing() or self._record_recover
 
     def _close(self) -> None:
         self.stop_all()

@@ -35,6 +35,7 @@ from pc_macro.script import (
     script_captions,
     steps_to_events,
 )
+from pc_macro.screen import change_percent, make_grid, sanitize_clicks, should_recover
 from pc_macro.session import Player, Recorder
 from pc_macro.store import MacroStore
 
@@ -261,6 +262,59 @@ class PrefixRangeTests(unittest.TestCase):
         self.assertEqual(result["loops"], 2)
         self.assertEqual(sent[:11], ["S", "P", "X", "A", "B", "0", "0", "0", "0", "1", "enter"])
         self.assertEqual(sent[11:22], ["S", "P", "X", "A", "B", "0", "0", "0", "0", "2", "enter"])
+
+    def test_screen_change_and_four_clicks_then_continue(self) -> None:
+        same = make_grid((10, 10, 10))
+        self.assertEqual(change_percent(same, same), 0.0)
+        changed = make_grid((10, 10, 10), flip=int(0.85 * 48 * 27))
+        hit, percent = should_recover(same, changed, 80)
+        self.assertTrue(hit)
+        self.assertGreaterEqual(percent, 80)
+        miss, _percent = should_recover(same, make_grid((10, 10, 10), flip=10), 80)
+        self.assertFalse(miss)
+        self.assertEqual(len(sanitize_clicks([{"x": 1, "y": 2}, {"x": 3, "y": 4}, {"x": 5, "y": 6}, {"x": 7, "y": 8}, {"x": 9, "y": 10}])), 4)
+        queue = NumberQueue(
+            range_mode=True,
+            prefix="SPXAB",
+            start="00001",
+            end="00003",
+            recover_clicks=[{"x": 11, "y": 22}, {"x": 33, "y": 44}, {"x": 55, "y": 66}, {"x": 77, "y": 88}],
+            change_threshold=80,
+        )
+        again = NumberQueue.from_dict(queue.to_dict())
+        self.assertEqual(len(again.recover_clicks), 4)
+        self.assertEqual(again.recover_clicks[0]["x"], 11)
+        self.assertEqual(again.change_threshold, 80)
+        sent: list[str] = []
+        after_calls = {"n": 0}
+
+        def prepare(_loop: int) -> list:
+            value = queue.take()
+            if not value:
+                return []
+            _script, batch = compile_script(number_enter_steps(value))
+            return batch
+
+        def after(_loop: int) -> list:
+            after_calls["n"] += 1
+            if after_calls["n"] != 1:
+                return []
+            queue.flag(queue.last_used)
+            _script, extra = compile_script(list(queue.recover_clicks))
+            return extra
+
+        player = Player(
+            lambda event: sent.append(f"{event.get('kind')}:{event.get('key') or event.get('x')}")
+            if event.get("action") == "down"
+            else None,
+            lambda _s: None,
+        )
+        result = player.play([], times=0, gap_ms=0, prepare=prepare, after=after)
+        self.assertEqual(result["loops"], 3)
+        self.assertEqual(queue.flagged, ["SPXAB00001"])
+        self.assertIn("click:11", sent)
+        self.assertIn("click:77", sent)
+        self.assertLess(sent.index("key:enter"), sent.index("click:11"))
 
 
 class ScriptStepTests(unittest.TestCase):

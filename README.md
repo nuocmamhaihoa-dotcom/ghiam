@@ -22,7 +22,7 @@ Chi tiết vận hành 2 PC: [`deploy/PA1_RUNBOOK.md`](deploy/PA1_RUNBOOK.md).
 
 ## Ghi nhớ phím và chuột trên máy, rồi làm lại
 
-Phần mềm nhỏ **chạy trên máy tính của bạn**: nhập **5 ký tự cố định** (đổi được), **số bắt đầu** và **số kết thúc** của 5 số phía sau, bấm vào ô cần nhập, **Bắt đầu**. Máy gõ mã (ví dụ `SPXAB00001`), **Enter**, rồi **cộng 1**, lặp đến số kết thúc. Thấy giao diện đổi thì **Giao diện đổi** (hoặc F9) để lưu mã đó. F8 dừng. VPS `http://VPS:8088/` hiện cùng giao diện; Gõ/Enter thật trên máy Windows.
+Phần mềm nhỏ **chạy trên máy tính của bạn**: nhập **5 ký tự cố định** (đổi được), **số bắt đầu** và **số kết thúc** của 5 số phía sau, **Ghi 4 nút** nếu sau Enter màn hình có thể đổi. **Bắt đầu**: máy gõ mã (ví dụ `SPXAB00001`), Enter, đo % đổi màn. Đủ ngưỡng (mặc định 80%): lưu mã vừa gõ vào danh sách, bấm 4 nút trái đã chỉ, rồi gõ số tiếp. F9 cũng lưu số vừa Enter. F8 dừng. VPS `http://VPS:8088/` hiện cùng giao diện; Gõ/Enter/bấm thật trên máy Windows.
 
 ```bash
 pip install pynput          # hoặc: pip install -e ".[macro]"
@@ -44,7 +44,7 @@ Windows (đã có venv của agent):
 
 **Kịch bản từng bước:** sau khi Dừng, bản ghi tách thành bước (gõ chữ, gõ số, phím, bấm, cuộn, chờ). Sửa / xoá / lên / xuống / thêm từng bước, hoặc **Ghi thêm** để nối thao tác mới. **Chèn vào kịch bản** ghép một bản đã lưu vào kịch bản đang sửa. Lưu rồi lần sau **Mở** lại đúng thứ tự đã chỉnh.
 
-**Dãy số:** mỗi mã gồm **5 ký tự cố định** đứng trước + **5 số** tăng dần. Ví dụ tiền tố `SPXAB`, bắt đầu `00001`, kết thúc `00100` → máy gõ `SPXAB00001` rồi Enter, sau đó `SPXAB00002` … đến `SPXAB00100`. Đổi 5 ký tự cố định bất cứ lúc nào; dãy không bung thành hàng vạn dòng. F9 lưu mã đang dùng khi giao diện đổi.
+**Dãy số:** mỗi mã gồm **5 ký tự cố định** đứng trước + **5 số** tăng dần. Ví dụ tiền tố `SPXAB`, bắt đầu `00001`, kết thúc `00100` → máy gõ `SPXAB00001` rồi Enter, sau đó `SPXAB00002` … đến `SPXAB00100`. Sau Enter máy so sánh ảnh màn hình; đổi ≥ ngưỡng (mặc định 80%) thì lưu mã vừa gõ và bấm 4 vị trí đã ghi, rồi tiếp tục tăng số. Đổi 5 ký tự cố định bất cứ lúc nào. F9 lưu mã khi bạn thấy đổi.
 
 ## Cài đặt trên PC (dùng tài nguyên máy local)
 

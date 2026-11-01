@@ -11,6 +11,7 @@ from pc_macro.desktop import Desktop, available, install_hint
 from pc_macro.events import default_title
 from pc_macro.hub import HubError, describe, pull, push
 from pc_macro.numbers import NumberQueue, apply_turn, digit_spans
+from pc_macro.screen import RECOVER_CLICKS, capture_grid, should_recover
 from pc_macro.script import compile_script, events_to_steps, number_enter_steps, script_captions, steps_to_events
 from pc_macro.session import Player
 from pc_macro.store import MacroStore
@@ -87,8 +88,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     events = steps_to_events(steps) if steps else item["events"]
     queue = NumberQueue.from_dict(item.get("numbers"))
     spans = digit_spans(events)
+    before_grid: list = [None]
 
     def prepare(_loop: int) -> list:
+        before_grid[0] = capture_grid()
         if queue.range_mode:
             value = queue.take()
             if not value:
@@ -101,8 +104,22 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"Số: {value}")
         return batch
 
+    def after(_loop: int) -> list:
+        if not queue.range_mode or not queue.last_used:
+            return []
+        time.sleep(0.5)
+        changed, percent = should_recover(before_grid[0], capture_grid(), queue.change_threshold)
+        if not changed:
+            return []
+        queue.flag(queue.last_used)
+        print(f"Đổi màn {percent:.0f}% — lưu {queue.last_used}")
+        if len(queue.recover_clicks) < RECOVER_CLICKS:
+            return []
+        _script, extra = compile_script(list(queue.recover_clicks))
+        return extra
+
     print(f"Đang làm lại «{item['name']}»…")
-    result = player.play(events, times=args.repeat, prepare=prepare)
+    result = player.play(events, times=args.repeat, prepare=prepare, after=after)
     if item.get("slug"):
         store.save(
             item["name"],

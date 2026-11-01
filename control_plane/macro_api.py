@@ -135,7 +135,8 @@ VPS chỉ giữ kịch bản. Ghi phím/chuột và bấm Làm lại phải làm
 2. Mở PowerShell trong thư mục này:
    .\\Cai-dat.ps1
 3. Cửa sổ hiện ra. Nhập 5 ký tự cố định, số bắt đầu và số kết thúc (5 số).
-   Bấm vào ô cần nhập, Bắt đầu: máy gõ mã rồi Enter, cộng 1, lặp đến hết.
+   Bấm Ghi 4 nút nếu sau Enter màn hình có thể đổi nhiều. Bắt đầu: máy gõ mã
+   rồi Enter; đổi ≥ 80% thì lưu số vừa gõ, bấm 4 nút, rồi tăng số tiếp.
 
 Đồng bộ với VPS (sau khi đặt địa chỉ):
   python -m pc_macro pull
