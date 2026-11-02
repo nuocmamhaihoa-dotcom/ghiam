@@ -131,6 +131,7 @@ def upsert_slot(
     wx: Any = None,
     wy: Any = None,
     hwnd: Any = None,
+    wtitle: Any = None,
 ) -> list[dict[str, Any]]:
     """Set one of the four steps without dropping the others."""
     try:
@@ -151,7 +152,17 @@ def upsert_slot(
     except (TypeError, ValueError):
         screen_w, screen_h = 0, 0
     slots[index] = _click_record(
-        px, py, screen_w, screen_h, name=name, step=index, via=via, wx=wx, wy=wy, hwnd=hwnd
+        px,
+        py,
+        screen_w,
+        screen_h,
+        name=name,
+        step=index,
+        via=via,
+        wx=wx,
+        wy=wy,
+        hwnd=hwnd,
+        wtitle=wtitle,
     )
     return [item for item in slots if item is not None]
 
@@ -286,6 +297,7 @@ def scale_clicks(clicks: Any, sw: int, sh: int) -> list[dict[str, Any]]:
                 wx=window_x,
                 wy=window_y,
                 hwnd=item.get("hwnd"),
+                wtitle=item.get("wtitle"),
             )
         )
     return out
@@ -350,6 +362,7 @@ def _click_record(
     wx: Any = None,
     wy: Any = None,
     hwnd: Any = None,
+    wtitle: Any = None,
 ) -> dict[str, Any]:
     record: dict[str, Any] = {"kind": "click", "x": x, "y": y, "button": "left", "wait": wait}
     label = normalize_click_name(name)
@@ -380,6 +393,9 @@ def _click_record(
     handle = _hwnd(hwnd)
     if handle:
         record["hwnd"] = handle
+    title = " ".join(str(wtitle or "").split())[:120]
+    if title:
+        record["wtitle"] = title
     return record
 
 
@@ -424,6 +440,7 @@ def _parse_click(item: Any) -> dict[str, Any] | None:
         wx=item.get("wx"),
         wy=item.get("wy"),
         hwnd=item.get("hwnd"),
+        wtitle=item.get("wtitle"),
     )
     ratio = _ratio(item)
     if ratio is not None and sw > 0 and sh > 0:

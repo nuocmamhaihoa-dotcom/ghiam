@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any, Callable
 
 import tkinter as tk
@@ -16,7 +17,7 @@ from pc_macro.screen import (
     sanitize_frame,
     upsert_slot,
 )
-from pc_macro.win_focus import window_handle_at
+from pc_macro.win_focus import is_hub_title, window_handle_at, window_title
 
 _FILL = "#0b6bcb"
 _EDGE = "#ffffff"
@@ -52,6 +53,7 @@ class ClickOverlay:
         self._phases = 2 if phases >= 2 and self._step is not None else 1
         self._window_xy: tuple[int, int] | None = None
         self._window_hwnd = 0
+        self._window_title = ""
         self.screen_w = max(1, int(root.winfo_screenwidth()))
         self.screen_h = max(1, int(root.winfo_screenheight()))
         self.clicks = sanitize_clicks(clicks or [])
@@ -138,8 +140,18 @@ class ClickOverlay:
             return
         if self._step is not None:
             if self._phases >= 2 and self._window_xy is None:
+                handle, title = self._peek_real_window(x, y)
+                if not handle or is_hub_title(title):
+                    self._window_xy = None
+                    self._window_hwnd = 0
+                    self._window_title = ""
+                    self.hint.configure(
+                        text="Đó là trang hub / lớp phủ. Bấm cửa sổ Evoshop (evoshop.vn), không bấm trang phần mềm."
+                    )
+                    return
                 self._window_xy = (x, y)
-                self._window_hwnd = window_handle_at(x, y)
+                self._window_hwnd = handle
+                self._window_title = title
                 self._sync_bar()
                 self._redraw()
                 return
@@ -155,6 +167,7 @@ class ClickOverlay:
                 wx=wx,
                 wy=wy,
                 hwnd=self._window_hwnd,
+                wtitle=self._window_title,
             )
             self._recording = False
             self._awaiting_save = True
@@ -165,6 +178,42 @@ class ClickOverlay:
                 self._awaiting_save = True
         self._sync_bar()
         self._redraw()
+
+    def _peek_real_window(self, x: int, y: int) -> tuple[int, str]:
+        """Hide this overlay so WindowFromPoint sees Evoshop, not the cover."""
+        exclude: list[int] = []
+        try:
+            exclude.append(int(self.win.winfo_id()))
+        except (tk.TclError, TypeError, ValueError):
+            pass
+        hidden = False
+        try:
+            self.win.attributes("-topmost", False)
+            self.win.withdraw()
+            self.win.update()
+            time.sleep(0.05)
+            hidden = True
+        except tk.TclError:
+            hidden = False
+        try:
+            handle = window_handle_at(x, y, exclude=exclude)
+            if not handle:
+                time.sleep(0.05)
+                handle = window_handle_at(x, y, exclude=exclude)
+            return handle, window_title(handle)
+        finally:
+            if hidden:
+                try:
+                    self.win.deiconify()
+                    self.win.attributes("-topmost", True)
+                    self.win.lift()
+                    try:
+                        self.win.grab_set()
+                    except tk.TclError:
+                        pass
+                    self.win.focus_force()
+                except tk.TclError:
+                    pass
 
     def _save(self) -> None:
         if not self._awaiting_save:
@@ -187,6 +236,7 @@ class ClickOverlay:
             self.clicks = [item for item in slots if item is not None]
             self._window_xy = None
             self._window_hwnd = 0
+            self._window_title = ""
         else:
             self.clicks = []
         self._recording = True

@@ -244,8 +244,9 @@ Nếu chưa có Python, file đó tự cài. Nếu thiếu pynput, file đó t�
 Cửa sổ lỗi sẽ đứng lại (không tắt ngay) để đọc được chữ.
 
 Hướng 2: chỉ 1 tiến trình. Gắn Evoshop (không gắn trang hub),
-rồi dòng Mã khách hàng / số điện thoại. Bật chạy gõ 5 ký tự + 5 số rồi Enter,
-tăng số. Tắt để dừng. Khung đổi ≥ 20% thì lưu mã. VPN trên PC: một nút Bật VPN
+rồi dòng Mã khách hàng / số điện thoại. Overlay tạm ẩn lúc gắn để lấy đúng
+cửa sổ Evoshop. Bật chạy thu nhỏ hub, đưa Evoshop lên trước, gõ 5 ký tự + 5 số
+rồi Enter, tăng số. Tắt để dừng. Khung đổi ≥ 20% thì lưu mã. VPN trên PC: một nút Bật VPN
 (DNS, IPv6, kill switch, WARP, VPN Gate, miễn phí). Mật khẩu chỉ lưu trên máy,
 không đưa lên VPS.
 

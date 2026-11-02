@@ -81,7 +81,16 @@ from pc_macro.screen import (
 )
 from pc_macro.session import Player, Recorder
 from pc_macro.store import MacroStore
-from pc_macro.win_focus import bring_window_at, focus_handle, window_handle_at
+from pc_macro.win_focus import (
+    bring_window_at,
+    find_window_by_title,
+    focus_handle,
+    is_hub_title,
+    is_window_alive,
+    lower_hub_windows,
+    window_handle_at,
+    window_title,
+)
 
 
 class SanitizeTests(unittest.TestCase):
@@ -566,9 +575,23 @@ class FourLaneTests(unittest.TestCase):
         self.assertEqual(scaled[0]["wy"], 80)
         self.assertIsNone(customer_target([]))
         self.assertIsNone(customer_target([{"x": 10, "y": 20}]))
-        bound = upsert_slot([], 0, 200, 150, 1000, 800, via="point", wx=50, wy=40, hwnd=4242)
+        bound = upsert_slot(
+            [],
+            0,
+            200,
+            150,
+            1000,
+            800,
+            via="point",
+            wx=50,
+            wy=40,
+            hwnd=4242,
+            wtitle="evoshop.vn - Google Chrome",
+        )
         self.assertEqual(customer_target(bound)["hwnd"], 4242)
+        self.assertEqual(customer_target(bound)["wtitle"], "evoshop.vn - Google Chrome")
         self.assertEqual(scale_clicks(bound, 2000, 1600)[0]["hwnd"], 4242)
+        self.assertEqual(scale_clicks(bound, 2000, 1600)[0]["wtitle"], "evoshop.vn - Google Chrome")
         self.assertFalse(bring_window_at(10, 20))
         self.assertFalse(focus_handle(0))
         self.assertEqual(window_handle_at(1, 1), 0)
@@ -1127,6 +1150,101 @@ class UpdateTests(unittest.TestCase):
             self.assertTrue((root / "CHAY-O-DAY.cmd").is_file())
             info = package_info(files)
             self.assertEqual(info["digest"], applied["digest"])
+
+
+class _FakeWin:
+    def __init__(self) -> None:
+        self.wins = {
+            100: {
+                "root": 100,
+                "next": 200,
+                "visible": True,
+                "alive": True,
+                "rect": (0, 0, 800, 600),
+                "title": "Gõ số rồi Enter - Google Chrome",
+            },
+            200: {
+                "root": 200,
+                "next": 0,
+                "visible": True,
+                "alive": True,
+                "rect": (0, 0, 800, 600),
+                "title": "evoshop.vn - Google Chrome",
+            },
+            9: {
+                "root": 9,
+                "next": 200,
+                "visible": True,
+                "alive": True,
+                "rect": (0, 0, 800, 600),
+                "title": "overlay",
+            },
+        }
+        self.hit = 9
+        self.fg = 100
+        self.minimized: list[int] = []
+        self.focused: list[int] = []
+
+    def WindowFromPoint(self, _pt: object) -> int:
+        return self.hit
+
+    def GetAncestor(self, hwnd: int, _flag: int) -> int:
+        return int(self.wins.get(int(hwnd), {}).get("root") or hwnd)
+
+    def GetWindow(self, hwnd: int, _cmd: int) -> int:
+        return int(self.wins.get(int(hwnd), {}).get("next") or 0)
+
+    def IsWindow(self, hwnd: int) -> bool:
+        return bool(self.wins.get(int(hwnd), {}).get("alive"))
+
+    def IsWindowVisible(self, hwnd: int) -> bool:
+        return bool(self.wins.get(int(hwnd), {}).get("visible"))
+
+    def title_of(self, hwnd: int) -> str:
+        return str(self.wins.get(int(hwnd), {}).get("title") or "")
+
+    def rect_of(self, hwnd: int) -> tuple[int, int, int, int]:
+        box = self.wins.get(int(hwnd), {}).get("rect") or (0, 0, 0, 0)
+        return int(box[0]), int(box[1]), int(box[2]), int(box[3])
+
+    def enum_windows(self) -> list[int]:
+        return list(self.wins)
+
+    def ShowWindow(self, hwnd: int, cmd: int) -> bool:
+        if cmd in {6, 7}:
+            self.minimized.append(int(hwnd))
+        return True
+
+    def SetForegroundWindow(self, hwnd: int) -> bool:
+        self.fg = int(hwnd)
+        self.focused.append(int(hwnd))
+        return True
+
+    def GetForegroundWindow(self) -> int:
+        return self.fg
+
+    def BringWindowToTop(self, hwnd: int) -> bool:
+        self.fg = int(hwnd)
+        return True
+
+
+class WinFocusTests(unittest.TestCase):
+    def test_skips_overlay_and_refuses_hub_title(self) -> None:
+        api = _FakeWin()
+        self.assertTrue(is_hub_title("Gõ số rồi Enter - Google Chrome"))
+        self.assertTrue(is_hub_title("http://103.200.20.245:8088/"))
+        self.assertFalse(is_hub_title("evoshop.vn - Google Chrome"))
+        self.assertEqual(window_handle_at(100, 100, api=api, exclude=[9]), 200)
+        self.assertEqual(window_title(200, api=api), "evoshop.vn - Google Chrome")
+        self.assertEqual(find_window_by_title("evoshop.vn", api=api), 200)
+        self.assertEqual(lower_hub_windows(api=api), 1)
+        self.assertEqual(api.minimized, [100])
+        self.assertTrue(focus_handle(200, api=api))
+        self.assertEqual(api.focused[-1], 200)
+        self.assertTrue(is_window_alive(200, api=api))
+        api.wins[200]["alive"] = False
+        self.assertFalse(is_window_alive(200, api=api))
+        self.assertFalse(focus_handle(200, api=api))
 
 
 class BootTests(unittest.TestCase):

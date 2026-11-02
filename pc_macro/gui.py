@@ -44,7 +44,16 @@ from pc_macro.store import MacroStore
 from pc_macro.updater import consume_just_updated
 from pc_macro.version import PC_MACRO_BUILD
 from pc_macro.vpn import KIND_LABELS, VpnClient, status_label
-from pc_macro.win_focus import bring_window_at, focus_handle
+from pc_macro.win_focus import (
+    bring_window_at,
+    find_window_by_title,
+    focus_handle,
+    is_hub_title,
+    is_window_alive,
+    lower_hub_windows,
+    window_handle_at,
+    window_title,
+)
 
 
 def main() -> None:
@@ -1251,15 +1260,32 @@ class App:
         target = customer_target(self._lane_focus_clicks()) or customer_target(self.lanes.lane_clicks)
         if target is None:
             return None
+        lower_hub_windows()
         handle = 0
         try:
             handle = int(target.get("hwnd") or 0)
         except (TypeError, ValueError):
             handle = 0
+        title = str(target.get("wtitle") or "")
+        if handle and not is_window_alive(handle):
+            handle = 0
+        if not handle and title:
+            handle = find_window_by_title(title)
         if handle and focus_handle(handle):
             return target
-        bring_window_at(int(target["wx"]), int(target["wy"]))
-        return target
+        wx = int(target["wx"])
+        wy = int(target["wy"])
+        hit = window_handle_at(wx, wy)
+        if hit and is_hub_title(window_title(hit)):
+            return None
+        if hit and focus_handle(hit):
+            return target
+        if bring_window_at(wx, wy):
+            hit = window_handle_at(wx, wy)
+            if hit and is_hub_title(window_title(hit)):
+                return None
+            return target
+        return None
 
     def _post_run(self, payload: dict[str, Any]) -> None:
         if not configured():
