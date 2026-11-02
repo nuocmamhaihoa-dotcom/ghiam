@@ -6,6 +6,7 @@ import io
 import os
 import tempfile
 import unittest
+import zipfile
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -951,6 +952,49 @@ class CliTests(unittest.TestCase):
                 self.assertIn("PC_MACRO_HUB", hub.getvalue())
             finally:
                 os.environ.pop("PC_MACRO_DIR", None)
+
+
+class UpdateTests(unittest.TestCase):
+    def test_needs_update_and_apply_keeps_data(self) -> None:
+        from pc_macro.updater import apply_package, needs_update, skip_update
+        from pc_macro.version import digest_files, package_info
+
+        self.assertTrue(needs_update({"build": 1, "digest": "a"}, {"build": 2, "digest": "b"}))
+        self.assertFalse(needs_update({"build": 2, "digest": "b"}, {"build": 2, "digest": "b"}))
+        self.assertFalse(needs_update({"build": 3, "digest": "c"}, {"build": 2, "digest": "b"}))
+        self.assertTrue(needs_update({"build": 2, "digest": "old"}, {"build": 2, "digest": "new"}))
+        self.assertTrue(skip_update(Path(__file__).resolve().parents[1]))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "pc_macro").mkdir()
+            (root / "pc_macro" / "gui.py").write_text("OLD = 1\n", encoding="utf-8")
+            (root / "data" / "macros").mkdir(parents=True)
+            keep = root / "data" / "macros" / "keep.json"
+            keep.write_text('{"ok": true}', encoding="utf-8")
+            staging_src = root / "incoming"
+            (staging_src / "pc_macro").mkdir(parents=True)
+            (staging_src / "pc_macro" / "gui.py").write_text("NEW = 2\n", encoding="utf-8")
+            (staging_src / "pc_macro" / "version.py").write_text("PC_MACRO_BUILD = 9\n", encoding="utf-8")
+            (staging_src / "Chay.cmd").write_text("echo run\n", encoding="utf-8")
+            files = {
+                "pc_macro/gui.py": (staging_src / "pc_macro" / "gui.py").read_bytes(),
+                "pc_macro/version.py": (staging_src / "pc_macro" / "version.py").read_bytes(),
+                "Chay.cmd": (staging_src / "Chay.cmd").read_bytes(),
+            }
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w") as archive:
+                for name, raw in files.items():
+                    archive.writestr(f"pc-macro/{name}", raw)
+            applied = apply_package(buf.getvalue(), root, digest=digest_files(files))
+            self.assertTrue(applied["ok"])
+            self.assertEqual(applied["build"], 9)
+            self.assertIn("NEW = 2", (root / "pc_macro" / "gui.py").read_text(encoding="utf-8"))
+            self.assertTrue(keep.is_file())
+            self.assertEqual(keep.read_text(encoding="utf-8"), '{"ok": true}')
+            self.assertTrue((root / "Chay.cmd").is_file())
+            info = package_info(files)
+            self.assertEqual(info["digest"], applied["digest"])
 
 
 if __name__ == "__main__":

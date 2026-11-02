@@ -50,6 +50,8 @@ Windows (đã có venv của agent):
 
 **VPN trên PC:** một nút **Bật VPN**. Bật là tự siết DNS `1.1.1.1`/`9.9.9.9`, IPv6, WebRTC Chrome/Edge/Firefox, cài Cloudflare WARP qua `winget` nếu thiếu, rồi nối (WARP → Proton/Windscribe CLI → [VPN Gate](https://www.vpngate.net/api/iphone/) → `data/proxies_static.txt`). Tắt là ngắt và thôi khóa. IP không đổi thì không gõ số. Mã nước 2 chữ (JP/US/KR) lọc VPN Gate. Không ẩn tuyệt đối — nhà cung cấp VPN vẫn thấy máy bạn. Mật khẩu chỉ nằm trong `data/vpn.json` — không đồng bộ VPS.
 
+**Tự cập nhật:** cài một lần (`Cai-dat.ps1`). Mỗi lần mở phần mềm (và khi đăng nhập Windows) máy hỏi `GET /v1/pc-macro/version`, nếu chữ ký khác thì tự tải `/tai/pc-macro.zip`, ghi đè `pc_macro/*.py`, rồi tự mở lại. Không cần tải zip hay chạy cài đặt lại. Thư mục `data/` (kịch bản, VPN) giữ nguyên.
+
 ## Cài đặt trên PC (dùng tài nguyên máy local)
 
 - Linux: [`docs/CAI_DAT_PC.md`](docs/CAI_DAT_PC.md)

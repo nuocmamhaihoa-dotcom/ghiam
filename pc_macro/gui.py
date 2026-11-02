@@ -44,6 +44,8 @@ from pc_macro.script import (
 )
 from pc_macro.session import Player, Recorder, ignore_window
 from pc_macro.store import MacroStore
+from pc_macro.updater import consume_just_updated
+from pc_macro.version import PC_MACRO_BUILD
 from pc_macro.vpn import KIND_LABELS, VpnClient, status_label
 
 
@@ -62,7 +64,7 @@ class App:
         self.root.geometry("430x720")
         self.root.minsize(400, 600)
         self.root.attributes("-topmost", True)
-        self.status = tk.StringVar(value="Gắn 4 ô 5 số trên website, rồi Bắt đầu 2.")
+        self.status = tk.StringVar(value=_startup_status())
         self.current_label = tk.StringVar(value="Sẽ gõ: —")
         self.recover_label = tk.StringVar(value="4 nút: chưa ghi")
         self.prefix = tk.StringVar(value="")
@@ -1583,6 +1585,13 @@ def _click_from_steps(steps: list[dict[str, Any]]) -> dict[str, Any] | None:
                 "wait": int(step.get("wait") or 80),
             }
     return None
+
+
+def _startup_status() -> str:
+    stamp = consume_just_updated()
+    if stamp and stamp.get("build"):
+        return f"Đã tự cập nhật lên bản {stamp['build']}. Gắn 4 ô rồi Bắt đầu 2."
+    return f"Gắn 4 ô 5 số trên website, rồi Bắt đầu 2. Bản {PC_MACRO_BUILD} tự cập nhật từ hub."
 
 
 def _now_ms() -> int:

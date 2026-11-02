@@ -10,6 +10,7 @@ from typing import Sequence
 from pc_macro.desktop import Desktop, available, install_hint
 from pc_macro.events import default_title
 from pc_macro.hub import HubError, describe, pull, push
+from pc_macro.updater import apply_if_needed
 from pc_macro.numbers import NumberQueue, apply_turn, digit_spans
 from pc_macro.screen import RECOVER_CLICKS, capture_grid, current_screen_size, play_named_clicks, recover_after_enter, scale_clicks
 from pc_macro.script import compile_script, events_to_steps, number_enter_steps, script_captions, steps_to_events
@@ -21,6 +22,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="pc-macro",
         description="Ghi nhớ thao tác bàn phím và chuột trên máy, rồi làm lại.",
+    )
+    parser.add_argument(
+        "--updated",
+        action="store_true",
+        help=argparse.SUPPRESS,
     )
     sub = parser.add_subparsers(dest="cmd")
 
@@ -43,9 +49,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     remote_push = sub.add_parser("push", help="Đưa kịch bản trên máy lên VPS")
     remote_push.add_argument("name", nargs="?", help="Slug hoặc để trống để đưa hết")
 
+    updater = sub.add_parser("update", help="Tự tải bản mới từ hub rồi thoát")
+    updater.add_argument("--then-gui", action="store_true", help="Mở cửa sổ sau khi cập nhật")
+
     args = parser.parse_args(argv)
+    if args.cmd == "update":
+        return _run_update(then_gui=bool(args.then_gui))
     if args.cmd in (None, "gui"):
-        return _launch_gui()
+        return _launch_gui(skip_update=bool(args.updated))
     store = MacroStore()
     if args.cmd == "hub":
         print(describe())
@@ -165,9 +176,31 @@ def _sync(store: MacroStore, action: str, name: str | None) -> int:
     return 0
 
 
-def _launch_gui() -> int:
+def _run_update(*, then_gui: bool) -> int:
+    result = apply_if_needed(relaunch=False)
+    if result.get("error"):
+        print(result["error"])
+        return 1 if not then_gui else _launch_gui(skip_update=True)
+    if result.get("skipped"):
+        print("Bỏ qua cập nhật (máy dev hoặc PC_MACRO_SKIP_UPDATE).")
+    elif result.get("updated"):
+        applied = result.get("applied") or {}
+        print(f"Đã tự cập nhật lên bản {applied.get('build') or '?'}.")
+    else:
+        current = result.get("current") or {}
+        print(f"Đã là bản mới nhất ({current.get('build') or '?'}).")
+    if then_gui:
+        return _launch_gui(skip_update=True)
+    return 0
+
+
+def _launch_gui(*, skip_update: bool = False) -> int:
     # Tk is optional. Keep this import here so `list` / `show` run on a server
     # that has no tkinter, instead of failing at module import.
+    if not skip_update:
+        result = apply_if_needed(relaunch=True)
+        if result.get("relaunch"):
+            return 0
     from pc_macro.gui import main as gui_main
 
     gui_main()
