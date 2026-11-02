@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from control_plane.settings import ROOT, settings
 from pc_macro.script import script_captions
 from pc_macro.store import MacroStore
+from pc_macro.version import PC_MACRO_BUILD, build_package_files, package_info
 
 router = APIRouter()
 
@@ -106,23 +107,49 @@ def delete_macro(slug: str, authorization: str | None = Header(default=None)) ->
     return {"ok": True, "slug": slug}
 
 
-@router.get("/tai/pc-macro.zip")
-def download_pc_macro() -> Response:
-    """Zip the PC recorder so a Windows machine can run it locally."""
-    buf = io.BytesIO()
+def _pc_macro_files() -> dict[str, bytes]:
     package = ROOT / "pc_macro"
     if not package.is_dir():
         raise HTTPException(status_code=404, detail="pc_macro missing")
+    return build_package_files(
+        package,
+        {
+            "Cai-dat.ps1": _INSTALL_PS1,
+            "Chay.cmd": _RUN_CMD,
+            "README.txt": _INSTALL_README,
+        },
+    )
+
+
+def _pc_macro_zip(files: dict[str, bytes]) -> bytes:
+    buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for path in sorted(package.glob("*.py")):
-            zf.write(path, arcname=f"pc-macro/pc_macro/{path.name}")
-        zf.writestr("pc-macro/Cai-dat.ps1", _INSTALL_PS1)
-        zf.writestr("pc-macro/README.txt", _INSTALL_README)
-    payload = buf.getvalue()
+        for name, raw in sorted(files.items()):
+            zf.writestr(f"pc-macro/{name}", raw)
+    return buf.getvalue()
+
+
+@router.get("/v1/pc-macro/version")
+def pc_macro_version() -> dict[str, Any]:
+    files = _pc_macro_files()
+    info = package_info(files)
+    info["size"] = len(_pc_macro_zip(files))
+    return info
+
+
+@router.get("/tai/pc-macro.zip")
+def download_pc_macro() -> Response:
+    """Zip the PC recorder so a Windows machine can run it locally."""
+    files = _pc_macro_files()
+    payload = _pc_macro_zip(files)
     return StreamingResponse(
         io.BytesIO(payload),
         media_type="application/zip",
-        headers={"Content-Disposition": 'attachment; filename="pc-macro.zip"'},
+        headers={
+            "Content-Disposition": 'attachment; filename="pc-macro.zip"',
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "X-Pc-Macro-Build": str(PC_MACRO_BUILD),
+        },
     )
 
 
@@ -131,34 +158,80 @@ _INSTALL_README = """Ghi nhớ thao tác PC
 Phần mềm này chạy trên máy tính của bạn (Windows / Linux có màn hình).
 VPS chỉ giữ kịch bản. Ghi phím/chuột và bấm Làm lại phải làm trên PC.
 
-1. Cài Python 3.11+
+Cài một lần:
+1. Cài Python 3.11+ (tick Add python.exe to PATH)
 2. Mở PowerShell trong thư mục này:
    .\\Cai-dat.ps1
-3. Cửa sổ hiện ra. Nhập 5 ký tự cố định, số bắt đầu và số kết thúc (5 số).
-   Từng bước: Bôi màu trên ảnh (hoặc Chụp màn) chỗ cần bấm, hoặc Chọn vị trí trên màn.
-   Máy tìm tâm vùng tô rồi bấm trái đúng chỗ đó. Nhớ tỷ lệ màn hình. Chưa nhận thì bấm lại.
-   Bắt đầu gồm cả hai kịch bản: gõ mã rồi Enter; màn đổi ≥ 80% thì tự bấm 4 nút trái, lưu số, rồi tăng số tiếp.
-   Hướng 2 (độc lập): mỗi dãy số một trình duyệt. Gắn 4 ô = bấm ô 5 số từng website (khung theo dõi tự lấy quanh ô). Bắt đầu 2 gõ 4 mã rồi Enter đồng loạt. Chỉ lưu mã của trình duyệt có khung đổi ≥ 20%; các mã khác vẫn chạy. Tiếp tục chỉ mở lại cửa sổ đã dừng.
-   VPN trên PC: một nút Bật VPN. Bật là siết DNS/IPv6/WebRTC/Firefox, cài WARP (winget) nếu thiếu, rồi nối nguồn miễn phí (WARP, Proton/Windscribe CLI, VPN Gate, proxy tĩnh). Tắt là ngắt. Mật khẩu chỉ lưu trên máy, không đưa lên VPS.
+Sau đó không cần tải zip hay cài lại. Mỗi lần mở (hoặc khi đăng nhập Windows)
+máy tự hỏi hub bản mới, tự tải, tự ghi đè file, rồi tự mở lại.
 
-Đồng bộ với VPS (sau khi đặt địa chỉ):
+Hướng 2: Gắn 4 ô = bấm ô 5 số từng website. Bắt đầu 2 gõ 4 mã rồi Enter đồng loạt.
+Chỉ lưu mã của trình duyệt có khung đổi ≥ 20%. VPN trên PC: một nút Bật VPN (DNS, IPv6,
+WARP, VPN Gate, miễn phí). Mật khẩu chỉ lưu trên máy, không đưa lên VPS.
+
+Lần sau chỉ cần:
+  .\\Chay.cmd
+hoặc icon trên Desktop / Menu Start. Muốn cập nhật im lặng:
+  python -m pc_macro update
+
+Đồng bộ kịch bản:
   python -m pc_macro pull
   python -m pc_macro push
 """
 
+_RUN_CMD = r"""@echo off
+cd /d "%~dp0"
+if not defined PC_MACRO_HUB set PC_MACRO_HUB=http://103.200.20.245:8088
+python -m pc_macro
+if errorlevel 1 py -3 -m pc_macro
+"""
+
 _INSTALL_PS1 = r"""param(
-  [string]$Hub = $env:PC_MACRO_HUB,
+  [string]$Hub = $(if ($env:PC_MACRO_HUB) { $env:PC_MACRO_HUB } else { "http://103.200.20.245:8088" }),
   [string]$Token = $env:PC_MACRO_TOKEN
 )
 $ErrorActionPreference = "Stop"
-if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-  Write-Host "Can Python 3.11+. Cai tu python.org roi mo lai PowerShell."
+$Root = Split-Path -Parent $MyInvocation.MyCommand.Path
+Set-Location $Root
+$Py = Get-Command python -ErrorAction SilentlyContinue
+if (-not $Py) { $Py = Get-Command py -ErrorAction SilentlyContinue }
+if (-not $Py) {
+  Write-Host "Can Python 3.11+. Cai tu python.org (tick Add to PATH) roi mo lai PowerShell."
   exit 1
 }
-python -m pip install --upgrade pip
-python -m pip install pynput
-if ($Hub) { [Environment]::SetEnvironmentVariable("PC_MACRO_HUB", $Hub, "User"); $env:PC_MACRO_HUB = $Hub }
-if ($Token) { [Environment]::SetEnvironmentVariable("PC_MACRO_TOKEN", $Token, "User"); $env:PC_MACRO_TOKEN = $Token }
+$Python = $Py.Source
+& $Python -m pip install --upgrade pip
+& $Python -m pip install pynput
+[Environment]::SetEnvironmentVariable("PC_MACRO_HUB", $Hub, "User")
+$env:PC_MACRO_HUB = $Hub
+if ($Token) {
+  [Environment]::SetEnvironmentVariable("PC_MACRO_TOKEN", $Token, "User")
+  $env:PC_MACRO_TOKEN = $Token
+}
+$Wsh = New-Object -ComObject WScript.Shell
+$Desktop = [Environment]::GetFolderPath("Desktop")
+$Start = Join-Path ([Environment]::GetFolderPath("StartMenu")) "Programs"
+New-Item -ItemType Directory -Force -Path $Start | Out-Null
+foreach ($LinkPath in @(
+  (Join-Path $Desktop "Go so roi Enter.lnk"),
+  (Join-Path $Start "Go so roi Enter.lnk")
+)) {
+  $Shortcut = $Wsh.CreateShortcut($LinkPath)
+  $Shortcut.TargetPath = $Python
+  $Shortcut.Arguments = "-m pc_macro"
+  $Shortcut.WorkingDirectory = $Root
+  $Shortcut.WindowStyle = 1
+  $Shortcut.Description = "Go so roi Enter — tự cập nhật từ hub"
+  $Shortcut.Save()
+}
+$Action = New-ScheduledTaskAction -Execute $Python -Argument "-m pc_macro update" -WorkingDirectory $Root
+$Trigger = New-ScheduledTaskTrigger -AtLogOn
+try {
+  Register-ScheduledTask -TaskName "PcMacroUpdate" -Action $Action -Trigger $Trigger -Force | Out-Null
+} catch {
+  schtasks /Create /TN "PcMacroUpdate" /TR "`"$Python`" -m pc_macro update" /SC ONLOGON /F | Out-Null
+}
+Write-Host "Da cai. Lan sau may tu cap nhat, khong can tai zip."
 Write-Host "Mo cua so Ghi / Lam lai. F8 de dung."
-python -m pc_macro
+& $Python -m pc_macro
 """

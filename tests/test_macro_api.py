@@ -27,6 +27,7 @@ from control_plane.app import app  # noqa: E402
 from control_plane.settings import settings  # noqa: E402
 from pc_macro.hub import HubError, describe, pull, push  # noqa: E402
 from pc_macro.store import MacroStore  # noqa: E402
+from pc_macro.version import digest_files  # noqa: E402
 
 
 def tearDownModule() -> None:
@@ -105,6 +106,7 @@ class MacroHubPageTests(unittest.TestCase):
         self.assertIn("giao diện đổi", home.text)
         self.assertIn("F9", home.text)
         self.assertIn("/tai/pc-macro.zip", home.text)
+        self.assertIn("tự&nbsp;cập&nbsp;nhật", home.text)
         self.assertIn("/v1/macros", home.text)
         self.assertIn('var serverToken = "page-token";', home.text)
         self.assertIn('translate="no"', home.text)
@@ -133,7 +135,10 @@ class MacroHubPageTests(unittest.TestCase):
         self.assertIn("pc-macro/pc_macro/free_vpn.py", names)
         self.assertIn("pc-macro/pc_macro/privacy.py", names)
         self.assertIn("pc-macro/Cai-dat.ps1", names)
+        self.assertIn("pc-macro/Chay.cmd", names)
         self.assertIn("pc-macro/README.txt", names)
+        self.assertIn("pc-macro/pc_macro/updater.py", names)
+        self.assertIn("pc-macro/pc_macro/version.py", names)
         readme = archive.read("pc-macro/README.txt").decode("utf-8")
         self.assertIn("Ghi nhớ thao tác PC", readme)
         self.assertIn("python -m pc_macro pull", readme)
@@ -145,6 +150,22 @@ class MacroHubPageTests(unittest.TestCase):
         self.assertIn("Bật VPN", readme)
         self.assertIn("IPv6", readme)
         self.assertIn("WARP", readme)
+        self.assertIn("tự hỏi hub bản mới", readme)
+        self.assertIn("python -m pc_macro update", readme)
+        version = self.client.get("/v1/pc-macro/version")
+        self.assertEqual(version.status_code, 200)
+        body = version.json()
+        self.assertEqual(body["name"], "pc-macro")
+        self.assertGreater(body["build"], 0)
+        self.assertEqual(len(body["digest"]), 64)
+        self.assertIn("pc_macro/updater.py", body["files"])
+        self.assertIn("Chay.cmd", body["files"])
+        files = {
+            name[len("pc-macro/") :]: archive.read(name)
+            for name in names
+            if name.startswith("pc-macro/") and not name.endswith("/")
+        }
+        self.assertEqual(body["digest"], digest_files(files))
 
     def test_save_list_get_delete(self) -> None:
         empty = self.client.get("/v1/macros", headers=self.headers)
