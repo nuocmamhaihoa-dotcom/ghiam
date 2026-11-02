@@ -81,6 +81,9 @@ class MacroHubPageTests(unittest.TestCase):
         self.assertIn("không&nbsp;gõ", home.text)
         self.assertIn("/v1/pc-macro/run", home.text)
         self.assertIn("Mã&nbsp;khách&nbsp;hàng", home.text)
+        self.assertIn("Sau Enter", home.text)
+        self.assertIn("Đổi giao diện", home.text)
+        self.assertIn("5 số", home.text)
         self.assertIn("trình&nbsp;duyệt", home.text)
         self.assertIn("Tiếp&nbsp;tục", home.text)
         self.assertIn("khung&nbsp;5&nbsp;số", home.text)
@@ -221,6 +224,22 @@ class MacroHubPageTests(unittest.TestCase):
         self.assertEqual(beat.json()["play_cmd"], "run")
         self.assertTrue(beat.json()["pc_bound"])
         self.assertEqual(beat.json()["current"], "SPXAB00001")
+        board = self.client.post(
+            "/v1/pc-macro/run",
+            headers=self.headers,
+            json={
+                "digits": "00007",
+                "changed": ["00003", "00007"],
+                "turns": [
+                    {"digits": "00007", "state": "run"},
+                    {"digits": "00003", "changed": True, "state": "changed"},
+                ],
+            },
+        )
+        self.assertEqual(board.json()["digits"], "00007")
+        self.assertEqual(board.json()["changed"], ["00003", "00007"])
+        self.assertEqual(board.json()["turns"][0]["digits"], "00007")
+        self.assertEqual(board.json()["turns"][1]["state"], "changed")
         stopped = self.client.post(
             "/v1/pc-macro/run",
             headers=self.page,

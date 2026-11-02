@@ -44,6 +44,37 @@ def make_code(prefix: str, digits: str) -> str:
     return f"{normalize_prefix(prefix)}{normalize_digits(digits)}"
 
 
+def code_digits(code: Any) -> str:
+    """The trailing 5 digits of a full code, or empty if there is no number."""
+    cleaned = "".join(ch for ch in str(code or "") if ch.isalnum())
+    if not cleaned:
+        return ""
+    tail = "".join(ch for ch in cleaned if ch.isdigit())
+    if not tail:
+        return ""
+    return normalize_digits(tail[-DIGIT_LEN:] if len(tail) >= DIGIT_LEN else tail)
+
+
+def sanitize_turns(raw: Any) -> list[dict[str, Any]]:
+    """Keep each Enter as {digits, code, changed} so the board can replay it."""
+    rows: list[dict[str, Any]] = []
+    for item in raw or []:
+        if isinstance(item, dict):
+            code = "".join(ch for ch in str(item.get("code") or "") if ch.isalnum())[: PREFIX_LEN + DIGIT_LEN]
+            digits = code_digits(item.get("digits") or code)
+            changed = bool(item.get("changed"))
+        else:
+            code = "".join(ch for ch in str(item or "") if ch.isalnum())[: PREFIX_LEN + DIGIT_LEN]
+            digits = code_digits(code)
+            changed = False
+        if not digits:
+            continue
+        rows.append({"digits": digits, "code": code or digits, "changed": changed})
+        if len(rows) >= _MAX_ITEMS:
+            break
+    return rows
+
+
 def digit_spans(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Find each run of digit keystrokes. end is an exclusive index."""
     spans: list[dict[str, Any]] = []
@@ -329,6 +360,8 @@ class FourLaneQueue:
         flagged_lanes: Any = None,
         lane_titles: Any = None,
         change_threshold: int = LANE_PAUSE_THRESHOLD,
+        turns: Any = None,
+        running: str = "",
     ) -> None:
         self.prefix = normalize_prefix(prefix)
         start_digits = normalize_digits(start or "00001")
@@ -358,6 +391,8 @@ class FourLaneQueue:
         self.watch_frame = self.watch_frames[0]
         self.lane_clicks = sanitize_clicks(lane_clicks)
         self.change_threshold = normalize_threshold(change_threshold, LANE_PAUSE_THRESHOLD)
+        self.turns = sanitize_turns(turns)
+        self.running = _clean_code(running)
         self.exhausted = False
         if not self.peek() and not any(self.waiting_lanes):
             if bool(exhausted) or all(int(item) > int(self.end) for item in self.currents):
@@ -490,6 +525,8 @@ class FourLaneQueue:
             flagged_lanes=data.get("flagged_lanes") or [],
             lane_titles=data.get("lane_titles") or [],
             change_threshold=data.get("change_threshold") if data.get("change_threshold") is not None else LANE_PAUSE_THRESHOLD,
+            turns=data.get("turns") or [],
+            running=str(data.get("running") or ""),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -515,6 +552,10 @@ class FourLaneQueue:
             "lane_clicks": list(self.lane_clicks),
             "change_threshold": self.change_threshold,
             "watch_frames": [dict(item) if item else None for item in self.watch_frames],
+            "turns": [dict(item) for item in self.turns],
+            "running": self.running,
+            "digits": self.running_digits(),
+            "changed_digits": self.changed_digits(),
         }
         if self.watch_frame is not None:
             payload["watch_frame"] = dict(self.watch_frame)
@@ -541,6 +582,71 @@ class FourLaneQueue:
     def peek_one(self) -> str:
         codes = self.peek()
         return codes[0] if codes else ""
+
+    def running_digits(self) -> str:
+        if self.running:
+            return code_digits(self.running)
+        peek = self.peek_one()
+        if peek:
+            return code_digits(peek)
+        if self.last_used:
+            return code_digits(self.last_used[0])
+        return ""
+
+    def changed_digits(self) -> list[str]:
+        seen: list[str] = []
+        for item in self.turns:
+            digits = str(item.get("digits") or "")
+            if item.get("changed") and digits and digits not in seen:
+                seen.append(digits)
+        for code in self.flagged:
+            digits = code_digits(code)
+            if digits and digits not in seen:
+                seen.append(digits)
+        return seen
+
+    def mark_running(self, code: str) -> str:
+        self.running = _clean_code(code)
+        return self.running
+
+    def note_enter(self, code: str, changed: bool = False) -> dict[str, Any]:
+        """Record one typed code after Enter. Keep a prior F9 'changed' mark."""
+        cleaned = _clean_code(code)
+        digits = code_digits(cleaned)
+        was = bool(self.turns and self.turns[-1].get("code") == cleaned and self.turns[-1].get("changed"))
+        entry = {"digits": digits, "code": cleaned, "changed": bool(changed or was)}
+        if self.turns and self.turns[-1].get("code") == cleaned:
+            self.turns[-1] = entry
+        else:
+            self.turns.append(entry)
+            if len(self.turns) > _MAX_ITEMS:
+                self.turns = self.turns[-_MAX_ITEMS:]
+        if entry["changed"]:
+            self.flag(cleaned)
+        self.running = ""
+        return entry
+
+    def board_rows(self, limit: int = 40) -> list[dict[str, Any]]:
+        """Newest first. Current 5 digits stay on top as 'run'."""
+        rows: list[dict[str, Any]] = []
+        current = self.running or self.peek_one()
+        current_code = _clean_code(current)
+        if current_code:
+            rows.append(
+                {
+                    "digits": code_digits(current_code),
+                    "code": current_code,
+                    "changed": False,
+                    "state": "run",
+                }
+            )
+        for item in reversed(self.turns[-max(1, int(limit or 40)) :]):
+            if current_code and item.get("code") == current_code:
+                continue
+            rows.append({**item, "state": "changed" if item.get("changed") else "ok"})
+            if len(rows) >= max(1, int(limit or 40)):
+                break
+        return rows
 
     def take_lane(self, index: int) -> str:
         """Advance one browser after its frame did not change."""

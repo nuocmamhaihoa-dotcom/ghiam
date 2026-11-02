@@ -7,7 +7,7 @@
   <meta http-equiv="content-language" content="vi" />
   <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate" />
   <title>Gõ số rồi Enter</title>
-    <meta name="ui-build" content="20261102-11" />
+    <meta name="ui-build" content="20261102-12" />
   <style>
     html, body, button, input, textarea {
       font-synthesis: none;
@@ -36,6 +36,25 @@
     .acts { display: grid; grid-template-columns: 1fr 1.5fr; gap: 10px; margin-top: 16px; }
     .acts button { min-height: 64px; font-size: 1.15rem; letter-spacing: 0.04em; }
     .acts button.go { background: #16a34a; }
+    .board {
+      margin: 14px 0 8px;
+      padding: 10px 10px 8px;
+      border: 1px solid #1e4970;
+      background: #16324f;
+      border-radius: 10px;
+    }
+    .board table { width: 100%; border-collapse: collapse; }
+    .board th, .board td {
+      text-align: left;
+      padding: 5px 6px;
+      font-size: 0.95rem;
+    }
+    .board th { color: #93c5fd; font-size: 0.8rem; letter-spacing: 0.04em; }
+    .board td.num { width: 4.4em; font-weight: 800; letter-spacing: 0.06em; }
+    .board tr.run td { color: #7dd3fc; }
+    .board tr.changed td { color: #fbbf24; font-weight: 700; }
+    .board tr.ok td { color: #94a3b8; }
+    .board .changed-line { color: #fbbf24; font-weight: 700; margin: 8px 0 2px; }
     h1 { font-size: 1.2rem; margin: 0 0 8px; }
     p { margin: 0 0 6px; }
     .hint { color: #5c6770; font-size: 0.92rem; }
@@ -355,6 +374,13 @@
       <button type="button" id="btnBindMini" data-bind="0">GẮN</button>
       <button type="button" class="go" id="btnStart2">CHẠY · Ctrl+F7</button>
     </div>
+    <div class="board" id="board2">
+      <table>
+        <thead><tr><th>5 số</th><th>Sau Enter</th></tr></thead>
+        <tbody id="boardBody2"><tr class="ok"><td class="num" colspan="2">Chưa gõ số nào.</td></tr></tbody>
+      </table>
+      <p class="changed-line" id="changed2">Chưa có số đổi giao diện</p>
+    </div>
     <div class="vpn-row" style="margin-top:14px">
       <a class="btn" href="/tai/pc-macro.zip">Tải PC</a>
     </div>
@@ -524,6 +550,8 @@
   var exhausted2 = false;
   var flagged2 = [];
   var flaggedLanes2 = [[]];
+  var turns2 = [];
+  var running2 = "";
   var laneTitles2 = ["Trình duyệt web khách"];
   var paused2 = "";
   var pausedCodes2 = [];
@@ -1201,6 +1229,43 @@
     for (var i = 0; i < LANE_COUNT; i++) paintLane(i);
     showFrame2();
     renderFlags2();
+    renderBoard2();
+  }
+  function renderBoard2() {
+    var body = $("boardBody2");
+    var line = $("changed2");
+    if (!body) return;
+    body.innerHTML = "";
+    var runDigits = (running2 || "").slice(-5);
+    if (!runDigits && nextLanes()[0]) runDigits = nextLanes()[0].slice(-5);
+    var rows = [];
+    if (runDigits) rows.push({ digits: pad5(runDigits), state: "run" });
+    turns2.slice().reverse().forEach(function (item) {
+      var digits = pad5((item.digits || (item.code || "").slice(-5) || "").replace(/\D/g, "").slice(-5));
+      if (!digits || (runDigits && digits === pad5(runDigits))) return;
+      rows.push({ digits: digits, state: item.changed ? "changed" : "ok" });
+    });
+    if (!rows.length) {
+      body.innerHTML = '<tr class="ok"><td class="num" colspan="2">Chưa gõ số nào.</td></tr>';
+    } else {
+      rows.slice(0, 12).forEach(function (item) {
+        var label = item.state === "run" ? "Đang chạy" : (item.state === "changed" ? "Đổi giao diện" : "Giữ nguyên");
+        var tr = document.createElement("tr");
+        tr.className = item.state;
+        tr.innerHTML = '<td class="num">' + item.digits + '</td><td>' + label + '</td>';
+        body.appendChild(tr);
+      });
+    }
+    var hits = [];
+    turns2.forEach(function (item) {
+      var digits = pad5((item.digits || "").replace(/\D/g, "").slice(-5));
+      if (item.changed && digits && hits.indexOf(digits) < 0) hits.push(digits);
+    });
+    flagged2.forEach(function (code) {
+      var digits = pad5((code || "").replace(/\D/g, "").slice(-5));
+      if (digits && hits.indexOf(digits) < 0) hits.push(digits);
+    });
+    if (line) line.textContent = hits.length ? ("Đổi giao diện: " + hits.join(" · ")) : "Chưa có số đổi giao diện";
   }
   function persist2() {
     var range = bounds2();
@@ -1236,7 +1301,9 @@
         change_threshold: threshold2(),
         watch_frame: frame2,
         watch_frames: frames2.slice(),
-        lane_clicks: laneClicks2.slice()
+        lane_clicks: laneClicks2.slice(),
+        turns: turns2.slice(),
+        running: running2
       }
     };
     return fetch("/v1/macros", { method: "POST", headers: headers(), body: JSON.stringify(body) })
@@ -1409,6 +1476,8 @@
         exhausted2 = !!item.numbers.exhausted && !nextActive2().length;
         lastUsed2 = Array.isArray(item.numbers.last_used) ? item.numbers.last_used.slice() : [];
         flagged2 = Array.isArray(item.numbers.flagged) ? item.numbers.flagged.slice() : [];
+        turns2 = Array.isArray(item.numbers.turns) ? item.numbers.turns.slice() : [];
+        running2 = item.numbers.running || "";
         flaggedLanes2 = [[]];
         if (Array.isArray(item.numbers.flagged_lanes)) {
           for (var f = 0; f < LANE_COUNT; f++) {
@@ -1611,6 +1680,8 @@
     if (!playing2) {
       resetCurrents2();
       currentDigits2 = range.start;
+      turns2 = [];
+      running2 = "";
     } else if (parseInt(currentDigits2, 10) < parseInt(range.start, 10)) {
       currentDigits2 = range.start;
     }
@@ -1675,6 +1746,15 @@
           var codeEl = document.querySelector("#lane0 .lane-code");
           if (codeEl && body.current) codeEl.textContent = body.current;
         }
+        if (body.digits) {
+          $("current2").textContent = body.digits;
+          running2 = body.digits;
+        }
+        if (Array.isArray(body.turns)) turns2 = body.turns.slice();
+        if (Array.isArray(body.changed) && body.changed.length && !flagged2.length) {
+          flagged2 = body.changed.slice();
+        }
+        renderBoard2();
         if (playing2 && body.play_cmd === "" && body.status === "idle" && body.pc_seen) {
           playing2 = false;
           setRunSwitch2(false);

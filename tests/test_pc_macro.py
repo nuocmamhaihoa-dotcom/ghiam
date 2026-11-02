@@ -20,6 +20,7 @@ from pc_macro.numbers import (
     NumberQueue,
     apply_turn,
     bump_number,
+    code_digits,
     digit_spans,
     make_code,
     normalize_digits,
@@ -44,6 +45,7 @@ from pc_macro.script import (
     number_enter_steps,
     number_type_steps,
     one_code_enter_steps,
+    one_code_type_steps,
     replace_step,
     script_captions,
     steps_to_events,
@@ -413,6 +415,26 @@ class FourLaneTests(unittest.TestCase):
         short = FourLaneQueue(prefix="AB", start="00001", end="00010")
         self.assertEqual(short.peek(), [])
         self.assertEqual(short.take(), [])
+
+    def test_board_shows_running_digits_and_changed_after_enter(self) -> None:
+        self.assertEqual(code_digits("SPXAB00007"), "00007")
+        queue = FourLaneQueue(prefix="SPXAB", start="00001", end="00010", step=1)
+        self.assertEqual(queue.running_digits(), "00001")
+        queue.mark_running("SPXAB00001")
+        self.assertEqual(queue.board_rows()[0]["state"], "run")
+        self.assertEqual(queue.board_rows()[0]["digits"], "00001")
+        queue.note_enter("SPXAB00001", False)
+        queue.take_one()
+        queue.note_enter("SPXAB00003", True)
+        self.assertEqual(queue.changed_digits(), ["00003"])
+        rows = {item["digits"]: item["state"] for item in queue.board_rows()}
+        self.assertEqual(rows["00003"], "changed")
+        self.assertEqual(rows["00001"], "ok")
+        again = FourLaneQueue.from_dict(queue.to_dict())
+        self.assertEqual(again.changed_digits(), ["00003"])
+        self.assertEqual(again.turns[0]["digits"], "00001")
+        queue.note_enter("SPXAB00003", False)
+        self.assertTrue(queue.turns[-1]["changed"])
 
     def test_player_types_one_code_and_enter_each_turn(self) -> None:
         queue = FourLaneQueue(prefix="SPXAB", start="00001", end="00004")
@@ -868,6 +890,9 @@ class ScriptStepTests(unittest.TestCase):
         self.assertEqual(clicks[-1]["x"], 120)
         enter_wait = next(step["wait"] for step in steps if step.get("key") == "enter")
         self.assertGreaterEqual(enter_wait, 80)
+        typed_only, typed_events = compile_script(one_code_type_steps("SPXAB00007", click))
+        self.assertNotIn("enter", [step.get("key") for step in typed_only])
+        self.assertFalse(any(event.get("key") == "enter" for event in typed_events))
 
     def test_player_increments_one_and_enters_once_per_code(self) -> None:
         queue = FourLaneQueue(prefix="SPXAB", start="00001", end="00003", step=1)

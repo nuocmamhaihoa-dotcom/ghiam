@@ -138,6 +138,37 @@ class RunBody(BaseModel):
     pc_bound: bool | None = None
     current: str | None = None
     status: str | None = None
+    digits: str | None = None
+    changed: list[str] | None = None
+    turns: list[dict[str, Any]] | None = None
+
+
+def _run_codes(raw: Any) -> list[str]:
+    items: list[str] = []
+    for item in raw or []:
+        digits = "".join(ch for ch in str(item or "") if ch.isdigit())[-5:]
+        if digits and digits not in items:
+            items.append(digits.zfill(5) if len(digits) <= 5 else digits[-5:])
+        if len(items) >= 80:
+            break
+    return items
+
+
+def _run_turns(raw: Any) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in raw or []:
+        if not isinstance(item, dict):
+            continue
+        digits = "".join(ch for ch in str(item.get("digits") or "") if ch.isdigit())[-5:]
+        if not digits:
+            continue
+        state = str(item.get("state") or ("changed" if item.get("changed") else "ok"))
+        if state not in {"run", "changed", "ok"}:
+            state = "ok"
+        rows.append({"digits": digits.zfill(5), "changed": state == "changed" or bool(item.get("changed")), "state": state})
+        if len(rows) >= 40:
+            break
+    return rows
 
 
 def _run_path() -> Path:
@@ -146,7 +177,16 @@ def _run_path() -> Path:
 
 
 def _empty_run() -> dict[str, Any]:
-    return {"play_cmd": "", "pc_seen": 0, "pc_bound": False, "current": "", "status": ""}
+    return {
+        "play_cmd": "",
+        "pc_seen": 0,
+        "pc_bound": False,
+        "current": "",
+        "status": "",
+        "digits": "",
+        "changed": [],
+        "turns": [],
+    }
 
 
 def _read_run() -> dict[str, Any]:
@@ -172,6 +212,9 @@ def _read_run() -> dict[str, Any]:
         "pc_bound": bool(raw.get("pc_bound")),
         "current": str(raw.get("current") or "")[:40],
         "status": str(raw.get("status") or "")[:40],
+        "digits": str(raw.get("digits") or "")[:8],
+        "changed": _run_codes(raw.get("changed")),
+        "turns": _run_turns(raw.get("turns")),
     }
 
 
@@ -198,7 +241,14 @@ def set_pc_macro_run(body: RunBody, authorization: str | None = Header(default=N
         patch["play_cmd"] = cmd if cmd in {"run", "stop"} else ""
     if body.pc_seen is not None:
         patch["pc_seen"] = max(0, int(body.pc_seen or 0))
-    elif body.pc_bound is not None or body.current is not None or body.status is not None:
+    elif (
+        body.pc_bound is not None
+        or body.current is not None
+        or body.status is not None
+        or body.digits is not None
+        or body.changed is not None
+        or body.turns is not None
+    ):
         patch["pc_seen"] = int(time.time())
     if body.pc_bound is not None:
         patch["pc_bound"] = bool(body.pc_bound)
@@ -206,6 +256,12 @@ def set_pc_macro_run(body: RunBody, authorization: str | None = Header(default=N
         patch["current"] = body.current[:40]
     if body.status is not None:
         patch["status"] = body.status[:40]
+    if body.digits is not None:
+        patch["digits"] = "".join(ch for ch in body.digits if ch.isdigit())[-5:]
+    if body.changed is not None:
+        patch["changed"] = _run_codes(body.changed)
+    if body.turns is not None:
+        patch["turns"] = _run_turns(body.turns)
     return _write_run(patch)
 
 

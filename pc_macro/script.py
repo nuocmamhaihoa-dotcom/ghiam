@@ -181,8 +181,8 @@ def field_clear_steps(*, wait: int = 20) -> list[dict[str, Any]]:
     return steps
 
 
-def one_code_enter_steps(sample: str = "1", click: Any = None) -> list[dict[str, Any]]:
-    """One increment: focus the chosen point, wipe, type the full code, Enter once."""
+def one_code_type_steps(sample: str = "1", click: Any = None) -> list[dict[str, Any]]:
+    """Focus the chosen point, wipe leftover text, type the full code. No Enter."""
     steps: list[dict[str, Any]] = []
     steps.extend(click_focus_steps(click, wait=_FOCUS_WAIT))
     steps.extend(field_clear_steps(wait=40 if steps else 20))
@@ -192,6 +192,12 @@ def one_code_enter_steps(sample: str = "1", click: Any = None) -> list[dict[str,
         first["wait"] = max(int(first.get("wait") or 0), _TYPE_SETTLE)
         typed = [first, *typed[1:]]
     steps.extend(typed)
+    return steps
+
+
+def one_code_enter_steps(sample: str = "1", click: Any = None) -> list[dict[str, Any]]:
+    """One increment: focus the chosen point, wipe, type the full code, Enter once."""
+    steps = one_code_type_steps(sample, click)
     enter = new_step("key", key="enter", wait=_ENTER_WAIT)
     if enter is not None:
         steps.append(enter)

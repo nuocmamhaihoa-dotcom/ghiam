@@ -10,7 +10,15 @@ from typing import Any
 
 from pc_macro.desktop import Desktop, available, install_hint
 from pc_macro.hub import HubError, configured, describe, get_run, pull, push, set_run
-from pc_macro.numbers import FourLaneQueue, LANE_COUNT, NumberQueue, make_code, normalize_digits, normalize_prefix
+from pc_macro.numbers import (
+    FourLaneQueue,
+    LANE_COUNT,
+    NumberQueue,
+    code_digits,
+    make_code,
+    normalize_digits,
+    normalize_prefix,
+)
 from pc_macro.overlay import ClickOverlay, FrameOverlay, show_click_overlay, show_frame_overlay
 from pc_macro.painter import PaintPicker, show_paint_picker
 from pc_macro.screen import (
@@ -19,6 +27,7 @@ from pc_macro.screen import (
     append_screen_click,
     apply_click_names,
     capture_grid,
+    capture_watch,
     click_order_cards,
     click_slots,
     current_screen_size,
@@ -34,8 +43,15 @@ from pc_macro.screen import (
     sanitize_frame,
     scale_clicks,
     start_both_scripts_status,
+    watch_changed,
 )
-from pc_macro.script import compile_script, four_lane_enter_steps, number_enter_steps, one_code_enter_steps
+from pc_macro.script import (
+    compile_script,
+    enter_key_steps,
+    four_lane_enter_steps,
+    number_enter_steps,
+    one_code_type_steps,
+)
 from pc_macro.session import Player, Recorder, ignore_window
 from pc_macro.store import MacroStore
 from pc_macro.updater import consume_just_updated
@@ -66,8 +82,8 @@ class App:
         self.store = MacroStore()
         self.root = tk.Tk()
         self.root.title("Gõ số rồi Enter")
-        self.root.geometry("380x420")
-        self.root.minsize(360, 400)
+        self.root.geometry("380x620")
+        self.root.minsize(360, 560)
         self.root.configure(bg="#102033")
         self.root.attributes("-topmost", True)
         self.status = tk.StringVar(value=_startup_status())
@@ -89,6 +105,7 @@ class App:
         self.frame_label = tk.StringVar(value=frames_label(None))
         self.fields_label = tk.StringVar(value="Ctrl+F7 hoặc CHẠY: tự chọn ô, rồi dãy số tăng và Enter từng lần")
         self.now_code = tk.StringVar(value="—")
+        self.changed_label = tk.StringVar(value="Chưa có số đổi giao diện")
         self.lane_card_vars = [
             tk.StringVar(value="Trình duyệt web khách  —\nChưa gắn\nChưa lưu số khi đổi")
             for _index in range(LANE_COUNT)
@@ -239,6 +256,37 @@ class App:
         self._btn_stop2 = self._btn_start2
         self.root.bind("<Control-F7>", lambda _event: self._on_hotkey_start())
         self.root.bind("<F8>", lambda _event: self._on_stop_hotkey())
+
+        board = tk.Frame(self.root, bg="#16324f", highlightbackground="#1e4970", highlightthickness=1)
+        board.pack(fill="both", expand=True, padx=16, pady=(10, 4))
+        tk.Label(
+            board,
+            text="5 số đang chạy",
+            font=("Segoe UI", 9, "bold"),
+            bg="#16324f",
+            fg="#93c5fd",
+            anchor="w",
+        ).pack(fill="x", padx=10, pady=(8, 0))
+        head = tk.Frame(board, bg="#1e4970")
+        head.pack(fill="x", padx=8, pady=(6, 0))
+        tk.Label(head, text="5 số", width=8, font=("Segoe UI", 9, "bold"), bg="#1e4970", fg="#e2e8f0").pack(
+            side="left", padx=4, pady=4
+        )
+        tk.Label(head, text="Sau Enter", font=("Segoe UI", 9, "bold"), bg="#1e4970", fg="#e2e8f0", anchor="w").pack(
+            side="left", fill="x", expand=True, padx=4, pady=4
+        )
+        self._board_body = tk.Frame(board, bg="#16324f")
+        self._board_body.pack(fill="both", expand=True, padx=8, pady=4)
+        tk.Label(
+            board,
+            textvariable=self.changed_label,
+            font=("Segoe UI", 9, "bold"),
+            bg="#16324f",
+            fg="#fbbf24",
+            wraplength=320,
+            justify="left",
+            anchor="w",
+        ).pack(fill="x", padx=10, pady=(0, 8))
 
         foot = tk.Frame(self.root, bg=bg)
         foot.pack(fill="x", padx=16, pady=(8, 4))
@@ -483,6 +531,19 @@ class App:
         self._after_record(recorded)
 
     def flag_change(self) -> None:
+        if self._playing2() or self.lanes.running or self._pending2 or self.lanes.last_used:
+            self._sync_lanes()
+            code = ""
+            if self._pending2:
+                code = self._pending2[0][1]
+            code = code or self.lanes.running or (self.lanes.last_used[0] if self.lanes.last_used else "") or self.lanes.peek_one()
+            if code:
+                self.lanes.note_enter(code, True)
+                self._refresh_lanes()
+                self._persist_lanes(silent=True)
+                self._post_run({"status": "play" if self._playing2() else "idle"})
+                self.status.set(f"Đã ghi {code_digits(code)} vì giao diện đổi.")
+                return
         self._sync_queue()
         value = self.queue.flag()
         if not value:
@@ -1363,6 +1424,9 @@ class App:
             body = dict(payload)
             peek = self.lanes.peek()
             body.setdefault("current", peek[0] if peek else "")
+            body.setdefault("digits", self.lanes.running_digits())
+            body.setdefault("changed", list(self.lanes.changed_digits()))
+            body.setdefault("turns", [dict(item) for item in self.lanes.board_rows(40)])
             body.setdefault("pc_bound", customer_target(self.lanes.lane_clicks) is not None)
             try:
                 set_run(body)
@@ -1395,6 +1459,9 @@ class App:
                     "pc_seen": int(time.time()),
                     "pc_bound": customer_target(self.lanes.lane_clicks) is not None,
                     "current": peek[0] if peek else "",
+                    "digits": self.lanes.running_digits(),
+                    "changed": list(self.lanes.changed_digits()),
+                    "turns": [dict(item) for item in self.lanes.board_rows(40)],
                     "status": "play" if self._playing2() else "idle",
                 }
             )
@@ -1445,11 +1512,13 @@ class App:
             self._pending2 = list(active)
             clicks = self._lane_clicks_for(active)
             shown = self._codes_text([code for _index, code in active])
-            self._set_status(f"Gõ {shown} vào ô đã chọn, Enter một lần, rồi tăng 1.")
+            self.lanes.mark_running(active[0][1])
+            self._set_status(f"Đang gõ 5 số {code_digits(active[0][1])} · {shown}. Rồi Enter một lần.")
             self.root.after(0, self._refresh_lanes)
+            self._post_run({"status": "play"})
             steps: list[dict[str, Any]] = []
             for (_index, code), click in zip(active, clicks):
-                steps.extend(one_code_enter_steps(code, click))
+                steps.extend(one_code_type_steps(code, click))
             _script, batch = compile_script(steps)
             return batch
 
@@ -1459,17 +1528,48 @@ class App:
             active = list(self._pending2)
             if not active:
                 return []
+            befores: dict[int, Any] = {}
+            for index, _code in active:
+                try:
+                    befores[index] = capture_watch(self._lane_frame(index))
+                except Exception:
+                    befores[index] = None
+            _script, burst = compile_script(enter_key_steps())
+            try:
+                self.player2.emit(burst)
+            except Exception as exc:
+                self._set_status(f"Lỗi Enter: {exc}.")
+                return []
+            time.sleep(0.55)
+            if self.player2 is None or self.player2.cancelled:
+                return []
             kept: list[str] = []
+            hits: list[str] = []
             for index, code in active:
+                try:
+                    changed, _percent = watch_changed(
+                        befores.get(index),
+                        capture_watch(self._lane_frame(index)),
+                        self.lanes.change_threshold,
+                    )
+                except Exception:
+                    changed = False
+                self.lanes.note_enter(code, changed)
                 self.lanes.take_lane(index)
                 kept.append(code)
-            shown = self._codes_text(kept)
-            nxt = self._codes_text(self.lanes.peek())
-            self._set_status(f"Đã Enter {shown}. Tăng 1 → tiếp theo: {nxt}.")
+                if changed:
+                    hits.append(code_digits(code))
+            shown = " · ".join(code_digits(item) for item in kept) or "—"
+            nxt = code_digits(self.lanes.peek_one()) or "—"
+            if hits:
+                self._set_status(f"Đã Enter {shown}. Đổi giao diện: {' · '.join(hits)}. Tiếp theo: {nxt}.")
+            else:
+                self._set_status(f"Đã Enter {shown}. Tăng 1 → tiếp theo: {nxt}.")
             if not self.lanes.peek() and self.player2 is not None:
                 self.player2.cancel()
             self.root.after(0, self._refresh_lanes)
             self.root.after(0, lambda: self._persist_lanes(silent=True))
+            self._post_run({"status": "play"})
             return []
 
         try:
@@ -1529,6 +1629,8 @@ class App:
         paused_codes = list(self.lanes.paused_codes)
         paused_lanes = list(self.lanes.paused_lanes)
         watch_frames = list(self.lanes.watch_frames)
+        turns = list(self.lanes.turns)
+        running = self.lanes.running
         if start != self.lanes.start and not self._playing2():
             currents = []
             exhausted = False
@@ -1537,6 +1639,8 @@ class App:
             paused = ""
             paused_codes = []
             paused_lanes = []
+            turns = []
+            running = ""
         self.lanes = FourLaneQueue(
             prefix=prefix,
             start=start,
@@ -1557,6 +1661,8 @@ class App:
             watch_frames=watch_frames,
             lane_clicks=self.lanes.lane_clicks,
             change_threshold=normalize_threshold(self.threshold2.get(), LANE_PAUSE_THRESHOLD),
+            turns=turns,
+            running=running,
         )
         if write_back:
             if self.prefix2.get() != self.lanes.prefix:
@@ -1575,7 +1681,8 @@ class App:
         nxt = self.lanes.peek()
         last = self.lanes.last_used
         paused = self._codes_text(self.lanes.paused_codes, self.lanes.paused)
-        self.now_code.set(" · ".join(nxt) if nxt else "—")
+        self.now_code.set(self.lanes.running_digits() or "—")
+        self._paint_board()
         if self.lanes.waiting and paused != "—" and nxt:
             self.lanes_label.set("Đã lưu " + paused + " — tiếp theo: " + " · ".join(nxt))
         elif self.lanes.waiting and paused != "—":
@@ -1619,6 +1726,47 @@ class App:
         self.flag_box2.delete(0, tk.END)
         for value in self.lanes.flagged:
             self.flag_box2.insert(tk.END, value)
+
+    def _paint_board(self) -> None:
+        body = getattr(self, "_board_body", None)
+        if body is None:
+            return
+        for child in body.winfo_children():
+            child.destroy()
+        labels = {"run": "Đang chạy", "changed": "Đổi giao diện", "ok": "Giữ nguyên"}
+        colors = {"run": "#7dd3fc", "changed": "#fbbf24", "ok": "#94a3b8"}
+        rows = self.lanes.board_rows(12)
+        if not rows:
+            tk.Label(body, text="Chưa gõ số nào.", font=("Segoe UI", 10), bg="#16324f", fg="#64748b").pack(
+                anchor="w", padx=4, pady=6
+            )
+        for item in rows:
+            state = str(item.get("state") or "ok")
+            if state not in labels:
+                state = "ok"
+            row = tk.Frame(body, bg="#16324f")
+            row.pack(fill="x", pady=1)
+            tk.Label(
+                row,
+                text=str(item.get("digits") or "—"),
+                width=8,
+                font=("Segoe UI", 12, "bold"),
+                bg="#16324f",
+                fg=colors[state],
+            ).pack(side="left", padx=4)
+            tk.Label(
+                row,
+                text=labels[state],
+                font=("Segoe UI", 10, "bold"),
+                bg="#16324f",
+                fg=colors[state],
+                anchor="w",
+            ).pack(side="left", fill="x", expand=True, padx=4)
+        changed = self.lanes.changed_digits()
+        if changed:
+            self.changed_label.set("Đổi giao diện: " + " · ".join(changed))
+        else:
+            self.changed_label.set("Chưa có số đổi giao diện")
 
     def _persist_lanes(self, *, silent: bool) -> None:
         self._sync_lanes()
