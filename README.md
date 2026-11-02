@@ -25,7 +25,7 @@ Chi tiết vận hành 2 PC: [`deploy/PA1_RUNBOOK.md`](deploy/PA1_RUNBOOK.md).
 Phần mềm nhỏ **chạy trên máy tính của bạn**: nhập **5 ký tự cố định** (đổi được), **số bắt đầu** và **số kết thúc** của 5 số phía sau, rồi chỉ 4 nút trái nếu sau Enter màn hình có thể đổi. Từng bước: nhập **tên vị trí**, bấm **Bôi màu** (chụp màn hoặc thêm ảnh, tô hồng chỗ cần ấn) hoặc **Chọn vị trí** trên màn hình, rồi **Lưu vị trí**. Máy tìm tâm vùng bôi màu và bấm trái đúng chỗ đó, nhớ theo **tỷ lệ màn hình**. Nếu máy không nhận lần bấm, phần mềm bấm lại đúng vị trí có tên đó. **Bắt đầu** gồm cả hai kịch bản: máy gõ mã (ví dụ `SPXAB00001`), Enter, đo % đổi màn. Đủ ngưỡng (mặc định 80%): tự bấm 4 nút trái đã chỉ, lưu mã vừa gõ, rồi gõ số tiếp. F9 cũng lưu số vừa Enter. F8 dừng. VPS `http://VPS:8088/` hiện cùng 4 thẻ; Gõ/Enter/bấm thật trên máy Windows.
 
 ```bash
-pip install pynput          # hoặc: pip install -e ".[macro]"
+pip install pynput Pillow   # hoặc: pip install -e ".[macro]"
 python -m pc_macro          # cửa sổ Ghi / Dừng / Làm lại
 python -m pc_macro list
 python -m pc_macro play "tên bản ghi" --repeat 3 --delay 2
@@ -36,7 +36,7 @@ python -m pc_macro pull     # lấy kịch bản từ VPS về máy
 Windows (đã có venv của agent):
 
 ```powershell
-.\.venv\Scripts\pip install pynput
+.\.venv\Scripts\pip install pynput Pillow
 .\.venv\Scripts\python -m pc_macro
 ```
 
@@ -50,7 +50,7 @@ Windows (đã có venv của agent):
 
 **VPN trên PC:** một nút **Bật VPN**. Bật là tự siết nhiều lớp: DNS-over-HTTPS `1.1.1.1`/`9.9.9.9`, tắt IPv6 + Teredo/6to4/ISATAP, khóa WebRTC/STUN (Chrome/Edge/Brave/Firefox), tắt LLMNR/NetBIOS/WPAD, random MAC Wi-Fi, chặn định vị / Advertising ID, cài Cloudflare WARP qua `winget` nếu thiếu, rồi nối (WARP → Proton/Windscribe CLI → [VPN Gate](https://www.vpngate.net/api/iphone/) → `data/proxies_static.txt`). Sau khi IP đổi, bật **kill switch** (tường lửa chỉ cho adapter VPN; rò IP thì cắt tunnel và giữ khóa). Tắt là ngắt và hoàn tường lửa. IP không đổi / IPv6 lộ / hai nguồn IP lệch thì không gõ số. Mã nước 2 chữ (JP/US/KR) lọc VPN Gate. **Không ẩn tuyệt đối** — nhà VPN vẫn thấy máy; tài khoản web, thanh toán, vân tay trình duyệt vẫn nhận diện được. Nếu mất mạng sau khi bật: `Get-NetFirewallRule | Where-Object { $_.DisplayName -like 'PcMacroKS-*' } | Remove-NetFirewallRule` rồi `Set-NetFirewallProfile -DefaultOutboundAction Allow`. Mật khẩu chỉ nằm trong `data/vpn.json` — không đồng bộ VPS.
 
-**Tự cập nhật:** giải nén zip, bấm đúp `CHAY-O-DAY.cmd` (không mở README, không chạy trong file zip). File đó tự tìm/cài Python + pynput rồi mở cửa sổ. Mỗi lần mở (và khi đăng nhập Windows) máy hỏi `GET /v1/pc-macro/version`, nếu chữ ký khác thì tự tải `/tai/pc-macro.zip`, ghi đè `pc_macro/*.py`, rồi tự mở lại. Thư mục `data/` (kịch bản, VPN) giữ nguyên.
+**Tự cập nhật:** giải nén zip, bấm đúp `CHAY-O-DAY.cmd` (không mở README, không chạy trong file zip). File đó tự tìm/cài Python + pynput + Pillow rồi mở cửa sổ điều khiển trình duyệt. Mỗi lần mở (và khi đăng nhập Windows) máy hỏi `GET /v1/pc-macro/version`, nếu chữ ký khác thì tự tải `/tai/pc-macro.zip`, ghi đè `pc_macro/*.py`, rồi tự mở lại. Thư mục `data/` (kịch bản, VPN) giữ nguyên. Lỗi `No module named 'PIL'` = chưa cài Pillow: tải zip mới hoặc `pip install Pillow`.
 
 ## Cài đặt trên PC (dùng tài nguyên máy local)
 

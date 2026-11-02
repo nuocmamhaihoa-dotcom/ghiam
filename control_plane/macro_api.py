@@ -240,7 +240,7 @@ _INSTALL_README = """BẤM ĐÚP file CHAY-O-DAY.cmd
 2. Mở thư mục pc-macro (phải thấy folder pc_macro và file CHAY-O-DAY.cmd).
 3. Bấm đúp CHAY-O-DAY.cmd — cửa sổ "Gõ số rồi Enter" sẽ mở.
 
-Nếu chưa có Python, file đó tự cài. Nếu thiếu pynput, file đó tự cài.
+Nếu chưa có Python, file đó tự cài. Nếu thiếu pynput hoặc Pillow, file đó tự cài.
 Cửa sổ lỗi sẽ đứng lại (không tắt ngay) để đọc được chữ.
 
 Hướng 2: chỉ 1 tiến trình. Gắn Evoshop (không gắn trang hub),
@@ -302,15 +302,15 @@ if errorlevel 1 (
   exit /b 1
 )
 
-"%PYEXE%" %PYARGS% -c "import pynput" >nul 2>nul
+"%PYEXE%" %PYARGS% -c "import pynput, PIL" >nul 2>nul
 if errorlevel 1 (
-  echo Dang cai pynput...
-  "%PYEXE%" %PYARGS% -m pip install --disable-pip-version-check pynput
+  echo Dang cai pynput va Pillow...
+  "%PYEXE%" %PYARGS% -m pip install --disable-pip-version-check pynput Pillow
 )
-"%PYEXE%" %PYARGS% -c "import pynput" >nul 2>nul
+"%PYEXE%" %PYARGS% -c "import pynput, PIL" >nul 2>nul
 if errorlevel 1 (
-  echo Khong cai duoc pynput.
-  echo Thu: "%PYEXE%" %PYARGS% -m pip install pynput
+  echo Khong cai duoc pynput / Pillow.
+  echo Thu: "%PYEXE%" %PYARGS% -m pip install pynput Pillow
   pause
   exit /b 1
 )
@@ -419,10 +419,10 @@ if ($LASTEXITCODE -ne 0) {
   exit 1
 }
 & $Python -m pip install --upgrade pip
-& $Python -m pip install pynput
-& $Python -c "import pynput, tkinter" 2>$null
+& $Python -m pip install pynput Pillow
+& $Python -c "import pynput, PIL, tkinter" 2>$null
 if ($LASTEXITCODE -ne 0) {
-  Write-Host "Cai pynput that bai. Mo PowerShell trong thu muc nay roi: $Python -m pip install pynput"
+  Write-Host "Cai pynput/Pillow that bai. Mo PowerShell trong thu muc nay roi: $Python -m pip install pynput Pillow"
   exit 1
 }
 [Environment]::SetEnvironmentVariable("PC_MACRO_HUB", $Hub, "User")

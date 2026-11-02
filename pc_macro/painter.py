@@ -8,7 +8,12 @@ from typing import Any, Callable
 import tkinter as tk
 from tkinter import filedialog
 
-from PIL import Image, ImageDraw, ImageGrab
+try:
+    from PIL import Image, ImageDraw, ImageGrab
+except ImportError:  # pragma: no cover
+    Image = None  # type: ignore[assignment]
+    ImageDraw = None  # type: ignore[assignment]
+    ImageGrab = None  # type: ignore[assignment]
 
 from pc_macro.paint import PAINT_HEX, PAINT_RGB, paint_point
 from pc_macro.screen import upsert_slot
