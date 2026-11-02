@@ -164,10 +164,11 @@ _INSTALL_README = """BẤM ĐÚP file CHAY-O-DAY.cmd
 Nếu chưa có Python, file đó tự cài. Nếu thiếu pynput, file đó tự cài.
 Cửa sổ lỗi sẽ đứng lại (không tắt ngay) để đọc được chữ.
 
-Hướng 2: mỗi thẻ Gắn N = bấm cửa sổ website rồi dòng ô 5 số. Gắn 4 ô vẫn gắn lần lượt.
-Bắt đầu 2 gõ rồi Enter đồng loạt. Chỉ lưu mã của trình duyệt có khung đổi ≥ 20%.
-Tiếp N chỉ mở lại trình đó. VPN trên PC: một nút Bật VPN (DNS, IPv6, kill switch,
-WARP, VPN Gate, miễn phí). Mật khẩu chỉ lưu trên máy, không đưa lên VPS.
+Hướng 2: chỉ 1 tiến trình. Gắn trình khách = bấm cửa sổ website khách,
+rồi dòng Mã khách hàng / số điện thoại. Bật chạy gõ 5 ký tự + 5 số rồi Enter,
+tăng số. Tắt để dừng. Khung đổi ≥ 20% thì lưu mã. VPN trên PC: một nút Bật VPN
+(DNS, IPv6, kill switch, WARP, VPN Gate, miễn phí). Mật khẩu chỉ lưu trên máy,
+không đưa lên VPS.
 
 Lần sau chỉ bấm đúp CHAY-O-DAY.cmd (hoặc icon Desktop). Máy tự hỏi hub bản mới.
 Muốn cập nhật im lặng: python -m pc_macro update

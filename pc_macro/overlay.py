@@ -209,7 +209,7 @@ class ClickOverlay:
         if self._awaiting_save:
             self.btn_save.configure(state="normal")
             if self._step is not None and self._phases >= 2:
-                self.hint.configure(text=f"Trình {self._step + 1}: đã chọn cửa sổ + ô. Bấm Lưu, hoặc Ghi lại.")
+                self.hint.configure(text="Đã chọn trình duyệt khách + dòng mã KH / SĐT. Bấm Lưu, hoặc Ghi lại.")
             elif self._step is not None:
                 self.hint.configure(text=f"Đã chọn {self._noun} {self._step + 1}. Bấm Lưu vị trí, hoặc Ghi lại.")
             else:
@@ -218,9 +218,9 @@ class ClickOverlay:
         self.btn_save.configure(state="disabled")
         if self._recording and self._step is not None and self._phases >= 2:
             if self._window_xy is None:
-                self.hint.configure(text=f"Trình {self._step + 1} · bước 1/2: bấm cửa sổ website")
+                self.hint.configure(text="Bước 1/2: bấm cửa sổ trình duyệt web khách")
             else:
-                self.hint.configure(text=f"Trình {self._step + 1} · bước 2/2: bấm dòng ô 5 số")
+                self.hint.configure(text="Bước 2/2: bấm dòng Mã khách hàng / số điện thoại")
         elif self._recording and self._step is not None:
             self.hint.configure(text=f"Bấm trái trên màn hình · {self._noun} {self._step + 1}")
         elif self._recording:

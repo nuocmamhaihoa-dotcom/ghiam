@@ -197,12 +197,12 @@ def overlay_banner(
     item = noun or "nút"
     if step is not None and phases >= 2:
         if awaiting_save:
-            return f"Trình {step + 1}: đã chọn cửa sổ + dòng ô. Bấm Lưu."
+            return "Đã chọn trình duyệt web khách + dòng mã KH / SĐT. Bấm Lưu."
         if recording and phase <= 0:
-            return f"Trình {step + 1} · bước 1/2: bấm cửa sổ website. Esc hủy."
+            return "Bước 1/2: bấm cửa sổ trình duyệt web khách. Esc hủy."
         if recording:
-            return f"Trình {step + 1} · bước 2/2: bấm dòng ô 5 số. Esc hủy."
-        return f"Đã nhớ trình {step + 1}."
+            return "Bước 2/2: bấm dòng Mã khách hàng / số điện thoại. Esc hủy."
+        return "Đã nhớ trình duyệt web khách."
     if step is not None:
         if awaiting_save:
             return f"Đã chọn {item} {step + 1}. Bấm Lưu để giữ vị trí."
