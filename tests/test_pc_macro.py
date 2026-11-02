@@ -52,6 +52,7 @@ from pc_macro.screen import (
     frame_label,
     scale_frame,
     frame_around_click,
+    frames_from_clicks,
     frames_label,
     lane_watch_frame,
     sanitize_frame,
@@ -483,6 +484,12 @@ class FourLaneTests(unittest.TestCase):
         around = frame_around_click({"x": 200, "y": 150, "sw": 1000, "sh": 800})
         self.assertIsNotNone(around)
         self.assertGreaterEqual(around["w"], 16)
+        auto = frames_from_clicks([{"x": 200, "y": 150, "sw": 1000, "sh": 800}, {"x": 400, "y": 300, "sw": 1000, "sh": 800}])
+        self.assertEqual(len(auto), 4)
+        self.assertIsNotNone(auto[0])
+        self.assertIsNotNone(auto[1])
+        self.assertIsNone(auto[2])
+        self.assertIn("ô 1/4", overlay_banner(0, recording=True, noun="ô"))
         frames = sanitize_frames([frame, None, around, None])
         self.assertEqual(len(frames), 4)
         self.assertIsNotNone(frames[0])

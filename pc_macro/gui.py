@@ -22,6 +22,7 @@ from pc_macro.screen import (
     capture_watch,
     click_order_cards,
     current_screen_size,
+    frames_from_clicks,
     frames_label,
     lane_watch_frame,
     normalize_click_name,
@@ -58,12 +59,10 @@ class App:
         self.store = MacroStore()
         self.root = tk.Tk()
         self.root.title("Gõ số rồi Enter")
-        self.root.geometry("430x1600")
-        self.root.minsize(400, 1120)
+        self.root.geometry("430x720")
+        self.root.minsize(400, 600)
         self.root.attributes("-topmost", True)
-        self.status = tk.StringVar(
-            value="Bắt đầu gồm cả hai kịch bản: gõ mã + Enter; màn đổi ≥80% thì tự bấm 4 nút trái."
-        )
+        self.status = tk.StringVar(value="Gắn 4 ô 5 số trên website, rồi Bắt đầu 2.")
         self.current_label = tk.StringVar(value="Sẽ gõ: —")
         self.recover_label = tk.StringVar(value="4 nút: chưa ghi")
         self.prefix = tk.StringVar(value="")
@@ -80,7 +79,10 @@ class App:
         self.threshold2 = tk.StringVar(value=str(LANE_PAUSE_THRESHOLD))
         self.lanes_label = tk.StringVar(value="Hướng 2 — 4 làn: —")
         self.frame_label = tk.StringVar(value=frames_label(None))
-        self.fields_label = tk.StringVar(value="4 ô nhập: chưa ghi — chọn 4 ô, mỗi ô một trình duyệt.")
+        self.fields_label = tk.StringVar(value="Chưa gắn ô — bấm Gắn 4 ô, rồi ấn ô 5 số từng website.")
+        self.lane_card_vars = [
+            tk.StringVar(value=f"{index + 1}  —\nChưa gắn ô") for index in range(LANE_COUNT)
+        ]
         self.vpn = VpnClient()
         self.vpn_kind = tk.StringVar(value=KIND_LABELS["free"])
         self.vpn_name = tk.StringVar(value="")
@@ -143,17 +145,18 @@ class App:
         ttk.Label(self.root, text="VPN trên máy này", font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=12, pady=(4, 0))
         ttk.Label(
             self.root,
-            text="Bật VPN = tự dọn hết bước bảo mật (DNS, IPv6, WebRTC, WARP) rồi nối. Tắt = ngắt. Nhà cung cấp VPN vẫn thấy bạn.",
+            text="Bật VPN = DNS + IPv6 + WebRTC + WARP + Ẩn IP, rồi nối. Tắt = ngắt.",
             wraplength=390,
-        ).pack(anchor="w", padx=12, pady=(2, 4))
+        ).pack(anchor="w", padx=12, pady=(2, 2))
         flags = ttk.Frame(self.root)
         flags.pack(fill="x", **pad)
         ttk.Checkbutton(
             flags,
-            text="Bật VPN",
+            text="Bật VPN + bảo mật",
             variable=self.vpn_enabled,
             command=self._on_vpn_toggle,
-        ).pack(anchor="w")
+        ).pack(side="left")
+        ttk.Button(flags, text="Xem IP", command=self.refresh_vpn_ip).pack(side="left", padx=8)
         kinds = ttk.Frame(self.root)
         kinds.pack(fill="x", **pad)
         ttk.Label(kinds, text="Loại").pack(side="left")
@@ -162,20 +165,18 @@ class App:
             textvariable=self.vpn_kind,
             values=list(KIND_LABELS.values()),
             state="readonly",
-            width=22,
+            width=18,
         ).pack(side="left", padx=6)
-        ttk.Label(self.root, text="Mã nước (tuỳ chọn, JP US KR)").pack(anchor="w", padx=12)
-        ttk.Entry(self.root, textvariable=self.vpn_name, width=36).pack(anchor="w", padx=12, pady=2)
-        vpn_btns = ttk.Frame(self.root)
-        vpn_btns.pack(fill="x", **pad)
-        ttk.Button(vpn_btns, text="Xem IP", command=self.refresh_vpn_ip).pack(side="left", padx=2)
-        ttk.Label(self.root, textvariable=self.vpn_label, wraplength=390).pack(anchor="w", padx=12, pady=(0, 6))
+        ttk.Label(kinds, text="Nước").pack(side="left")
+        ttk.Entry(kinds, textvariable=self.vpn_name, width=8).pack(side="left", padx=4)
+        ttk.Label(self.root, textvariable=self.vpn_label, wraplength=390).pack(anchor="w", padx=12, pady=(0, 4))
         ttk.Separator(self.root).pack(fill="x", padx=12, pady=4)
 
-        ttk.Label(self.root, text="5 ký tự cố định (đứng trước, đổi được)").pack(anchor="w", padx=12)
-        ttk.Entry(self.root, textvariable=self.prefix, width=8, font=("Segoe UI", 18)).pack(anchor="w", padx=12, pady=4)
+        self._dir1 = ttk.Frame(self.root)
+        ttk.Label(self._dir1, text="5 ký tự cố định (đứng trước, đổi được)").pack(anchor="w", padx=12)
+        ttk.Entry(self._dir1, textvariable=self.prefix, width=8, font=("Segoe UI", 18)).pack(anchor="w", padx=12, pady=4)
 
-        row = ttk.Frame(self.root)
+        row = ttk.Frame(self._dir1)
         row.pack(fill="x", **pad)
         left = ttk.Frame(row)
         left.pack(side="left", fill="x", expand=True)
@@ -186,9 +187,9 @@ class App:
         ttk.Label(right, text="Số kết thúc (5 số)").pack(anchor="w")
         ttk.Entry(right, textvariable=self.end, width=8, font=("Segoe UI", 16)).pack(anchor="w", pady=2)
 
-        ttk.Label(self.root, textvariable=self.current_label, font=("Segoe UI", 16, "bold")).pack(anchor="w", padx=12, pady=8)
+        ttk.Label(self._dir1, textvariable=self.current_label, font=("Segoe UI", 16, "bold")).pack(anchor="w", padx=12, pady=8)
 
-        opts = ttk.Frame(self.root)
+        opts = ttk.Frame(self._dir1)
         opts.pack(fill="x", **pad)
         ttk.Label(opts, text="Chờ (giây)").pack(side="left")
         ttk.Entry(opts, textvariable=self.delay, width=5).pack(side="left", padx=(6, 14))
@@ -197,13 +198,13 @@ class App:
         ttk.Label(opts, text="Đổi màn ≥ %").pack(side="left", padx=(14, 0))
         ttk.Entry(opts, textvariable=self.threshold, width=4).pack(side="left", padx=6)
 
-        buttons = ttk.Frame(self.root)
+        buttons = ttk.Frame(self._dir1)
         buttons.pack(fill="x", **pad)
         ttk.Button(buttons, text="Bắt đầu", command=self.start_play).pack(side="left", padx=2)
         ttk.Button(buttons, text="Dừng", command=self.stop_all).pack(side="left", padx=2)
         ttk.Button(buttons, text="Giao diện đổi", command=self.flag_change).pack(side="left", padx=2)
 
-        extra = ttk.Frame(self.root)
+        extra = ttk.Frame(self._dir1)
         extra.pack(fill="x", **pad)
         ttk.Button(extra, text="Ghi chỗ nhập", command=self.start_record).pack(side="left", padx=2)
         ttk.Button(extra, text="Ghi 4 nút", command=self.start_record_recover).pack(side="left", padx=2)
@@ -211,12 +212,12 @@ class App:
         ttk.Button(extra, text="Lên VPS", command=self.push_hub).pack(side="left", padx=2)
         ttk.Button(extra, text="Lấy VPS", command=self.pull_hub).pack(side="left", padx=2)
 
-        ttk.Label(self.root, text="4 nút chuột trái — tên, chọn vị trí hoặc bôi màu trên ảnh").pack(anchor="w", padx=12, pady=(8, 2))
+        ttk.Label(self._dir1, text="4 nút chuột trái — tên, chọn vị trí hoặc bôi màu trên ảnh").pack(anchor="w", padx=12, pady=(8, 2))
         self._name_vars: list[tk.StringVar] = []
         self._mark_cards: list[tuple[tk.Frame, tk.Label, tk.Label, tk.Frame]] = []
         self._loading_names = False
         for index in range(RECOVER_CLICKS):
-            card = tk.Frame(self.root, bd=1, relief="solid", bg="#f3f8fd")
+            card = tk.Frame(self._dir1, bd=1, relief="solid", bg="#f3f8fd")
             card.pack(fill="x", padx=12, pady=3)
             head = tk.Frame(card, bg="#f3f8fd")
             head.pack(fill="x")
@@ -233,31 +234,30 @@ class App:
             name.trace_add("write", self._on_click_name)
             self._name_vars.append(name)
             self._mark_cards.append((card, num, detail, actions))
-        marks = ttk.Frame(self.root)
+        marks = ttk.Frame(self._dir1)
         marks.pack(fill="x", **pad)
         ttk.Button(marks, text="Lưu 4 nút", command=self.save_recover).pack(side="left", padx=2)
         ttk.Button(marks, text="Hiện 4 nút trên màn", command=self.preview_recover).pack(side="left", padx=2)
         ttk.Button(marks, text="Xóa 4 nút", command=self.clear_recover).pack(side="left", padx=2)
-        ttk.Label(self.root, textvariable=self.recover_label, wraplength=390).pack(anchor="w", padx=12, pady=(2, 6))
-        ttk.Label(self.root, text="Số lúc giao diện đổi ≥ ngưỡng — F9 cũng lưu số vừa Enter.").pack(anchor="w", padx=12, pady=(8, 2))
-        self.flag_box = tk.Listbox(self.root, height=4, font=("Segoe UI", 12))
+        ttk.Label(self._dir1, textvariable=self.recover_label, wraplength=390).pack(anchor="w", padx=12, pady=(2, 6))
+        ttk.Label(self._dir1, text="Số lúc giao diện đổi ≥ ngưỡng — F9 cũng lưu số vừa Enter.").pack(anchor="w", padx=12, pady=(8, 2))
+        self.flag_box = tk.Listbox(self._dir1, height=4, font=("Segoe UI", 12))
         self.flag_box.pack(fill="both", expand=True, padx=12, pady=4)
         ttk.Label(
-            self.root,
+            self._dir1,
             text="Bắt đầu = gõ Enter + nếu màn đổi ≥80% tự bấm 4 nút. F8 dừng. Bôi màu / Chọn vị trí từng bước.",
         ).pack(anchor="w", padx=12, pady=(0, 8))
 
-        ttk.Separator(self.root).pack(fill="x", padx=12, pady=8)
-        ttk.Label(self.root, text="Hướng 2 — 4 tiến trình Enter đồng loạt (không đụng hướng 1)", font=("Segoe UI", 11, "bold")).pack(
+        ttk.Label(self.root, text="Hướng 2 — gắn 4 ô rồi Enter đồng loạt", font=("Segoe UI", 11, "bold")).pack(
             anchor="w", padx=12
         )
         ttk.Label(
             self.root,
-            text="Mỗi dãy số chạy một trình duyệt. Gõ 4 mã rồi Enter đồng loạt. Chỉ lưu mã của trình duyệt có màn hình đổi ≥20%; các mã khác vẫn chạy. Tiếp tục chỉ mở lại trình duyệt đã dừng.",
+            text="Gắn 4 ô = bấm ô 5 số từng website. Máy gõ tăng dần rồi Enter; khung theo dõi tự lấy quanh ô.",
             wraplength=390,
         ).pack(anchor="w", padx=12, pady=(2, 4))
-        ttk.Label(self.root, text="5 ký tự cố định hướng 2").pack(anchor="w", padx=12)
-        ttk.Entry(self.root, textvariable=self.prefix2, width=8, font=("Segoe UI", 18)).pack(anchor="w", padx=12, pady=4)
+        ttk.Label(self.root, text="5 ký tự cố định").pack(anchor="w", padx=12)
+        ttk.Entry(self.root, textvariable=self.prefix2, width=8, font=("Segoe UI", 18)).pack(anchor="w", padx=12, pady=2)
         row2 = ttk.Frame(self.root)
         row2.pack(fill="x", **pad)
         left2 = ttk.Frame(row2)
@@ -268,34 +268,47 @@ class App:
         right2.pack(side="left", fill="x", expand=True, padx=(12, 0))
         ttk.Label(right2, text="Số kết thúc").pack(anchor="w")
         ttk.Entry(right2, textvariable=self.end2, width=8, font=("Segoe UI", 16)).pack(anchor="w", pady=2)
-        ttk.Label(self.root, textvariable=self.lanes_label, wraplength=390, font=("Segoe UI", 12, "bold")).pack(
-            anchor="w", padx=12, pady=6
+        ttk.Label(self.root, textvariable=self.lanes_label, wraplength=390, font=("Segoe UI", 11, "bold")).pack(
+            anchor="w", padx=12, pady=(4, 2)
         )
+        cards2 = ttk.Frame(self.root)
+        cards2.pack(fill="x", padx=12, pady=(0, 4))
+        cards2.columnconfigure(0, weight=1)
+        cards2.columnconfigure(1, weight=1)
+        for index in range(LANE_COUNT):
+            ttk.Label(
+                cards2,
+                textvariable=self.lane_card_vars[index],
+                relief="groove",
+                padding=6,
+                justify="left",
+                anchor="w",
+            ).grid(row=index // 2, column=index % 2, sticky="nsew", padx=3, pady=3)
         opts2 = ttk.Frame(self.root)
         opts2.pack(fill="x", **pad)
-        ttk.Label(opts2, text="Chờ (giây)").pack(side="left")
-        ttk.Entry(opts2, textvariable=self.delay2, width=5).pack(side="left", padx=(6, 14))
-        ttk.Label(opts2, text="Mỗi lần cộng").pack(side="left")
-        ttk.Entry(opts2, textvariable=self.step2, width=5).pack(side="left", padx=6)
-        ttk.Label(opts2, text="Khung đổi ≥ %").pack(side="left", padx=(14, 0))
-        ttk.Entry(opts2, textvariable=self.threshold2, width=4).pack(side="left", padx=6)
-        ttk.Label(self.root, textvariable=self.frame_label, wraplength=390).pack(anchor="w", padx=12, pady=(2, 2))
+        ttk.Label(opts2, text="Chờ").pack(side="left")
+        ttk.Entry(opts2, textvariable=self.delay2, width=4).pack(side="left", padx=(4, 10))
+        ttk.Label(opts2, text="Cộng").pack(side="left")
+        ttk.Entry(opts2, textvariable=self.step2, width=4).pack(side="left", padx=(4, 10))
+        ttk.Label(opts2, text="Khung đổi ≥ %").pack(side="left")
+        ttk.Entry(opts2, textvariable=self.threshold2, width=4).pack(side="left", padx=4)
         ttk.Label(self.root, textvariable=self.fields_label, wraplength=390).pack(anchor="w", padx=12, pady=(0, 2))
         buttons2 = ttk.Frame(self.root)
         buttons2.pack(fill="x", **pad)
+        ttk.Button(buttons2, text="Gắn 4 ô", command=self.pick_lane_fields).pack(side="left", padx=2)
         ttk.Button(buttons2, text="Bắt đầu 2", command=self.start_play2).pack(side="left", padx=2)
         ttk.Button(buttons2, text="Dừng 2", command=self.stop_play2).pack(side="left", padx=2)
         ttk.Button(buttons2, text="Tiếp tục", command=self.continue_play2).pack(side="left", padx=2)
         extra2 = ttk.Frame(self.root)
         extra2.pack(fill="x", **pad)
-        ttk.Button(extra2, text="Chọn 4 ô nhập", command=self.pick_lane_fields).pack(side="left", padx=2)
         ttk.Button(extra2, text="Chọn 4 khung", command=self.pick_watch_frame).pack(side="left", padx=2)
         ttk.Button(extra2, text="Lưu hướng 2", command=self.save_lanes).pack(side="left", padx=2)
-        ttk.Label(self.root, text="Mã dừng khi khung 5 số đổi ≥ ngưỡng (đủ 5 ký tự + 5 số)").pack(
-            anchor="w", padx=12, pady=(6, 2)
-        )
-        self.flag_box2 = tk.Listbox(self.root, height=3, font=("Segoe UI", 12))
-        self.flag_box2.pack(fill="x", padx=12, pady=4)
+        ttk.Button(extra2, text="Lên VPS", command=self.push_hub).pack(side="left", padx=2)
+        ttk.Button(extra2, text="Lấy VPS", command=self.pull_hub).pack(side="left", padx=2)
+        ttk.Label(self.root, textvariable=self.frame_label, wraplength=390).pack(anchor="w", padx=12, pady=(2, 2))
+        ttk.Label(self.root, text="Mã dừng khi khung 5 số đổi ≥ ngưỡng").pack(anchor="w", padx=12, pady=(2, 2))
+        self.flag_box2 = tk.Listbox(self.root, height=2, font=("Segoe UI", 11))
+        self.flag_box2.pack(fill="x", padx=12, pady=(0, 4))
 
     def start_record(self) -> None:
         if self.recorder.on or self._playing() or self._record_recover:
@@ -631,11 +644,11 @@ class App:
         self._overlay = None
         if self._picking_lanes:
             self._picking_lanes = False
-            self.lanes.lane_clicks = sanitize_clicks(clicks)
+            self._apply_lane_clicks(clicks)
             self._deiconify()
             self._refresh_lanes()
             self._persist_lanes(silent=True)
-            self.status.set("Đã nhớ 4 ô nhập. Mỗi ô một trình duyệt — chỉ dừng mã của cửa sổ đổi.")
+            self.status.set("Đã gắn 4 ô 5 số. Mỗi ô một website — máy gõ tăng dần rồi Enter.")
             return
         self._recover_draft = sanitize_clicks(clicks)
         self._finish_recover(keep=True)
@@ -645,7 +658,7 @@ class App:
         if self._picking_lanes:
             self._picking_lanes = False
             self._deiconify()
-            self.status.set("Đã hủy chọn 4 ô nhập.")
+            self.status.set("Đã hủy gắn 4 ô.")
             return
         self._finish_recover(keep=False)
 
@@ -983,11 +996,11 @@ class App:
         ready = len(sanitize_clicks(self.lanes.lane_clicks))
         if ready < RECOVER_CLICKS:
             self.status.set(
-                f"Hướng 2: chưa đủ 4 ô nhập — chỉ cửa sổ đang focus nhận phím. Khung ≥{bar}% thì chỉ lưu mã của trình duyệt đổi."
+                f"Hướng 2: chưa gắn đủ 4 ô — chỉ cửa sổ đang focus nhận phím. Khung ≥{bar}% thì chỉ lưu mã của website đổi."
             )
         else:
             self.status.set(
-                f"Hướng 2: gõ 4 mã, Enter đồng loạt. Khung ≥{bar}% thì chỉ lưu mã của trình duyệt đổi; các mã khác vẫn chạy."
+                f"Hướng 2: gõ 4 mã vào ô đã gắn, Enter đồng loạt. Khung ≥{bar}% thì chỉ lưu mã của website đổi."
             )
         self._play_thread2 = threading.Thread(target=self._run_play2, args=(delay,), daemon=True)
         self._play_thread2.start()
@@ -1032,11 +1045,17 @@ class App:
     def save_lanes(self) -> None:
         self._persist_lanes(silent=False)
 
+    def _apply_lane_clicks(self, clicks: list[dict[str, Any]]) -> None:
+        self.lanes.lane_clicks = sanitize_clicks(clicks)
+        frames = frames_from_clicks(self.lanes.lane_clicks)
+        self.lanes.watch_frames = frames
+        self.lanes.watch_frame = frames[0] if frames else None
+
     def pick_lane_fields(self) -> None:
         if self._busy():
             return
         self._picking_lanes = True
-        self.status.set("Bấm trái 4 ô nhập của 4 tiến trình, theo thứ tự 1 → 4, rồi Lưu.")
+        self.status.set("Bấm lần lượt ô 5 số trên 4 website (1 → 4), rồi Lưu 4 ô.")
         self.root.withdraw()
         try:
             self._overlay = show_click_overlay(
@@ -1045,11 +1064,13 @@ class App:
                 on_cancel=self._overlay_cancel,
                 clicks=self.lanes.lane_clicks,
                 recording=True,
+                noun="ô",
+                save_text="Lưu 4 ô",
             )
         except tk.TclError:
             self._picking_lanes = False
             self.root.deiconify()
-            self.status.set("Không mở được lớp phủ để chọn 4 ô nhập.")
+            self.status.set("Không mở được lớp phủ để gắn 4 ô.")
 
     def pick_watch_frame(self) -> None:
         if self._busy():
@@ -1344,11 +1365,21 @@ class App:
         self.frame_label.set(frames_label(self.lanes.watch_frames))
         ready = len(sanitize_clicks(self.lanes.lane_clicks))
         if ready >= RECOVER_CLICKS:
-            self.fields_label.set("4 ô nhập: đã nhớ — mỗi ô một trình duyệt, Enter đồng loạt.")
+            self.fields_label.set("Đã gắn 4 ô 5 số — mỗi ô một website, Enter đồng loạt.")
         elif ready:
-            self.fields_label.set(f"4 ô nhập: đã nhớ {ready}/4 — chọn đủ 4 ô, mỗi ô một trình duyệt.")
+            self.fields_label.set(f"Đã gắn {ready}/4 ô — bấm Gắn 4 ô, ấn tiếp ô 5 số còn thiếu.")
         else:
-            self.fields_label.set("4 ô nhập: chưa ghi — chọn 4 ô, mỗi ô một trình duyệt.")
+            self.fields_label.set("Chưa gắn ô — bấm Gắn 4 ô, rồi ấn ô 5 số từng website.")
+        clicks = sanitize_clicks(self.lanes.lane_clicks)
+        active = {index: code for index, code in self.lanes.peek_active()}
+        for index in range(LANE_COUNT):
+            waiting = index < len(self.lanes.waiting_lanes) and self.lanes.waiting_lanes[index]
+            paused = self.lanes.paused_lanes[index] if index < len(self.lanes.paused_lanes) else ""
+            last = self.lanes.last_used[index] if index < len(self.lanes.last_used) else ""
+            code = paused if waiting else (active.get(index) or last)
+            bind = "Đã gắn ô 5 số" if index < len(clicks) else "Chưa gắn ô"
+            mark = " · dừng" if waiting else ""
+            self.lane_card_vars[index].set(f"{index + 1}  {code or '—'}\n{bind}{mark}")
         self.flag_box2.delete(0, tk.END)
         for value in self.lanes.flagged:
             self.flag_box2.insert(tk.END, value)

@@ -7,6 +7,7 @@
   <meta http-equiv="content-language" content="vi" />
   <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate" />
   <title>Gõ số rồi Enter</title>
+  <meta name="ui-build" content="20261102-3" />
   <style>
     html, body, button, input, textarea {
       font-synthesis: none;
@@ -17,22 +18,60 @@
       color: #17202a;
       background: #eef1f4;
       font-family: -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
-      font-size: 17px;
-      line-height: 1.45;
-      word-spacing: 0.22em;
+      font-size: 16px;
+      line-height: 1.35;
     }
-    main { max-width: 430px; margin: 0 auto; padding: 14px 12px 36px; }
-    h1 { font-size: 1.45rem; margin: 0 0 8px; }
-    p { margin: 0 0 10px; }
-    .hint { color: #5c6770; }
-    .status { min-height: 2.6em; }
+    main { max-width: 430px; margin: 0 auto; padding: 10px 10px 20px; }
+    h1 { font-size: 1.2rem; margin: 0 0 8px; }
+    p { margin: 0 0 6px; }
+    .hint { color: #5c6770; font-size: 0.92rem; }
+    .status { min-height: 0; }
     .card {
       background: #fff;
       border: 1px solid #d5dbe3;
       border-radius: 12px;
-      padding: 12px;
-      margin: 0 0 12px;
+      padding: 10px;
+      margin: 0 0 8px;
     }
+    .dir1 { display: none !important; }
+    .vpn-row, .bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .switch {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 44px;
+      padding: 0 16px;
+      border-radius: 999px;
+      background: #d5dbe3;
+      color: #17202a;
+      font-weight: 800;
+      cursor: pointer;
+      user-select: none;
+    }
+    .switch.on { background: #0b6bcb; color: #fff; }
+    .switch input { display: none; }
+    .sec {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      list-style: none;
+      margin: 8px 0 0;
+      padding: 0;
+    }
+    .sec li {
+      background: #eef6ff;
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+    .sec li.on { background: #d1fae5; color: #065f46; }
     label { display: block; font-weight: 700; margin: 0 0 6px; }
     input[type="text"], input[type="number"] {
       width: 100%;
@@ -45,11 +84,11 @@
     }
     input.wide { font-size: 1.35rem; letter-spacing: 0.08em; }
     .now {
-      font-size: 1.35rem;
+      font-size: 1.05rem;
       font-weight: 700;
-      margin: 8px 0 0;
+      margin: 6px 0 4px;
     }
-    .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
     .pair { display: flex; gap: 8px; }
     .pair > div { flex: 1; }
     button, a.btn {
@@ -70,13 +109,11 @@
     button.go, a.btn { background: #0b6bcb; color: #fff; }
     button.warn { background: #c2410c; color: #fff; }
     .line {
-      min-height: 52px;
-      border: 1.5px dashed #9aa4b0;
-      border-radius: 8px;
-      padding: 10px 12px;
+      min-height: 0;
+      border: 1.5px solid #c5ccd4;
+      border-radius: 10px;
+      padding: 8px 10px;
       background: #f7f9fb;
-      font-family: ui-monospace, Consolas, monospace;
-      font-size: 1.2rem;
     }
     .order {
       font-weight: 800;
@@ -175,12 +212,39 @@
     #translateWarn { padding: 8px 10px; background: #fdecec; color: #8a2b2b; border-radius: 8px; }
     .ok { color: #0d7a46; }
     .err { color: #b42318; }
-    .lanes { position: relative; }
-    .lanes .line { margin: 0 0 6px; }
+    .lanes {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin: 8px 0 2px;
+    }
+    .lanes .line {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      cursor: pointer;
+    }
+    .lanes .line b {
+      font-size: 0.75rem;
+      color: #5c6770;
+    }
+    .lanes .line .lane-code {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 1.05rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+    }
+    .lanes .line .lane-bind {
+      font-size: 0.78rem;
+      font-style: normal;
+      color: #5c6770;
+    }
+    .lanes .line.bound { border-color: #0b6bcb; background: #f3f8fd; }
+    .lanes .line.bound .lane-bind { color: #0b6bcb; font-weight: 700; }
     .lanes .line.on { background: #fff1e8; border-color: #c2410c; }
     .lanes .line.stop { background: #fdecec; border-color: #b42318; }
     .lanes .line.run { background: #e8f6ee; border-color: #14804a; }
-    .lanes .pick { position: absolute; border: 2px solid #ff00aa; pointer-events: none; }
     .pcts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
     [hidden] { display: none !important; }
   </style>
@@ -189,8 +253,103 @@
 <main translate="no">
   <p id="translateWarn" hidden></p>
   <h1><span class="w">Gõ</span><span class="w">số</span><span class="w">rồi</span><span class="w">Enter</span></h1>
-  <p class="status" id="status">Bắt&nbsp;đầu&nbsp;gồm&nbsp;cả&nbsp;hai&nbsp;kịch&nbsp;bản:&nbsp;gõ&nbsp;mã&nbsp;rồi&nbsp;Enter;&nbsp;nếu&nbsp;màn&nbsp;đổi&nbsp;≥&nbsp;80%&nbsp;tự&nbsp;bấm&nbsp;4&nbsp;nút&nbsp;trái.</p>
 
+  <section class="card" id="vpn">
+    <div class="vpn-row">
+      <div>
+        <label>VPN + hệ thống bảo mật</label>
+        <p class="hint">Một&nbsp;nút&nbsp;<b>Bật&nbsp;VPN</b>&nbsp;bật&nbsp;hết&nbsp;bước&nbsp;bảo&nbsp;mật.&nbsp;Hub&nbsp;không&nbsp;lưu&nbsp;mật&nbsp;khẩu.</p>
+      </div>
+      <label class="switch" id="vpnSwitch">
+        <input type="checkbox" id="vpnToggle" />
+        Bật&nbsp;VPN
+      </label>
+    </div>
+    <ul class="sec" id="vpnSteps">
+      <li>DNS 1.1.1.1</li>
+      <li>Chặn IPv6</li>
+      <li>WebRTC</li>
+      <li>WARP / VPN&nbsp;Gate</li>
+      <li>Ẩn&nbsp;IP</li>
+    </ul>
+    <p class="status" id="vpnStatus">VPN&nbsp;nối&nbsp;trên&nbsp;PC.&nbsp;Tải&nbsp;phần&nbsp;mềm&nbsp;rồi&nbsp;bật&nbsp;nút&nbsp;này&nbsp;(WARP,&nbsp;miễn&nbsp;phí).</p>
+    <div class="row">
+      <a class="btn" href="/tai/pc-macro.zip">Tải phần mềm PC</a>
+    </div>
+  </section>
+
+  <section class="card" id="dir2">
+    <label>Hướng&nbsp;2&nbsp;—&nbsp;4&nbsp;mã&nbsp;Enter&nbsp;đồng&nbsp;loạt,&nbsp;mỗi&nbsp;dãy&nbsp;một&nbsp;trình&nbsp;duyệt</label>
+    <p class="hint">Gắn&nbsp;ô&nbsp;trên&nbsp;PC:&nbsp;bấm&nbsp;<b>Gắn&nbsp;4&nbsp;ô</b>,&nbsp;rồi&nbsp;ấn&nbsp;ô&nbsp;5&nbsp;số&nbsp;từng&nbsp;website.&nbsp;Máy&nbsp;gõ&nbsp;4&nbsp;mã&nbsp;rồi&nbsp;Enter&nbsp;đồng&nbsp;loạt.&nbsp;Chỉ&nbsp;lưu&nbsp;mã&nbsp;của&nbsp;trình&nbsp;duyệt&nbsp;có&nbsp;khung&nbsp;5&nbsp;số&nbsp;đổi&nbsp;≥&nbsp;20%.</p>
+    <label for="prefix2">5 ký tự cố định</label>
+    <input id="prefix2" class="wide" type="text" maxlength="5" autocomplete="off" spellcheck="false" placeholder="SPXAB" />
+    <div class="pair">
+      <div>
+        <label for="start2">Số bắt đầu</label>
+        <input id="start2" class="wide" type="text" inputmode="numeric" maxlength="5" autocomplete="off" value="00001" />
+      </div>
+      <div>
+        <label for="end2">Số kết thúc</label>
+        <input id="end2" class="wide" type="text" inputmode="numeric" maxlength="5" autocomplete="off" value="00010" />
+      </div>
+    </div>
+    <p class="now" id="current2">Sẽ gõ 4 làn: —</p>
+    <div class="pair">
+      <div>
+        <label for="delay2">Chờ (giây)</label>
+        <input id="delay2" type="number" value="2" min="0" />
+      </div>
+      <div>
+        <label for="step2">Mỗi lần cộng</label>
+        <input id="step2" type="number" value="1" />
+      </div>
+      <div>
+        <label for="threshold2">Khung đổi ≥ %</label>
+        <input id="threshold2" type="number" value="20" min="1" max="100" />
+      </div>
+    </div>
+    <p class="hint" id="frame2Label">Chưa gắn khung 5 số — trên PC bấm Gắn 4 ô, ấn ô 5 số từng website.</p>
+    <p class="status" id="status2">Gắn 4 ô trên PC, rồi Bắt đầu 2. Mỗi thẻ = một website + ô 5 số tăng dần.</p>
+    <div class="lanes" id="lanes2">
+      <div class="line" id="lane0" data-lane="0"><b>Trình 1</b><span class="lane-code">—</span><em class="lane-bind">Chưa gắn ô</em></div>
+      <div class="line" id="lane1" data-lane="1"><b>Trình 2</b><span class="lane-code">—</span><em class="lane-bind">Chưa gắn ô</em></div>
+      <div class="line" id="lane2" data-lane="2"><b>Trình 3</b><span class="lane-code">—</span><em class="lane-bind">Chưa gắn ô</em></div>
+      <div class="line" id="lane3" data-lane="3"><b>Trình 4</b><span class="lane-code">—</span><em class="lane-bind">Chưa gắn ô</em></div>
+    </div>
+    <div class="row">
+      <button type="button" class="go" id="btnStart2">Bắt&nbsp;đầu&nbsp;2</button>
+      <button type="button" id="btnStop2">Dừng&nbsp;2</button>
+      <button type="button" class="go" id="btnContinue2">Tiếp&nbsp;tục</button>
+    </div>
+    <div class="row">
+      <button type="button" id="btnFrame2">Chọn&nbsp;khung&nbsp;5&nbsp;số</button>
+      <button type="button" class="warn" id="btnPause2">Khung đổi</button>
+      <button type="button" id="btnSave">Lưu</button>
+    </div>
+    <div class="pcts" hidden>
+      <div>
+        <label for="frameChange2_0">Trình 1 đổi %</label>
+        <input id="frameChange2_0" type="number" value="0" min="0" max="100" />
+      </div>
+      <div>
+        <label for="frameChange2_1">Trình 2 đổi %</label>
+        <input id="frameChange2_1" type="number" value="0" min="0" max="100" />
+      </div>
+      <div>
+        <label for="frameChange2_2">Trình 3 đổi %</label>
+        <input id="frameChange2_2" type="number" value="0" min="0" max="100" />
+      </div>
+      <div>
+        <label for="frameChange2_3">Trình 4 đổi %</label>
+        <input id="frameChange2_3" type="number" value="0" min="0" max="100" />
+      </div>
+    </div>
+    <p class="hint">Mã dừng khi khung 5 số đổi (đủ 5 ký tự + 5 số)</p>
+    <ul class="flags" id="flags2"></ul>
+  </section>
+
+  <div class="dir1">
+  <p class="status" id="status">Bắt&nbsp;đầu&nbsp;gồm&nbsp;cả&nbsp;hai&nbsp;kịch&nbsp;bản:&nbsp;gõ&nbsp;mã&nbsp;rồi&nbsp;Enter;&nbsp;nếu&nbsp;màn&nbsp;đổi&nbsp;≥&nbsp;80%&nbsp;tự&nbsp;bấm&nbsp;4&nbsp;nút&nbsp;trái.</p>
   <section class="card">
     <label for="prefix"><span class="w">5</span><span class="w">ký</span><span class="w">tự</span><span class="w">cố</span><span class="w">định</span></label>
     <p class="hint"><span class="w">Đứng</span><span class="w">trước,</span><span class="w">đổi</span><span class="w">được</span><span class="w">bất</span><span class="w">cứ</span><span class="w">lúc</span><span class="w">nào.</span></p>
@@ -230,83 +389,6 @@
     </div>
   </section>
 
-  <section class="card" id="dir2">
-    <label>Hướng&nbsp;2&nbsp;—&nbsp;4&nbsp;mã&nbsp;Enter&nbsp;đồng&nbsp;loạt,&nbsp;mỗi&nbsp;dãy&nbsp;một&nbsp;trình&nbsp;duyệt</label>
-    <p class="hint">Không&nbsp;đụng&nbsp;hướng&nbsp;1.&nbsp;Gõ&nbsp;4&nbsp;mã&nbsp;rồi&nbsp;Enter&nbsp;đồng&nbsp;loạt.&nbsp;Chỉ&nbsp;lưu&nbsp;mã&nbsp;của&nbsp;trình&nbsp;duyệt&nbsp;có&nbsp;khung&nbsp;5&nbsp;số&nbsp;đổi&nbsp;≥&nbsp;20%;&nbsp;các&nbsp;mã&nbsp;khác&nbsp;vẫn&nbsp;chạy.</p>
-    <label for="prefix2"><span class="w">5</span><span class="w">ký</span><span class="w">tự</span><span class="w">cố</span><span class="w">định</span></label>
-    <input id="prefix2" class="wide" type="text" maxlength="5" autocomplete="off" spellcheck="false" placeholder="SPXAB" />
-    <div class="pair">
-      <div>
-        <label for="start2"><span class="w">Số</span><span class="w">bắt</span><span class="w">đầu</span></label>
-        <input id="start2" class="wide" type="text" inputmode="numeric" maxlength="5" autocomplete="off" value="00001" />
-      </div>
-      <div>
-        <label for="end2"><span class="w">Số</span><span class="w">kết</span><span class="w">thúc</span></label>
-        <input id="end2" class="wide" type="text" inputmode="numeric" maxlength="5" autocomplete="off" value="00010" />
-      </div>
-    </div>
-    <p class="now" id="current2"><span class="w">Sẽ</span><span class="w">gõ</span><span class="w">4</span><span class="w">làn:</span> —</p>
-    <div class="pair">
-      <div>
-        <label for="delay2"><span class="w">Chờ</span><span class="w">(giây)</span></label>
-        <input id="delay2" type="number" value="2" min="0" />
-      </div>
-      <div>
-        <label for="step2"><span class="w">Mỗi</span><span class="w">lần</span><span class="w">cộng</span></label>
-        <input id="step2" type="number" value="1" />
-      </div>
-    </div>
-    <div class="pair">
-      <div>
-        <label for="threshold2"><span class="w">Khung</span><span class="w">đổi</span><span class="w">≥</span><span class="w">%</span></label>
-        <input id="threshold2" type="number" value="20" min="1" max="100" />
-      </div>
-    </div>
-    <p class="hint" id="frame2Label">Chưa&nbsp;chọn&nbsp;khung&nbsp;5&nbsp;số&nbsp;—&nbsp;trên&nbsp;PC&nbsp;kéo&nbsp;4&nbsp;khung,&nbsp;mỗi&nbsp;trình&nbsp;duyệt&nbsp;một&nbsp;khung.</p>
-    <p class="status" id="status2">Bắt&nbsp;đầu&nbsp;2:&nbsp;gõ&nbsp;4&nbsp;mã&nbsp;rồi&nbsp;Enter&nbsp;đồng&nbsp;loạt;&nbsp;chỉ&nbsp;lưu&nbsp;mã&nbsp;của&nbsp;trình&nbsp;duyệt&nbsp;đổi.</p>
-    <div class="lanes" id="lanes2">
-      <div class="line" id="lane0" contenteditable="true"></div>
-      <div class="line" id="lane1" contenteditable="true"></div>
-      <div class="line" id="lane2" contenteditable="true"></div>
-      <div class="line" id="lane3" contenteditable="true"></div>
-    </div>
-    <div class="pcts">
-      <div>
-        <label for="frameChange2_0">Trình&nbsp;1&nbsp;đổi&nbsp;%</label>
-        <input id="frameChange2_0" type="number" value="0" min="0" max="100" />
-      </div>
-      <div>
-        <label for="frameChange2_1">Trình&nbsp;2&nbsp;đổi&nbsp;%</label>
-        <input id="frameChange2_1" type="number" value="0" min="0" max="100" />
-      </div>
-      <div>
-        <label for="frameChange2_2">Trình&nbsp;3&nbsp;đổi&nbsp;%</label>
-        <input id="frameChange2_2" type="number" value="0" min="0" max="100" />
-      </div>
-      <div>
-        <label for="frameChange2_3">Trình&nbsp;4&nbsp;đổi&nbsp;%</label>
-        <input id="frameChange2_3" type="number" value="0" min="0" max="100" />
-      </div>
-    </div>
-    <div class="row">
-      <button type="button" class="go" id="btnStart2">Bắt&nbsp;đầu&nbsp;2</button>
-      <button type="button" id="btnStop2">Dừng&nbsp;2</button>
-      <button type="button" class="go" id="btnContinue2">Tiếp&nbsp;tục</button>
-    </div>
-    <div class="row">
-      <button type="button" id="btnFrame2">Chọn&nbsp;khung&nbsp;5&nbsp;số</button>
-      <button type="button" class="warn" id="btnPause2">Khung&nbsp;đổi</button>
-    </div>
-    <p class="hint">Mã&nbsp;dừng&nbsp;khi&nbsp;khung&nbsp;5&nbsp;số&nbsp;đổi&nbsp;(đủ&nbsp;5&nbsp;ký&nbsp;tự&nbsp;+&nbsp;5&nbsp;số)</p>
-    <ul class="flags" id="flags2"></ul>
-  </section>
-
-  <section class="card" id="vpn">
-    <label>VPN&nbsp;trên&nbsp;PC</label>
-    <p class="hint">Một&nbsp;nút&nbsp;<b>Bật&nbsp;VPN</b>&nbsp;bật&nbsp;hết&nbsp;bước&nbsp;bảo&nbsp;mật:&nbsp;siết&nbsp;DNS/IPv6/WebRTC,&nbsp;cài&nbsp;WARP,&nbsp;rồi&nbsp;nối&nbsp;(WARP,&nbsp;VPN&nbsp;Gate,&nbsp;proxy&nbsp;miễn&nbsp;phí).&nbsp;Tắt&nbsp;là&nbsp;ngắt.&nbsp;<b>Ẩn&nbsp;IP</b>&nbsp;đi&nbsp;kèm&nbsp;nút.&nbsp;Hub&nbsp;không&nbsp;lưu&nbsp;mật&nbsp;khẩu.</p>
-    <p class="status" id="vpnStatus">VPN&nbsp;chỉ&nbsp;nối&nbsp;trên&nbsp;PC&nbsp;—&nbsp;tải&nbsp;phần&nbsp;mềm&nbsp;rồi&nbsp;bật&nbsp;trong&nbsp;cửa&nbsp;sổ.</p>
-  </section>
-
   <section class="card">
     <label>4&nbsp;nút&nbsp;chuột&nbsp;trái</label>
     <p class="hint">Từng&nbsp;bước:&nbsp;nhập&nbsp;tên,&nbsp;bấm&nbsp;<b>Thêm&nbsp;ảnh</b>&nbsp;rồi&nbsp;<b>Bôi&nbsp;màu</b>&nbsp;chỗ&nbsp;cần&nbsp;ấn,&nbsp;hoặc&nbsp;<b>Chọn&nbsp;vị&nbsp;trí</b>&nbsp;trên&nbsp;ảnh.&nbsp;Máy&nbsp;bấm&nbsp;trái&nbsp;đúng&nbsp;chỗ&nbsp;tô.</p>
@@ -340,10 +422,11 @@
     <p class="hint">5.&nbsp;Hướng&nbsp;2:&nbsp;chọn&nbsp;4&nbsp;ô&nbsp;nhập&nbsp;và&nbsp;4&nbsp;khung.&nbsp;Gõ&nbsp;4&nbsp;mã&nbsp;rồi&nbsp;Enter&nbsp;đồng&nbsp;loạt.&nbsp;Chỉ&nbsp;lưu&nbsp;mã&nbsp;của&nbsp;trình&nbsp;duyệt&nbsp;đổi&nbsp;≥&nbsp;20%;&nbsp;các&nbsp;mã&nbsp;khác&nbsp;vẫn&nbsp;chạy.</p>
     <p class="hint">6.&nbsp;VPN&nbsp;trên&nbsp;PC:&nbsp;tự&nbsp;chọn&nbsp;miễn&nbsp;phí&nbsp;+&nbsp;ẩn&nbsp;IP&nbsp;(không&nbsp;chạy&nbsp;nếu&nbsp;lộ&nbsp;địa&nbsp;chỉ).&nbsp;Mật&nbsp;khẩu&nbsp;chỉ&nbsp;lưu&nbsp;trên&nbsp;máy,&nbsp;không&nbsp;đưa&nbsp;lên&nbsp;VPS.</p>
     <div class="row">
-      <button type="button" id="btnSave"><span class="w">Lưu</span></button>
+      <button type="button"><span class="w">Lưu</span></button>
       <a class="btn" href="/tai/pc-macro.zip"><span class="w">Tải</span><span class="w">phần</span><span class="w">mềm</span><span class="w">PC</span></a>
     </div>
   </section>
+  </div>
 </main>
 <div id="paintModal" hidden>
   <div class="paint-bar">
@@ -377,6 +460,7 @@
   var forcePause2 = false;
   var frame2 = null;
   var frames2 = [null, null, null, null];
+  var laneClicks2 = [];
   var framePick2 = false;
   var lastUsed = "";
   var currentDigits = "00001";
@@ -889,10 +973,46 @@
     flagged2.push(value);
     renderFlags2();
   }
+  function boundCount2() {
+    return laneClicks2.filter(function (click) { return click && click.x != null; }).length;
+  }
+  function bindLabel2(index) {
+    return laneClicks2[index] && laneClicks2[index].x != null ? "Đã gắn ô 5 số" : "Chưa gắn ô";
+  }
+  function laneCodeOf(index) {
+    if (waitingLanes2[index]) return pausedLanes2[index] || "";
+    if (prefix2().length === 5 && parseInt(currents2[index], 10) <= parseInt(bounds2().end, 10)) {
+      return prefix2() + pad5(currents2[index]);
+    }
+    return pausedLanes2[index] || lastUsed2[index] || "";
+  }
+  function paintLane(index, extra) {
+    var box = $("lane" + index);
+    if (!box) return;
+    var shown = laneCodeOf(index);
+    var codeEl = box.querySelector(".lane-code");
+    var bindEl = box.querySelector(".lane-bind");
+    if (codeEl) codeEl.textContent = shown || "—";
+    if (bindEl) bindEl.textContent = bindLabel2(index) + (waitingLanes2[index] ? " · dừng" : "");
+    var klass = "line";
+    if (laneClicks2[index] && laneClicks2[index].x != null) klass += " bound";
+    if (waitingLanes2[index]) klass += " stop";
+    else if (extra) klass += " " + extra;
+    else if (playing2 && shown) klass += " run";
+    box.className = klass;
+  }
   function showFrame2() {
-    $("frame2Label").textContent = frame2
-      ? ("Đã chọn khung 5 số: " + frame2.w + "×" + frame2.h)
-      : "Chưa chọn khung 5 số — trên PC kéo khung quanh chỗ 5 số tăng.";
+    var n = boundCount2();
+    var ready = frames2.filter(Boolean).length;
+    if (n >= LANE_COUNT) {
+      $("frame2Label").textContent = "Đã gắn 4 ô 5 số trên PC. Khung theo dõi tự lấy quanh mỗi ô" + (ready ? " (" + ready + " khung)." : ".");
+    } else if (n) {
+      $("frame2Label").textContent = "Đã gắn " + n + "/4 ô — trên PC bấm Gắn 4 ô, ấn lần lượt ô 5 số.";
+    } else if (frame2) {
+      $("frame2Label").textContent = "Đã chọn khung 5 số: " + frame2.w + "×" + frame2.h;
+    } else {
+      $("frame2Label").textContent = "Chưa gắn khung 5 số — trên PC bấm Gắn 4 ô, ấn ô 5 số từng website.";
+    }
   }
   function nextActive2() {
     if (exhausted2 || prefix2().length !== 5) return [];
@@ -976,17 +1096,20 @@
     } else if (waiting2 && pausedShow !== "—") {
       $("current2").textContent = "Đã lưu " + pausedShow + " — bấm Tiếp tục";
     } else {
+      var shown = now.slice();
+      if (!shown.length && prefix2().length === 5) {
+        var preview = bounds2();
+        var bump = step2();
+        for (var p = 0; p < LANE_COUNT; p++) {
+          var num = parseInt(preview.start, 10) + p * bump;
+          if (num <= parseInt(preview.end, 10)) shown.push(prefix2() + pad5(num));
+        }
+      }
       $("current2").textContent = lastUsed2.length
-        ? ("Sẽ gõ 4 làn: " + (now.join(" · ") || "—") + "   (vừa xong: " + lastUsed2.join(" · ") + ")")
-        : ("Sẽ gõ 4 làn: " + (now.join(" · ") || "—"));
+        ? ("Sẽ gõ 4 làn: " + (shown.join(" · ") || "—") + "   (vừa xong: " + lastUsed2.join(" · ") + ")")
+        : ("Sẽ gõ 4 làn: " + (shown.join(" · ") || "—"));
     }
-    for (var i = 0; i < LANE_COUNT; i++) {
-      var box = $("lane" + i);
-      if (!box) continue;
-      var shown = waitingLanes2[i] ? (pausedLanes2[i] || "") : (prefix2().length === 5 && parseInt(currents2[i], 10) <= parseInt(bounds2().end, 10) ? (prefix2() + pad5(currents2[i])) : (pausedLanes2[i] || lastUsed2[i] || ""));
-      box.textContent = shown;
-      box.className = waitingLanes2[i] ? "line stop" : (playing2 && shown ? "line run" : "line");
-    }
+    for (var i = 0; i < LANE_COUNT; i++) paintLane(i);
     showFrame2();
     renderFlags2();
   }
@@ -1021,7 +1144,8 @@
         waiting_lanes: waitingLanes2.slice(),
         change_threshold: threshold2(),
         watch_frame: frame2,
-        watch_frames: frames2.slice()
+        watch_frames: frames2.slice(),
+        lane_clicks: laneClicks2.slice()
       }
     };
     return fetch("/v1/macros", { method: "POST", headers: headers(), body: JSON.stringify(body) })
@@ -1029,22 +1153,15 @@
   }
   function flashAllLanes(active, done) {
     for (var i = 0; i < LANE_COUNT; i++) {
-      var box = $("lane" + i);
-      if (!box) continue;
       if (waitingLanes2[i]) {
-        box.className = "line stop";
+        paintLane(i);
         continue;
       }
       var hit = active.filter(function (item) { return item.i === i; })[0];
-      box.textContent = hit ? hit.code : box.textContent;
-      box.className = hit ? "line on" : "line";
+      paintLane(i, hit ? "on" : "");
     }
     timer2 = window.setTimeout(function () {
-      for (var i = 0; i < LANE_COUNT; i++) {
-        var reset = $("lane" + i);
-        if (!reset) continue;
-        reset.className = waitingLanes2[i] ? "line stop" : "line";
-      }
+      for (var i = 0; i < LANE_COUNT; i++) paintLane(i);
       done();
     }, 420);
   }
@@ -1106,7 +1223,13 @@
     if (prefix2().length !== 5) { setStatus2("Hướng 2: nhập đủ 5 ký tự cố định.", "err"); return; }
     if (!nextActive2().length) {
       if (waiting2) { setStatus2("Hướng 2 đã lưu " + codesText2(pausedCodes2, paused2) + ". Bấm Tiếp tục cho trình duyệt đã dừng.", "err"); return; }
-      setStatus2("Hướng 2 đã hết dãy. Đổi số bắt đầu / kết thúc để chạy lại.", "err");
+      resetCurrents2();
+      lastUsed2 = [];
+      flagged2 = [];
+      renderFlags2();
+    }
+    if (!nextActive2().length) {
+      setStatus2("Hướng 2: nhập số bắt đầu / kết thúc còn trong dãy.", "err");
       return;
     }
     playing2 = true;
@@ -1208,10 +1331,16 @@
         frame2 = item.numbers.watch_frame || item.numbers.frame || null;
         frames2 = Array.isArray(item.numbers.watch_frames) ? item.numbers.watch_frames.slice() : [frame2, null, null, null];
         while (frames2.length < LANE_COUNT) frames2.push(null);
+        laneClicks2 = Array.isArray(item.numbers.lane_clicks) ? item.numbers.lane_clicks.slice() : [];
+        while (laneClicks2.length < LANE_COUNT) laneClicks2.push(null);
         if (item.numbers.change_threshold) $("threshold2").value = item.numbers.change_threshold;
+        if (exhausted2 && !waiting2) {
+          resetCurrents2();
+          lastUsed2 = [];
+        }
         showLanes();
         if (waiting2) setStatus2("Đã mở hướng 2. Đang chờ Tiếp tục tại " + codesText2(pausedCodes2, paused2) + ".");
-        else if (item.numbers.prefix) setStatus2("Đã mở hướng 2 đã lưu. Bấm Bắt đầu 2.");
+        else if (item.numbers.prefix) setStatus2("Đã mở hướng 2. Bấm Bắt đầu 2.");
       })
       .catch(function () {});
   }
@@ -1242,56 +1371,16 @@
     pauseBatch2(codes, threshold2());
   };
   $("btnFrame2").onclick = function () {
-    framePick2 = !framePick2;
-    $("lanes2").style.outline = framePick2 ? "2px dashed #ff00aa" : "";
-    setStatus2(framePick2
-      ? "Kéo một khung trên 4 làn để nhớ chỗ 5 số (trên PC kéo trực tiếp màn hình)."
-      : "Đã tắt chọn khung.");
+    setStatus2("Gắn ô trên PC: mở phần mềm → Gắn 4 ô → ấn lần lượt ô 5 số trên 4 website. Mỗi lần ấn gắn cửa sổ + ô + khung 5 số quanh ô.");
   };
-  $("lanes2").onmousedown = function (ev) {
-    if (!framePick2) return;
-    var box = $("lanes2").getBoundingClientRect();
-    var x0 = ev.clientX - box.left;
-    var y0 = ev.clientY - box.top;
-    function move(ev2) {
-      var x1 = ev2.clientX - box.left;
-      var y1 = ev2.clientY - box.top;
-      var mark = $("frameMark2");
-      if (!mark) {
-        mark = document.createElement("div");
-        mark.id = "frameMark2";
-        mark.className = "pick";
-        $("lanes2").appendChild(mark);
-      }
-      mark.style.left = Math.min(x0, x1) + "px";
-      mark.style.top = Math.min(y0, y1) + "px";
-      mark.style.width = Math.abs(x1 - x0) + "px";
-      mark.style.height = Math.abs(y1 - y0) + "px";
-    }
-    function up(ev2) {
-      document.removeEventListener("mousemove", move);
-      document.removeEventListener("mouseup", up);
-      var x1 = ev2.clientX - box.left;
-      var y1 = ev2.clientY - box.top;
-      var w = Math.abs(x1 - x0);
-      var h = Math.abs(y1 - y0);
-      if (w < 16 || h < 16) { setStatus2("Khung quá nhỏ. Kéo rộng hơn.", "err"); return; }
-      frame2 = {
-        x: Math.round(Math.min(x0, x1)),
-        y: Math.round(Math.min(y0, y1)),
-        w: Math.round(w),
-        h: Math.round(h),
-        sw: Math.round(box.width),
-        sh: Math.round(box.height)
-      };
-      framePick2 = false;
-      $("lanes2").style.outline = "";
-      showFrame2();
-      persist2().catch(function () {});
-      setStatus2("Đã chọn khung 5 số " + frame2.w + "×" + frame2.h + ". Trên PC máy so đúng khung này.");
-    }
-    document.addEventListener("mousemove", move);
-    document.addEventListener("mouseup", up);
+  $("lanes2").onclick = function (ev) {
+    var card = ev.target.closest ? ev.target.closest(".line") : ev.target;
+    if (!card || !card.id || card.id.indexOf("lane") !== 0) return;
+    var index = parseInt(card.getAttribute("data-lane") || card.id.slice(4), 10);
+    if (isNaN(index)) return;
+    var code = laneCodeOf(index) || "—";
+    var bound = bindLabel2(index);
+    setStatus2("Trình " + (index + 1) + " (" + code + "): " + bound + ". Trên PC bấm Gắn 4 ô, rồi ấn ô 5 số của website này ở bước " + (index + 1) + "/4.");
   };
   $("btnStop").onclick = stopPlay;
   $("btnFlag").onclick = flagNow;
@@ -1349,9 +1438,9 @@
   $("paintCanvas").ontouchstart = strokePaint;
   $("paintCanvas").ontouchmove = strokePaint;
   $("btnSave").onclick = function () {
-    if (prefix().length !== 5) { setStatus("Nhập đủ 5 ký tự cố định rồi lưu.", "err"); return; }
-    persist().then(function () { setStatus("Đã lưu dãy và các số lúc giao diện đổi.", "ok"); showCurrent(); })
-      .catch(function (err) { setStatus(err.message, "err"); });
+    if (prefix2().length !== 5) { setStatus2("Hướng 2: nhập đủ 5 ký tự cố định rồi lưu.", "err"); return; }
+    persist2().then(function () { setStatus2("Đã lưu 4 làn và chỗ gắn ô.", "ok"); showLanes(); })
+      .catch(function (err) { setStatus2(err.message, "err"); });
   };
   $("prefix").oninput = showCurrent;
   $("start").oninput = function () {
@@ -1393,6 +1482,33 @@
     if (ev.key === "F8") { ev.preventDefault(); stopPlay(); stopPlay2(); }
     if (ev.key === "F9") { ev.preventDefault(); flagNow(); }
   });
+  function setVpnSwitch(on) {
+    var box = $("vpnToggle");
+    var sw = $("vpnSwitch");
+    var status = $("vpnStatus");
+    var chips = $("vpnSteps");
+    if (!box || !sw || !status) return;
+    box.checked = !!on;
+    sw.className = "switch" + (on ? " on" : "");
+    if (chips) {
+      Array.prototype.forEach.call(chips.children, function (li) {
+        li.className = on ? "on" : "";
+      });
+    }
+    status.textContent = on
+      ? "Đã bật VPN + bảo mật trên PC: DNS, IPv6, WebRTC, WARP / VPN Gate, Ẩn IP."
+      : "VPN nối trên PC. Tải phần mềm rồi bật nút này (WARP, miễn phí).";
+  }
+  if ($("vpnToggle") && $("vpnSwitch")) {
+    $("vpnToggle").onchange = function () {
+      setVpnSwitch($("vpnToggle").checked);
+    };
+    $("vpnSwitch").onclick = function (ev) {
+      ev.preventDefault();
+      setVpnSwitch(!$("vpnToggle").checked);
+    };
+    setVpnSwitch(false);
+  }
   renderRecover();
   showCurrent();
   showLanes();

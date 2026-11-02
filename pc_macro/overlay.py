@@ -38,11 +38,14 @@ class ClickOverlay:
         clicks: list[dict[str, Any]] | None = None,
         recording: bool = True,
         step: int | None = None,
+        noun: str = "nút",
+        save_text: str | None = None,
     ) -> None:
         self._on_done = on_done
         self._on_cancel = on_cancel
         self._recording = recording
         self._awaiting_save = False
+        self._noun = noun or "nút"
         self._step = step if step is not None and 0 <= int(step) < RECOVER_CLICKS else None
         self.screen_w = max(1, int(root.winfo_screenwidth()))
         self.screen_h = max(1, int(root.winfo_screenheight()))
@@ -62,7 +65,7 @@ class ClickOverlay:
         self.hint.pack(side="left", padx=12, pady=10)
         self.btn_save = tk.Button(
             self.bar,
-            text="Lưu vị trí" if self._step is not None else "Lưu 4 nút",
+            text=save_text or ("Lưu vị trí" if self._step is not None else "Lưu 4 nút"),
             command=self._save,
             font=("Segoe UI", 12, "bold"),
             bg="#ffd166",
@@ -186,15 +189,15 @@ class ClickOverlay:
         if self._awaiting_save:
             self.btn_save.configure(state="normal")
             if self._step is not None:
-                self.hint.configure(text=f"Đã chọn nút {self._step + 1}. Bấm Lưu vị trí, hoặc Ghi lại.")
+                self.hint.configure(text=f"Đã chọn {self._noun} {self._step + 1}. Bấm Lưu vị trí, hoặc Ghi lại.")
             else:
-                self.hint.configure(text="Đã chọn 4 nút. Bấm Lưu để giữ, hoặc Ghi lại.")
+                self.hint.configure(text=f"Đã chọn 4 {self._noun}. Bấm Lưu để giữ, hoặc Ghi lại.")
             return
         self.btn_save.configure(state="disabled")
         if self._recording and self._step is not None:
-            self.hint.configure(text=f"Bấm trái trên màn hình · nút {self._step + 1}")
+            self.hint.configure(text=f"Bấm trái trên màn hình · {self._noun} {self._step + 1}")
         elif self._recording:
-            self.hint.configure(text=f"Bấm trái trên màn hình · nút {len(self.clicks) + 1}/{RECOVER_CLICKS}")
+            self.hint.configure(text=f"Bấm trái trên màn hình · {self._noun} {len(self.clicks) + 1}/{RECOVER_CLICKS}")
         else:
             self.hint.configure(text="")
 
@@ -206,6 +209,7 @@ class ClickOverlay:
             recording=self._recording,
             awaiting_save=self._awaiting_save,
             step=self._step,
+            noun=self._noun,
         )
         self.canvas.create_rectangle(0, 0, width, 72, fill="#0b6bcb", outline="")
         self.canvas.create_text(20, 24, text=banner, fill=_TEXT, font=("Segoe UI", 16, "bold"), anchor="w")
@@ -231,7 +235,9 @@ class ClickOverlay:
             r = 28
             self.canvas.create_oval(x - r, y - r, x + r, y + r, fill=_FILL, outline=_EDGE, width=4)
             self.canvas.create_text(x, y, text=str(index), fill=_TEXT, font=("Segoe UI", 20, "bold"))
-            self.canvas.create_text(x, y + 44, text=f"Nút {index} / 4", fill=_EDGE, font=("Segoe UI", 13, "bold"))
+            self.canvas.create_text(
+                x, y + 44, text=f"{self._noun.capitalize()} {index} / 4", fill=_EDGE, font=("Segoe UI", 13, "bold")
+            )
             prev = (x, y)
 
 
@@ -243,6 +249,8 @@ def show_click_overlay(
     clicks: list[dict[str, Any]] | None = None,
     recording: bool = True,
     step: int | None = None,
+    noun: str = "nút",
+    save_text: str | None = None,
 ) -> ClickOverlay:
     return ClickOverlay(
         root,
@@ -251,6 +259,8 @@ def show_click_overlay(
         clicks=clicks,
         recording=recording,
         step=step,
+        noun=noun,
+        save_text=save_text,
     )
 
 
