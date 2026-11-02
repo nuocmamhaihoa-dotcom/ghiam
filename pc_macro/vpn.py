@@ -13,9 +13,16 @@ from typing import Any, Callable
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-VPN_KINDS = ("windows", "wireguard", "openvpn", "command")
+from pc_macro import free_vpn
+
+FREE_KINDS = ("free", "warp", "vpngate", "proxy")
+VPN_KINDS = ("windows", "wireguard", "openvpn", "command") + FREE_KINDS
 DEFAULT_KIND = "windows"
 KIND_LABELS = {
+    "free": "Tự chọn miễn phí",
+    "warp": "Cloudflare WARP",
+    "vpngate": "VPN Gate",
+    "proxy": "Proxy tĩnh",
     "windows": "VPN Windows",
     "wireguard": "WireGuard",
     "openvpn": "OpenVPN",
@@ -41,6 +48,14 @@ def vpn_path() -> Path:
 
 def normalize_kind(raw: Any) -> str:
     text = str(raw or DEFAULT_KIND).strip().lower()
+    if text in {"free", "auto", "mienphi", "all"}:
+        return "free"
+    if text in {"warp", "cloudflare", "1111", "1.1.1.1"}:
+        return "warp"
+    if text in {"vpngate", "gate", "tsukuba"}:
+        return "vpngate"
+    if text in {"proxy", "static", "proxies"}:
+        return "proxy"
     if text in {"rasdial", "win", "system"}:
         return "windows"
     if text in {"wg", "wire-guard"}:
@@ -76,6 +91,7 @@ def sanitize_profile(raw: Any) -> dict[str, Any]:
         "connect_cmd": connect_cmd,
         "disconnect_cmd": disconnect_cmd,
         "last_ip": str(data.get("last_ip") or "").strip()[:64],
+        "last_source": free_vpn.persist_source(data.get("last_source")),
         "connected": bool(data.get("connected")),
     }
 
@@ -99,6 +115,14 @@ def profile_ready(profile: Any) -> bool:
         return bool(item["config"])
     if kind == "command":
         return bool(item["connect_cmd"])
+    if kind == "free":
+        return True
+    if kind == "warp":
+        return True
+    if kind == "vpngate":
+        return True
+    if kind == "proxy":
+        return True
     _unknown(kind)
     return False
 
@@ -129,6 +153,14 @@ def connect_command(profile: Any) -> list[str]:
         return []
     if kind == "command":
         return _split_command(item["connect_cmd"])
+    if kind == "free":
+        return []
+    if kind == "warp":
+        return []
+    if kind == "vpngate":
+        return []
+    if kind == "proxy":
+        return []
     _unknown(kind)
     return []
 
@@ -151,6 +183,14 @@ def disconnect_command(profile: Any) -> list[str]:
         return []
     if kind == "command":
         return _split_command(item["disconnect_cmd"])
+    if kind == "free":
+        return []
+    if kind == "warp":
+        return []
+    if kind == "vpngate":
+        return []
+    if kind == "proxy":
+        return []
     _unknown(kind)
     return []
 
@@ -173,6 +213,9 @@ def status_label(profile: Any, ip: str = "") -> str:
     item = sanitize_profile(profile)
     shown = ip or item["last_ip"]
     kind = KIND_LABELS[item["kind"]]
+    source = free_vpn.source_label(item.get("last_source"))
+    if source and item["kind"] in FREE_KINDS:
+        kind = source
     if item["connected"] and shown:
         return f"VPN đã nối ({kind}) · IP {shown}"
     if item["connected"]:
@@ -193,10 +236,18 @@ class VpnClient:
         *,
         runner: Runner | None = None,
         ip_fetch: Callable[[], str] | None = None,
+        fetcher: Callable[[str], str] | None = None,
+        tools: dict[str, str] | None = None,
+        servers: list[dict[str, Any]] | None = None,
+        proxies: list[dict[str, str]] | None = None,
     ) -> None:
         self.path = Path(path) if path is not None else vpn_path()
         self.runner = runner or _run
         self.ip_fetch = ip_fetch or fetch_public_ip
+        self.fetcher = fetcher
+        self.tools = tools
+        self.servers = servers
+        self.proxies = proxies
         self.profile = sanitize_profile(None)
         self._child: Any = None
         self.load()
@@ -213,15 +264,20 @@ class VpnClient:
     def save(self, raw: Any = None) -> dict[str, Any]:
         if raw is not None:
             keep_password = self.profile.get("password") or ""
+            keep_source = self.profile.get("last_source") or ""
             incoming = sanitize_profile(raw)
             if not incoming["password"] and keep_password:
                 incoming["password"] = keep_password
+            if not incoming["last_source"] and keep_source:
+                incoming["last_source"] = keep_source
             self.profile = incoming
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(self.profile, ensure_ascii=False, indent=2), encoding="utf-8")
         return self.profile
 
     def connect(self) -> dict[str, Any]:
+        if self.profile["kind"] in FREE_KINDS:
+            return self._connect_free()
         if not profile_ready(self.profile):
             return {"ok": False, "error": "Chưa đủ tên VPN hoặc file cấu hình.", "ip": ""}
         cmd = connect_command(self.profile)
@@ -233,24 +289,20 @@ class VpnClient:
             result = self._run_cmd(cmd)
         if not result["ok"]:
             return result
-        self.profile["connected"] = True
-        ip = ""
-        try:
-            ip = self.ip_fetch() or ""
-        except Exception:
-            ip = ""
-        if ip:
-            self.profile["last_ip"] = ip
-        self.save()
-        return {"ok": True, "error": "", "ip": ip}
+        return self._mark_connected()
 
     def disconnect(self) -> dict[str, Any]:
-        cmd = disconnect_command(self.profile)
         error = ""
-        if cmd:
-            result = self._run_cmd(cmd)
+        if self.profile["kind"] in FREE_KINDS:
+            result = self._disconnect_free()
             if not result["ok"]:
                 error = result["error"]
+        else:
+            cmd = disconnect_command(self.profile)
+            if cmd:
+                result = self._run_cmd(cmd)
+                if not result["ok"]:
+                    error = result["error"]
         self._stop_child()
         self.profile["connected"] = False
         self.save()
@@ -278,6 +330,128 @@ class VpnClient:
             self.profile["last_ip"] = ip
             self.save()
         return ip
+
+    def _connect_free(self) -> dict[str, Any]:
+        tools = self._discover_tools()
+        country = free_vpn.country_code(self.profile.get("name"))
+        servers = self.servers
+        if servers is None and "vpngate" in free_vpn.source_order(self.profile["kind"]):
+            try:
+                text = free_vpn.fetch_text(free_vpn.VPNGATE_URL, opener=self.fetcher)
+                servers = free_vpn.pick_servers(free_vpn.parse_vpngate(text), country)
+            except Exception:
+                servers = []
+        proxies = self.proxies
+        if proxies is None:
+            proxies = free_vpn.load_proxy_lines(free_vpn.proxies_path())
+        attempts = free_vpn.build_attempts(
+            kind=self.profile["kind"],
+            country=country,
+            tools=tools,
+            servers=servers or [],
+            proxies=proxies or [],
+        )
+        if not attempts:
+            return {
+                "ok": False,
+                "error": "Không tìm thấy nguồn VPN miễn phí (WARP, Proton, Windscribe, VPN Gate, proxy tĩnh).",
+                "ip": "",
+            }
+        errors: list[str] = []
+        for step in attempts:
+            result = self._run_attempt(step, tools)
+            if result["ok"]:
+                self.profile["last_source"] = free_vpn.persist_source(step.get("source"))
+                return self._mark_connected()
+            errors.append(f"{step.get('source')}: {result['error']}")
+        return {"ok": False, "error": " / ".join(errors)[:200], "ip": ""}
+
+    def _disconnect_free(self) -> dict[str, Any]:
+        source = free_vpn.persist_source(self.profile.get("last_source"))
+        tools = self._discover_tools()
+        commands: list[list[str]] = []
+        if source in {"", "warp"} and tools.get("warp"):
+            commands.append(free_vpn.warp_disconnect_command(tools["warp"]))
+        if source in {"", "proton"} and tools.get("proton"):
+            commands.append(free_vpn.proton_disconnect_command(tools["proton"]))
+        if source in {"", "windscribe"} and tools.get("windscribe"):
+            commands.append(free_vpn.windscribe_disconnect_command(tools["windscribe"]))
+        if source in {"", "vpngate"}:
+            commands.append(free_vpn.l2tp_disconnect_command())
+        if source in {"", "proxy"}:
+            commands.extend(free_vpn.proxy_disable_commands())
+        error = ""
+        for cmd in commands:
+            result = self._run_cmd(cmd)
+            if not result["ok"] and not error:
+                error = result["error"]
+        if error:
+            return {"ok": False, "error": error, "ip": self.profile.get("last_ip") or ""}
+        return {"ok": True, "error": "", "ip": self.profile.get("last_ip") or ""}
+
+    def _run_attempt(self, step: dict[str, Any], tools: dict[str, str]) -> dict[str, Any]:
+        source = str(step.get("source") or "")
+        if step.get("mode") == "openvpn":
+            config = str(step.get("config") or "")
+            exe = tools.get("openvpn") or ""
+            if not config or not exe:
+                return {"ok": False, "error": "Thiếu OpenVPN hoặc file cấu hình.", "ip": ""}
+            dest = self.path.parent / "vpngate.ovpn"
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(config, encoding="utf-8")
+            return self._start_child([exe, "--config", str(dest)])
+        commands = list(step.get("commands") or [])
+        if not commands:
+            return {"ok": False, "error": "Không có lệnh nối.", "ip": ""}
+        soft = 0
+        if source == "warp":
+            soft = 1
+        elif step.get("mode") == "l2tp":
+            soft = max(0, len(commands) - 1)
+        last = {"ok": False, "error": "Không nối được.", "ip": ""}
+        for index, cmd in enumerate(commands):
+            last = self._run_cmd(cmd)
+            if not last["ok"] and index >= soft:
+                return last
+        if last["ok"]:
+            return last
+        return {"ok": True, "error": "", "ip": ""}
+
+    def _mark_connected(self) -> dict[str, Any]:
+        self.profile["connected"] = True
+        ip = ""
+        try:
+            ip = self.ip_fetch() or ""
+        except Exception:
+            ip = ""
+        if ip:
+            self.profile["last_ip"] = ip
+        self.save()
+        return {"ok": True, "error": "", "ip": ip}
+
+    def _discover_tools(self) -> dict[str, str]:
+        if self.tools is not None:
+            return dict(self.tools)
+        found: dict[str, str] = {}
+        warp = _find_exe(("warp-cli",), _WARP)
+        if warp:
+            found["warp"] = warp
+        proton = _find_exe(("protonvpn-cli", "protonvpn"), ())
+        if proton:
+            found["proton"] = proton
+        windscribe = _find_exe(("windscribe-cli", "windscribe"), ())
+        if windscribe:
+            found["windscribe"] = windscribe
+        openvpn = _find_exe(("openvpn",), _OPENVPN)
+        if openvpn:
+            found["openvpn"] = openvpn
+        rasdial = _find_exe(("rasdial",), ())
+        if rasdial:
+            found["rasdial"] = rasdial
+        powershell = _find_exe(("powershell", "pwsh"), ())
+        if powershell:
+            found["powershell"] = powershell
+        return found
 
     def _run_cmd(self, cmd: list[str]) -> dict[str, Any]:
         try:
@@ -374,4 +548,8 @@ _WIREGUARD = (
 _OPENVPN = (
     r"C:\Program Files\OpenVPN\bin\openvpn.exe",
     r"C:\Program Files\OpenVPN Connect\OpenVPNConnect.exe",
+)
+_WARP = (
+    r"C:\Program Files\Cloudflare\Cloudflare WARP\warp-cli.exe",
+    r"C:\Program Files (x86)\Cloudflare\Cloudflare WARP\warp-cli.exe",
 )

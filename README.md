@@ -48,7 +48,7 @@ Windows (đã có venv của agent):
 
 **Hướng 2** (độc lập, không đụng 4 nút / 80% của hướng 1): cùng 5 ký tự + 5 số. Mỗi dãy số chạy **một trình duyệt**. **Chọn 4 ô nhập** rồi **Chọn 4 khung** (mỗi cửa sổ một khung; thiếu thì so vùng quanh ô nhập). **Bắt đầu 2** gõ 4 mã rồi Enter đồng loạt. Sau Enter, chỉ lưu mã của trình duyệt có khung đổi ≥20%; các mã / trình duyệt khác vẫn chạy. **Tiếp tục** chỉ mở lại cửa sổ đã dừng. Ví dụ `00001`–`00010` → nhịp 1: `…00001 …00002 …00003 …00004`; nếu chỉ `…00002` đổi thì lần sau gõ `…00005 …00002(chờ) …00007 …00008`. F8 dừng cả hai hướng.
 
-**VPN trên PC:** khi mở phần mềm, máy có thể tự nối VPN Windows (`rasdial`), WireGuard, OpenVPN, hoặc lệnh riêng. Đánh dấu **Bật VPN khi mở phần mềm**, nhập tên kết nối / file `.conf` / `.ovpn`, rồi **Lưu VPN**. Mật khẩu chỉ nằm trong `data/vpn.json` trên máy — không đồng bộ VPS. **Nối** / **Ngắt** / **Xem IP** bất cứ lúc nào. Tùy chọn **Ngắt VPN khi đóng cửa sổ**.
+**VPN trên PC:** chọn **Tự chọn miễn phí** rồi đánh dấu **Bật VPN khi mở phần mềm**. Máy tự thử Cloudflare WARP (nếu đã cài `warp-cli`), Proton/Windscribe CLI (đã đăng nhập), danh sách công khai [VPN Gate](https://www.vpngate.net/api/iphone/) (L2TP `vpn`/`vpn` hoặc OpenVPN đã lọc script), rồi `data/proxies_static.txt` làm proxy hệ thống. Điền mã nước 2 chữ (JP/US/KR) nếu muốn lọc VPN Gate. Vẫn dùng được VPN Windows / WireGuard / OpenVPN / lệnh riêng. Mật khẩu chỉ nằm trong `data/vpn.json` — không đồng bộ VPS. **Nối** / **Ngắt** / **Xem IP**. Tùy chọn **Ngắt VPN khi đóng cửa sổ**. Không tự tải bộ cài VPN.
 
 ## Cài đặt trên PC (dùng tài nguyên máy local)
 

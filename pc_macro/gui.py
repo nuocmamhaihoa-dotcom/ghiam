@@ -82,7 +82,7 @@ class App:
         self.frame_label = tk.StringVar(value=frames_label(None))
         self.fields_label = tk.StringVar(value="4 ô nhập: chưa ghi — chọn 4 ô, mỗi ô một trình duyệt.")
         self.vpn = VpnClient()
-        self.vpn_kind = tk.StringVar(value=KIND_LABELS["windows"])
+        self.vpn_kind = tk.StringVar(value=KIND_LABELS["free"])
         self.vpn_name = tk.StringVar(value="")
         self.vpn_config = tk.StringVar(value="")
         self.vpn_user = tk.StringVar(value="")
@@ -139,7 +139,7 @@ class App:
         ttk.Label(self.root, text="VPN trên máy này", font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=12, pady=(4, 0))
         ttk.Label(
             self.root,
-            text="Nối VPN Windows / WireGuard / OpenVPN hoặc lệnh riêng khi mở phần mềm. Mật khẩu chỉ lưu trên PC, không gửi lên VPS.",
+            text="Tự chọn miễn phí: Cloudflare WARP (nếu đã cài), Proton/Windscribe CLI (đã đăng nhập), VPN Gate công khai, rồi proxy tĩnh trong data/proxies_static.txt. Không tải cài đặt lén. Mật khẩu chỉ lưu trên PC, không gửi lên VPS.",
             wraplength=390,
         ).pack(anchor="w", padx=12, pady=(2, 4))
         kinds = ttk.Frame(self.root)
@@ -150,11 +150,11 @@ class App:
             textvariable=self.vpn_kind,
             values=list(KIND_LABELS.values()),
             state="readonly",
-            width=18,
+            width=22,
         ).pack(side="left", padx=6)
-        ttk.Label(self.root, text="Tên kết nối / tunnel").pack(anchor="w", padx=12)
+        ttk.Label(self.root, text="Tên kết nối / mã nước (JP US KR)").pack(anchor="w", padx=12)
         ttk.Entry(self.root, textvariable=self.vpn_name, width=36).pack(anchor="w", padx=12, pady=2)
-        ttk.Label(self.root, text="File cấu hình hoặc lệnh nối").pack(anchor="w", padx=12)
+        ttk.Label(self.root, text="File cấu hình / lệnh / để trống nếu miễn phí").pack(anchor="w", padx=12)
         ttk.Entry(self.root, textvariable=self.vpn_config, width=36).pack(anchor="w", padx=12, pady=2)
         acc = ttk.Frame(self.root)
         acc.pack(fill="x", **pad)
@@ -1418,11 +1418,19 @@ class App:
             "disconnect_cmd": self.vpn_disconnect.get(),
             "connected": bool(self.vpn.profile.get("connected")),
             "last_ip": self.vpn.profile.get("last_ip") or "",
+            "last_source": self.vpn.profile.get("last_source") or "",
         }
 
     def _fill_vpn(self) -> None:
         item = self.vpn.profile
-        self.vpn_kind.set(KIND_LABELS.get(item["kind"], KIND_LABELS["windows"]))
+        empty = (
+            item["kind"] == "windows"
+            and not item["name"]
+            and not item["config"]
+            and not item["enabled"]
+            and not item["connected"]
+        )
+        self.vpn_kind.set(KIND_LABELS["free"] if empty else KIND_LABELS.get(item["kind"], KIND_LABELS["free"]))
         self.vpn_name.set(item["name"])
         shown = item["config"] or item["connect_cmd"]
         self.vpn_config.set(shown)
