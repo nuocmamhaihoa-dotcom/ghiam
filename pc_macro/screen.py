@@ -187,19 +187,21 @@ def overlay_banner(
     total: int = RECOVER_CLICKS,
     awaiting_save: bool = False,
     step: int | None = None,
+    noun: str = "nút",
 ) -> str:
     """Top bar while the user points at the real screen."""
+    item = noun or "nút"
     if step is not None:
         if awaiting_save:
-            return f"Đã chọn nút {step + 1}. Bấm Lưu để giữ vị trí."
+            return f"Đã chọn {item} {step + 1}. Bấm Lưu để giữ vị trí."
         if recording:
-            return f"Bấm trái nút {step + 1} trên màn hình. Esc hủy."
-        return f"Đã nhớ nút {step + 1}."
+            return f"Bấm trái {item} {step + 1} trên màn hình. Esc hủy."
+        return f"Đã nhớ {item} {step + 1}."
     if awaiting_save:
-        return "Đã chọn 4 nút. Bấm Lưu để giữ vị trí."
+        return f"Đã chọn 4 {item}. Bấm Lưu để giữ vị trí."
     if recording and 0 <= count < total:
-        return f"Bấm trái nút {count + 1}/{total} trên màn hình. Esc hủy."
-    return "Đã nhớ 4 nút trái theo thứ tự 1 → 2 → 3 → 4."
+        return f"Bấm trái {item} {count + 1}/{total} trên màn hình. Esc hủy."
+    return f"Đã nhớ 4 {item} trái theo thứ tự 1 → 2 → 3 → 4."
 
 
 def current_screen_size(fallback: tuple[int, int] | None = None) -> tuple[int, int]:
@@ -449,6 +451,13 @@ def frames_label(frames: Any) -> str:
         return f"Khung trình duyệt: đã chọn {ready}/{len(items)} — thiếu thì so quanh ô nhập."
     parts = [f"{index + 1}:{item['w']}×{item['h']}" for index, item in enumerate(items) if item]
     return "4 khung: " + " · ".join(parts)
+
+
+def frames_from_clicks(clicks: Any, count: int = RECOVER_CLICKS) -> list[dict[str, Any] | None]:
+    """One watch rectangle around each bound 5-digit field."""
+    total = max(1, int(count or RECOVER_CLICKS))
+    points = sanitize_clicks(clicks)
+    return [frame_around_click(points[index]) if index < len(points) else None for index in range(total)]
 
 
 def frame_around_click(click: Any, width: int = 420, height: int = 320) -> dict[str, Any] | None:
