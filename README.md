@@ -50,7 +50,7 @@ Windows (đã có venv của agent):
 
 **VPN trên PC:** một nút **Bật VPN**. Bật là tự siết nhiều lớp: DNS-over-HTTPS `1.1.1.1`/`9.9.9.9`, tắt IPv6 + Teredo/6to4/ISATAP, khóa WebRTC/STUN (Chrome/Edge/Brave/Firefox), tắt LLMNR/NetBIOS/WPAD, random MAC Wi-Fi, chặn định vị / Advertising ID, cài Cloudflare WARP qua `winget` nếu thiếu, rồi nối (WARP → Proton/Windscribe CLI → [VPN Gate](https://www.vpngate.net/api/iphone/) → `data/proxies_static.txt`). Sau khi IP đổi, bật **kill switch** (tường lửa chỉ cho adapter VPN; rò IP thì cắt tunnel và giữ khóa). Tắt là ngắt và hoàn tường lửa. IP không đổi / IPv6 lộ / hai nguồn IP lệch thì không gõ số. Mã nước 2 chữ (JP/US/KR) lọc VPN Gate. **Không ẩn tuyệt đối** — nhà VPN vẫn thấy máy; tài khoản web, thanh toán, vân tay trình duyệt vẫn nhận diện được. Nếu mất mạng sau khi bật: `Get-NetFirewallRule | Where-Object { $_.DisplayName -like 'PcMacroKS-*' } | Remove-NetFirewallRule` rồi `Set-NetFirewallProfile -DefaultOutboundAction Allow`. Mật khẩu chỉ nằm trong `data/vpn.json` — không đồng bộ VPS.
 
-**Tự cập nhật:** cài một lần (`Cai-dat.ps1`). Mỗi lần mở phần mềm (và khi đăng nhập Windows) máy hỏi `GET /v1/pc-macro/version`, nếu chữ ký khác thì tự tải `/tai/pc-macro.zip`, ghi đè `pc_macro/*.py`, rồi tự mở lại. Không cần tải zip hay chạy cài đặt lại. Thư mục `data/` (kịch bản, VPN) giữ nguyên.
+**Tự cập nhật:** giải nén zip, bấm đúp `CHAY-O-DAY.cmd` (không mở README, không chạy trong file zip). File đó tự tìm/cài Python + pynput rồi mở cửa sổ. Mỗi lần mở (và khi đăng nhập Windows) máy hỏi `GET /v1/pc-macro/version`, nếu chữ ký khác thì tự tải `/tai/pc-macro.zip`, ghi đè `pc_macro/*.py`, rồi tự mở lại. Thư mục `data/` (kịch bản, VPN) giữ nguyên.
 
 ## Cài đặt trên PC (dùng tài nguyên máy local)
 

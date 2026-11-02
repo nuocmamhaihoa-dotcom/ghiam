@@ -7,6 +7,7 @@ import sys
 import time
 from typing import Sequence
 
+from pc_macro.boot import print_report
 from pc_macro.desktop import Desktop, available, install_hint
 from pc_macro.events import default_title
 from pc_macro.hub import HubError, describe, pull, push
@@ -31,6 +32,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="cmd")
 
     sub.add_parser("gui", help="Mở cửa sổ Ghi / Làm lại")
+    sub.add_parser("doctor", help="Kiểm tra Python, tkinter, pynput, thư mục phần mềm")
     sub.add_parser("list", help="Liệt kê bản đã lưu")
 
     play = sub.add_parser("play", help="Làm lại một bản đã lưu")
@@ -53,6 +55,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     updater.add_argument("--then-gui", action="store_true", help="Mở cửa sổ sau khi cập nhật")
 
     args = parser.parse_args(argv)
+    if args.cmd == "doctor":
+        return print_report()
     if args.cmd == "update":
         return _run_update(then_gui=bool(args.then_gui))
     if args.cmd in (None, "gui"):
@@ -206,7 +210,7 @@ def _launch_gui(*, skip_update: bool = False) -> int:
     except Exception as exc:
         print(f"Không mở được cửa sổ: {exc}")
         print(install_hint())
-        print("Cần Python 3.11+ (tick tcl/tk) rồi chạy Cai-dat.ps1 trong thư mục phần mềm.")
+        print("Cần Python 3.11+ (tick tcl/tk) rồi bấm đúp CHAY-O-DAY.cmd trong thư mục đã giải nén.")
         return 1
     try:
         gui_main()

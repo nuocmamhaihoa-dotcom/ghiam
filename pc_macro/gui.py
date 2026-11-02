@@ -53,7 +53,7 @@ from pc_macro.vpn import KIND_LABELS, VpnClient, status_label
 def main() -> None:
     if not available():
         print(install_hint())
-        print("Trong thư mục phần mềm chạy: .\\Cai-dat.ps1")
+        print("Giải nén zip, rồi bấm đúp CHAY-O-DAY.cmd")
         raise SystemExit(1)
     App().run()
 
