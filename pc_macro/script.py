@@ -16,6 +16,8 @@ _STEP_GAP = 80
 _CHAR_GAP = 30
 _FOCUS_WAIT = 220
 _CLEAR_KEYS = 12
+_TYPE_SETTLE = 80
+_ENTER_WAIT = 180
 
 
 def events_to_steps(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -156,15 +158,43 @@ def number_enter_steps(sample: str = "1") -> list[dict[str, Any]]:
 
 
 def field_clear_steps(*, wait: int = 20) -> list[dict[str, Any]]:
-    """Wipe the focused 5-digit field so the next code replaces, not appends."""
+    """Wipe leftover text so the next code replaces, not appends.
+
+    Home + Delete clears from the start; End + Backspace clears from the end.
+    Together they empty both left-to-right and right-to-left fields.
+    """
     steps: list[dict[str, Any]] = []
-    end = new_step("key", key="end", wait=wait)
+    home = new_step("key", key="home", wait=wait)
+    if home is not None:
+        steps.append(home)
+    for _index in range(_CLEAR_KEYS):
+        forward = new_step("key", key="delete", wait=0)
+        if forward is not None:
+            steps.append(forward)
+    end = new_step("key", key="end", wait=0)
     if end is not None:
         steps.append(end)
     for _index in range(_CLEAR_KEYS):
         wipe = new_step("key", key="backspace", wait=0)
         if wipe is not None:
             steps.append(wipe)
+    return steps
+
+
+def one_code_enter_steps(sample: str = "1", click: Any = None) -> list[dict[str, Any]]:
+    """One increment: focus the chosen point, wipe, type the full code, Enter once."""
+    steps: list[dict[str, Any]] = []
+    steps.extend(click_focus_steps(click, wait=_FOCUS_WAIT))
+    steps.extend(field_clear_steps(wait=40 if steps else 20))
+    typed = number_type_steps(sample)
+    if typed:
+        first = dict(typed[0])
+        first["wait"] = max(int(first.get("wait") or 0), _TYPE_SETTLE)
+        typed = [first, *typed[1:]]
+    steps.extend(typed)
+    enter = new_step("key", key="enter", wait=_ENTER_WAIT)
+    if enter is not None:
+        steps.append(enter)
     return steps
 
 

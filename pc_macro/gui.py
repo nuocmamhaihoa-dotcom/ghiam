@@ -19,7 +19,6 @@ from pc_macro.screen import (
     append_screen_click,
     apply_click_names,
     capture_grid,
-    capture_watch,
     click_order_cards,
     click_slots,
     current_screen_size,
@@ -35,10 +34,8 @@ from pc_macro.screen import (
     sanitize_frame,
     scale_clicks,
     start_both_scripts_status,
-    watch_changed,
 )
-from pc_macro.lanes_play import enter_lane_burst
-from pc_macro.script import compile_script, four_lane_enter_steps, four_lane_type_steps, number_enter_steps
+from pc_macro.script import compile_script, four_lane_enter_steps, number_enter_steps, one_code_enter_steps
 from pc_macro.session import Player, Recorder, ignore_window
 from pc_macro.store import MacroStore
 from pc_macro.updater import consume_just_updated
@@ -90,7 +87,7 @@ class App:
         self.threshold2 = tk.StringVar(value=str(LANE_PAUSE_THRESHOLD))
         self.lanes_label = tk.StringVar(value="Hướng 2 — 1 tiến trình: —")
         self.frame_label = tk.StringVar(value=frames_label(None))
-        self.fields_label = tk.StringVar(value="Chưa gắn — bấm GẮN, rồi bấm 1 lần vào ô mã trên website")
+        self.fields_label = tk.StringVar(value="Ctrl+F7 hoặc CHẠY: tự chọn ô, rồi dãy số tăng và Enter từng lần")
         self.now_code = tk.StringVar(value="—")
         self.lane_card_vars = [
             tk.StringVar(value="Trình duyệt web khách  —\nChưa gắn\nChưa lưu số khi đổi")
@@ -135,6 +132,8 @@ class App:
         self._picking_lanes = False
         self._picking_lane_index: int | None = None
         self._picking_frame_index: int | None = None
+        self._run_after_pick = False
+        self._mods = {"ctrl": False, "shift": False, "alt": False, "cmd": False}
         self._build()
         self._fill_vpn()
         self._load_or_empty()
@@ -235,9 +234,11 @@ class App:
         acts.pack(fill="x", padx=16, pady=(14, 6))
         self._btn_bind = self._action_btn(acts, "GẮN", self.pick_lane_fields, fill="#334155")
         self._btn_bind.pack(side="left", fill="x", expand=True, padx=(0, 8))
-        self._btn_start2 = self._action_btn(acts, "CHẠY", self._on_run_tap, fill="#16a34a")
+        self._btn_start2 = self._action_btn(acts, "CHẠY · Ctrl+F7", self._on_run_tap, fill="#16a34a")
         self._btn_start2.pack(side="left", fill="x", expand=True)
         self._btn_stop2 = self._btn_start2
+        self.root.bind("<Control-F7>", lambda _event: self._on_hotkey_start())
+        self.root.bind("<F8>", lambda _event: self._on_stop_hotkey())
 
         foot = tk.Frame(self.root, bg=bg)
         foot.pack(fill="x", padx=16, pady=(8, 4))
@@ -609,25 +610,19 @@ class App:
 
     def _on_desktop(self, now_ms: int, raw: dict[str, Any]) -> None:
         key = str(raw.get("key") or "").lower()
+        if raw.get("kind") == "key" and key in self._mods:
+            self._mods[key] = raw.get("action") == "down"
+            return
         if raw.get("kind") == "key" and raw.get("action") == "down" and key == "f9":
             self.root.after(0, self.flag_change)
             return
+        if raw.get("kind") == "key" and raw.get("action") == "down" and key == "f7" and (
+            self._mods.get("ctrl") or self._mods.get("cmd")
+        ):
+            self.root.after(0, self._on_hotkey_start)
+            return
         if raw.get("kind") == "key" and raw.get("action") == "down" and key == "f8":
-            if self.player is not None:
-                self.player.cancel()
-            if self.player2 is not None:
-                self.player2.cancel()
-            if self._record_recover:
-                self.root.after(0, lambda: self._finish_recover(keep=False))
-            if self._picking_lanes:
-                self.root.after(0, self._overlay_cancel)
-            if self._painter is not None:
-                self.root.after(0, self._paint_cancel)
-            if self._framer is not None:
-                self.root.after(0, self._frame_cancel)
-            if self.recorder.on:
-                recorded = self.recorder.stop()
-                self.root.after(0, lambda ev=recorded: self._after_record(ev))
+            self.root.after(0, self._on_stop_hotkey)
             return
         if self._record_recover:
             return
@@ -674,20 +669,28 @@ class App:
             self._deiconify()
             self._refresh_lanes()
             self._persist_lanes(silent=True)
-            title = "Đã gắn Evoshop + dòng Mã khách hàng / số điện thoại. Bật chạy sẽ gõ vào Evoshop, không vào trang hub."
             self._picking_lane_index = None
-            self.status.set(title)
+            if self._run_after_pick:
+                self._run_after_pick = False
+                self.status.set("Đã chọn ô. Gõ mã, Enter một lần, rồi tăng 1.")
+                self.root.after(80, self.start_play2)
+                return
+            self.status.set(
+                "Đã gắn ô. Ctrl+F7 hoặc CHẠY: gõ mã → Enter một lần → tăng 1."
+            )
             return
         self._recover_draft = sanitize_clicks(clicks)
         self._finish_recover(keep=True)
 
     def _overlay_cancel(self) -> None:
         self._overlay = None
+        armed = self._run_after_pick
+        self._run_after_pick = False
         if self._picking_lanes:
             self._picking_lanes = False
             self._deiconify()
             self._picking_lane_index = None
-            self.status.set("Đã hủy gắn trình / ô.")
+            self.status.set("Đã hủy chọn ô." if armed else "Đã hủy gắn trình / ô.")
             return
         self._finish_recover(keep=False)
 
@@ -996,6 +999,42 @@ class App:
     def _toggle_run2(self) -> None:
         self._on_run_tap()
 
+    def _on_hotkey_start(self) -> None:
+        """Ctrl+F7: pick the field if needed, then type → Enter → +1."""
+        if self._picking_lanes or self._overlay is not None or self._run_after_pick:
+            return
+        if self._playing2() or self.run2.get():
+            return
+        if self.lanes.waiting:
+            self.continue_play2()
+            return
+        self.start_play2()
+
+    def _on_stop_hotkey(self) -> None:
+        if self.player is not None:
+            self.player.cancel()
+        if self.player2 is not None:
+            self.player2.cancel()
+        if self._record_recover:
+            self._finish_recover(keep=False)
+        overlay = self._overlay
+        if overlay is not None:
+            try:
+                overlay.cancel()
+            except tk.TclError:
+                self._overlay_cancel()
+        elif self._picking_lanes:
+            self._overlay_cancel()
+        if self._painter is not None:
+            self._paint_cancel()
+        if self._framer is not None:
+            self._frame_cancel()
+        if self.recorder.on:
+            recorded = self.recorder.stop()
+            self._after_record(recorded)
+        if self.run2.get() and not self._playing2():
+            self.stop_play2()
+
     def _on_run_tap(self) -> None:
         if self._playing2() or self.run2.get():
             self.stop_play2()
@@ -1010,11 +1049,11 @@ class App:
         start = getattr(self, "_btn_start2", None)
         if start is not None:
             if playing:
-                start.configure(text="TẮT", bg="#dc2626", activebackground="#dc2626")
+                start.configure(text="TẮT · F8", bg="#dc2626", activebackground="#dc2626")
             elif self.lanes.waiting:
-                start.configure(text="TIẾP", bg="#0b6bcb", activebackground="#0b6bcb")
+                start.configure(text="TIẾP · Ctrl+F7", bg="#0b6bcb", activebackground="#0b6bcb")
             else:
-                start.configure(text="CHẠY", bg="#16a34a", activebackground="#16a34a")
+                start.configure(text="CHẠY · Ctrl+F7", bg="#16a34a", activebackground="#16a34a")
         bind = getattr(self, "_btn_bind", None)
         if bind is not None:
             ready = customer_target(self.lanes.lane_clicks) is not None
@@ -1053,18 +1092,16 @@ class App:
             self.run2.set(False)
             return
         if customer_target(self.lanes.lane_clicks) is None:
-            self.status.set(
-                "Chưa gắn Evoshop. Bấm Gắn trình khách: cửa sổ Evoshop (không phải trang hub), rồi dòng Mã khách hàng / SĐT."
-            )
-            self.run2.set(False)
-            self._post_run({"status": "need_bind", "pc_bound": False})
+            self._run_after_pick = True
+            self.status.set("Bấm 1 lần vào ô muốn gõ dãy số. Mỗi số Enter một lần rồi tăng 1.")
+            self.pick_one_lane(0)
             return
         self._persist_vpn()
         self.player2 = Player(self.desktop.send, time.sleep)
         self.run2.set(True)
         bar = self.lanes.change_threshold
         self.status.set(
-            f"Hướng 2: đưa Evoshop lên trước, gõ mã vào dòng đã gắn, Enter, tăng số. Khung ≥{bar}% thì lưu mã."
+            f"Gõ mã vào ô đã chọn, Enter một lần, tăng 1. F8 tắt. Khung ≥{bar}% thì F9 lưu mã."
         )
         self._post_run({"play_cmd": "run", "status": "play", "pc_bound": True})
         self._paint_run_buttons()
@@ -1141,7 +1178,7 @@ class App:
             return
         self._picking_lanes = True
         self._picking_lane_index = index
-        self.status.set("Bấm 1 lần vào dòng Mã khách hàng / SĐT trên Evoshop.")
+        self.status.set("Bấm 1 lần vào ô muốn cho dãy số chạy tăng. Esc hoặc F8 hủy.")
         self.root.withdraw()
         try:
             self._overlay = show_click_overlay(
@@ -1157,6 +1194,7 @@ class App:
         except tk.TclError:
             self._picking_lanes = False
             self._picking_lane_index = None
+            self._run_after_pick = False
             self.root.deiconify()
             self.status.set("Không mở được lớp phủ để gắn trình duyệt.")
 
@@ -1404,17 +1442,15 @@ class App:
             active = self.lanes.peek_active()
             if not active:
                 return []
-            codes = [code for _index, code in active]
             self._pending2 = list(active)
-            shown = self._codes_text(codes)
-            bar = self.lanes.change_threshold
-            paused = self._codes_text(self.lanes.paused_codes)
-            extra = f" Đã lưu {paused}." if paused != "—" else ""
-            self._set_status(
-                f"Hướng 2 đang gõ {shown} vào Evoshop (dòng mã KH / SĐT) rồi Enter. Khung ≥{bar}% thì lưu.{extra}"
-            )
+            clicks = self._lane_clicks_for(active)
+            shown = self._codes_text([code for _index, code in active])
+            self._set_status(f"Gõ {shown} vào ô đã chọn, Enter một lần, rồi tăng 1.")
             self.root.after(0, self._refresh_lanes)
-            _script, batch = compile_script(four_lane_type_steps(codes, self._lane_clicks_for(active)))
+            steps: list[dict[str, Any]] = []
+            for (_index, code), click in zip(active, clicks):
+                steps.extend(one_code_enter_steps(code, click))
+            _script, batch = compile_script(steps)
             return batch
 
         def after(_loop: int) -> list[dict[str, Any]]:
@@ -1423,58 +1459,13 @@ class App:
             active = list(self._pending2)
             if not active:
                 return []
-            clicks = self._lane_clicks_for(active)
-            befores: dict[int, Any] = {}
-            for index, _code in active:
-                try:
-                    befores[index] = capture_watch(self._lane_frame(index))
-                except Exception:
-                    befores[index] = None
-            try:
-                enter_lane_burst(
-                    clicks,
-                    len(active),
-                    self.desktop.send,
-                    time.sleep,
-                    cancelled=lambda: self.player2 is None or self.player2.cancelled,
-                )
-            except Exception as exc:
-                self._set_status(f"Hướng 2 lỗi Enter: {exc}.")
-                return []
-            time.sleep(0.6)
-            if self.player2 is None or self.player2.cancelled:
-                return []
-            paused: list[str] = []
             kept: list[str] = []
             for index, code in active:
-                try:
-                    changed, percent = watch_changed(
-                        befores.get(index),
-                        capture_watch(self._lane_frame(index)),
-                        self.lanes.change_threshold,
-                    )
-                except Exception:
-                    self.lanes.take_lane(index)
-                    kept.append(code)
-                    continue
-                if changed:
-                    self.lanes.pause_lane(index, code)
-                    paused.append(code)
-                else:
-                    self.lanes.take_lane(index)
-                    kept.append(code)
-            shown_paused = self._codes_text(paused)
-            shown_kept = self._codes_text(kept)
-            if paused and kept:
-                self._set_status(
-                    f"Đã lưu {shown_paused} vì màn hình trình duyệt đổi. Các mã khác vẫn chạy: {shown_kept}."
-                )
-            elif paused:
-                self._set_status(
-                    f"Đã lưu {shown_paused} vì màn hình trình duyệt đổi. Bấm Tiếp tục khi xong thao tác tay."
-                )
-            else:
-                self._set_status(f"Đã Enter {shown_kept}. Tăng số rồi gõ mã tiếp theo.")
+                self.lanes.take_lane(index)
+                kept.append(code)
+            shown = self._codes_text(kept)
+            nxt = self._codes_text(self.lanes.peek())
+            self._set_status(f"Đã Enter {shown}. Tăng 1 → tiếp theo: {nxt}.")
             if not self.lanes.peek() and self.player2 is not None:
                 self.player2.cancel()
             self.root.after(0, self._refresh_lanes)
@@ -1598,9 +1589,9 @@ class App:
         self.frame_label.set(frames_label(self.lanes.watch_frames))
         ready = customer_target(self.lanes.lane_clicks) is not None
         if ready:
-            self.fields_label.set("Đã gắn website. Bấm CHẠY.")
+            self.fields_label.set("Đã gắn ô. Ctrl+F7 / CHẠY: gõ mã → Enter → +1. F8 tắt.")
         else:
-            self.fields_label.set("Bấm GẮN, rồi bấm 1 lần vào ô mã trên website")
+            self.fields_label.set("Ctrl+F7 hoặc CHẠY: tự chọn ô, rồi dãy số tăng và Enter từng lần")
         self._paint_run_buttons()
         slots = click_slots(self.lanes.lane_clicks)
         active = {index: code for index, code in self.lanes.peek_active()}
@@ -1834,8 +1825,8 @@ def _click_from_steps(steps: list[dict[str, Any]]) -> dict[str, Any] | None:
 def _startup_status() -> str:
     stamp = consume_just_updated()
     if stamp and stamp.get("build"):
-        return f"Đã tự cập nhật lên bản {stamp['build']}. Gắn Evoshop (không gắn trang hub) rồi bật chạy."
-    return f"Nhập mã · GẮN 1 lần · CHẠY. Bản {PC_MACRO_BUILD}."
+        return f"Đã tự cập nhật lên bản {stamp['build']}. Ctrl+F7 bắt đầu, chọn ô, mỗi số Enter một lần."
+    return f"Ctrl+F7 bắt đầu · chọn ô · gõ + Enter +1. Bản {PC_MACRO_BUILD}."
 
 
 def _now_ms() -> int:

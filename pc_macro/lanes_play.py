@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from pc_macro.events import sanitize_events, schedule
-from pc_macro.script import compile_script, four_lane_enter_burst_steps, four_lane_type_steps
+from pc_macro.script import compile_script, four_lane_enter_burst_steps, four_lane_type_steps, one_code_enter_steps
 
 SendFn = Callable[[dict[str, Any]], None]
 SleepFn = Callable[[float], None]
@@ -73,3 +73,20 @@ def play_type_then_enter(
     if settle > 0:
         sleep(settle)
     return {"typed": typed, "enters": entered, "stopped": 0}
+
+
+def play_one_code_enter(
+    code: str,
+    click: Any,
+    send: SendFn,
+    sleep: SleepFn,
+    cancelled: CancelFn | None = None,
+) -> dict[str, int]:
+    """Focus the chosen point, type one code, press Enter once."""
+    _script, batch = compile_script(one_code_enter_steps(str(code or ""), click))
+    played = emit_scheduled(batch, send, sleep, cancelled)
+    downs = [event for event in batch if event.get("kind") == "key" and event.get("action") == "down"]
+    enters = sum(1 for event in downs if event.get("key") == "enter")
+    letters = sum(1 for event in downs if len(str(event.get("key") or "")) == 1)
+    stopped = 1 if cancelled and cancelled() else 0
+    return {"played": played, "typed": letters, "enters": enters, "stopped": stopped}

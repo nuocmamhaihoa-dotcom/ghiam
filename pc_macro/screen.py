@@ -234,7 +234,7 @@ def overlay_banner(
     if instant and step is not None:
         if awaiting_save:
             return "Đã gắn trình duyệt. Đóng."
-        return "Bấm 1 lần vào dòng Mã khách hàng / số điện thoại trên Evoshop. Esc hủy."
+        return "Bấm 1 lần vào ô muốn gõ dãy số tăng (Mã khách hàng / SĐT). Esc hủy."
     if step is not None and phases >= 2:
         if awaiting_save:
             return "Đã chọn trình duyệt web khách + dòng mã KH / SĐT. Bấm Lưu."

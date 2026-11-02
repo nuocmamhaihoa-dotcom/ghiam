@@ -27,7 +27,7 @@ from pc_macro.numbers import (
     parse_number_list,
     pick_span,
 )
-from pc_macro.lanes_play import emit_scheduled, play_type_then_enter
+from pc_macro.lanes_play import emit_scheduled, play_one_code_enter, play_type_then_enter
 from pc_macro.script import (
     compile_script,
     delete_step,
@@ -43,6 +43,7 @@ from pc_macro.script import (
     four_lane_type_steps,
     number_enter_steps,
     number_type_steps,
+    one_code_enter_steps,
     replace_step,
     script_captions,
     steps_to_events,
@@ -431,7 +432,7 @@ class FourLaneTests(unittest.TestCase):
         result = player.play([], times=0, gap_ms=0, prepare=prepare)
         self.assertEqual(result["loops"], 4)
         self.assertEqual(sent.count("enter"), 4)
-        typed = [key for key in sent if key not in {"enter", "end", "backspace"}]
+        typed = [key for key in sent if key not in {"enter", "end", "home", "delete", "backspace"}]
         self.assertEqual("".join(typed), "SPXAB00001SPXAB00002SPXAB00003SPXAB00004")
         self.assertTrue(queue.exhausted)
 
@@ -439,8 +440,11 @@ class FourLaneTests(unittest.TestCase):
         clicks = [{"x": 10, "y": 20}, {"x": 30, "y": 40}, {"x": 50, "y": 60}, {"x": 70, "y": 80}]
         codes = ["SPXAB00001", "SPXAB00002", "SPXAB00003", "SPXAB00004"]
         wipe = field_clear_steps()
-        self.assertEqual(wipe[0]["key"], "end")
-        self.assertEqual([step["key"] for step in wipe[1:]], ["backspace"] * 12)
+        keys = [step["key"] for step in wipe]
+        self.assertEqual(keys[0], "home")
+        self.assertEqual(keys[1:13], ["delete"] * 12)
+        self.assertEqual(keys[13], "end")
+        self.assertEqual(keys[14:], ["backspace"] * 12)
         typed = four_lane_type_steps(codes, clicks)
         self.assertEqual([step["kind"] for step in typed].count("type"), 4)
         self.assertGreaterEqual([step["kind"] for step in typed].count("key"), 13 * 4)
@@ -510,7 +514,10 @@ class FourLaneTests(unittest.TestCase):
             if key == "backspace":
                 fields[point] = fields[point][:-1]
                 return
-            if key == "end":
+            if key == "delete":
+                fields[point] = fields[point][1:]
+                return
+            if key in {"end", "home", "ctrl", "shift", "alt"}:
                 return
             if len(key) == 1:
                 fields[point] += key
@@ -841,6 +848,79 @@ class ScriptStepTests(unittest.TestCase):
         self.assertEqual(coded[0]["value"], "SPXAB00001")
         typed_keys = [event["key"] for event in typed if event.get("action") == "down"]
         self.assertEqual(typed_keys, ["S", "P", "X", "A", "B", "0", "0", "0", "0", "1", "enter"])
+
+    def test_one_code_enter_clicks_clears_types_and_enters_once(self) -> None:
+        click = {"x": 120, "y": 80, "wx": 40, "wy": 30}
+        steps, events = compile_script(one_code_enter_steps("SPXAB00007", click))
+        kinds = [step["kind"] for step in steps]
+        self.assertGreaterEqual(kinds.count("click"), 2)
+        self.assertEqual(kinds.count("type") + kinds.count("number"), 1)
+        self.assertEqual([step["key"] for step in steps if step.get("key") == "enter"], ["enter"])
+        downs = [event for event in events if event.get("action") == "down"]
+        keys = [str(event.get("key") or "") for event in downs if event.get("kind") == "key"]
+        self.assertEqual(keys.count("enter"), 1)
+        self.assertEqual(keys[-1], "enter")
+        self.assertLess(keys.index("home"), keys.index("delete"))
+        self.assertLess(keys.index("delete"), keys.index("S"))
+        self.assertEqual("".join(key for key in keys if len(key) == 1), "SPXAB00007")
+        clicks = [event for event in downs if event.get("kind") == "click"]
+        self.assertEqual(clicks[0]["x"], 40)
+        self.assertEqual(clicks[-1]["x"], 120)
+        enter_wait = next(step["wait"] for step in steps if step.get("key") == "enter")
+        self.assertGreaterEqual(enter_wait, 80)
+
+    def test_player_increments_one_and_enters_once_per_code(self) -> None:
+        queue = FourLaneQueue(prefix="SPXAB", start="00001", end="00003", step=1)
+        click = {"x": 10, "y": 20}
+        sent: list[str] = []
+        field = {"text": "OLD99", "submitted": []}
+        ctrl = {"on": False}
+
+        def send(event: dict[str, Any]) -> None:
+            if event.get("kind") == "click" and event.get("action") == "down":
+                return
+            if event.get("kind") != "key" or event.get("action") != "down":
+                return
+            key = str(event.get("key") or "")
+            sent.append(key)
+            if key == "ctrl":
+                ctrl["on"] = True
+                return
+            if key == "enter":
+                field["submitted"].append(field["text"])
+                return
+            if key == "backspace":
+                field["text"] = field["text"][:-1]
+                return
+            if key == "delete":
+                field["text"] = field["text"][1:]
+                return
+            if key in {"end", "home", "shift", "alt"}:
+                return
+            if len(key) == 1 and not ctrl["on"]:
+                field["text"] += key
+
+        def prepare(_loop: int) -> list:
+            code = queue.peek_one()
+            if not code:
+                return []
+            _script, batch = compile_script(one_code_enter_steps(code, click))
+            return batch
+
+        def after(_loop: int) -> list:
+            queue.take_one()
+            return []
+
+        player = Player(send, lambda _s: None)
+        result = player.play([], times=0, gap_ms=0, prepare=prepare, after=after)
+        self.assertEqual(result["loops"], 3)
+        self.assertEqual(sent.count("enter"), 3)
+        self.assertEqual(field["submitted"], ["SPXAB00001", "SPXAB00002", "SPXAB00003"])
+        self.assertTrue(queue.exhausted)
+        live = play_one_code_enter("SPXAB00009", click, lambda _e: None, lambda _s: None)
+        self.assertEqual(live["enters"], 1)
+        self.assertEqual(live["typed"], 10)
+        self.assertEqual(live["stopped"], 0)
 
     def test_collapses_and_compiles_back(self) -> None:
         events = sanitize_events(

@@ -279,7 +279,7 @@ class ClickOverlay:
             return
         self.btn_save.configure(state="disabled")
         if self._instant and self._recording:
-            self.hint.configure(text="Bấm 1 lần vào dòng Mã khách hàng / số điện thoại trên Evoshop. Esc hủy.")
+            self.hint.configure(text="Bấm 1 lần vào ô muốn gõ dãy số tăng (Mã khách hàng / SĐT). Esc hủy.")
             return
         if self._recording and self._step is not None and self._phases >= 2:
             if self._window_xy is None:

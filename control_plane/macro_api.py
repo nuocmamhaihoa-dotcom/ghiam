@@ -243,9 +243,10 @@ _INSTALL_README = """BẤM ĐÚP file CHAY-O-DAY.cmd
 Nếu chưa có Python, file đó tự cài. Nếu thiếu pynput hoặc Pillow, file đó tự cài.
 Cửa sổ lỗi sẽ đứng lại (không tắt ngay) để đọc được chữ.
 
-Hướng 2: chỉ 1 tiến trình. Trên PC: nhập mã, bấm GẮN, bấm 1 lần vào ô
-Mã khách hàng / số điện thoại trên Evoshop (không bấm trang hub). CHẠY
-đưa Evoshop lên trước, gõ mã, Enter, tăng số. Bấm CHẠY lần nữa để tắt. VPN trên PC: một nút Bật VPN
+Hướng 2: chỉ 1 tiến trình. Trên PC: nhập mã, bấm Ctrl+F7 hoặc CHẠY, rồi
+bấm 1 lần vào ô Mã khách hàng / số điện thoại trên Evoshop (Gắn trình khách,
+không bấm trang hub). Mỗi số gõ xong ấn Enter một lần rồi tăng 1. F8 tắt.
+VPN trên PC: một nút Bật VPN
 (DNS, IPv6, kill switch, WARP, VPN Gate, miễn phí). Mật khẩu chỉ lưu trên máy,
 không đưa lên VPS.
 
