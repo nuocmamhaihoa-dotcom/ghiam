@@ -235,7 +235,7 @@ def status_label(profile: Any, ip: str = "") -> str:
         return "VPN đang bật nhưng chưa đủ tên / file cấu hình."
     if item["privacy_lock"]:
         return "Ẩn IP bật — phải bật VPN rồi nối, không chạy trên địa chỉ thật."
-    return "VPN tắt — đánh dấu Bật VPN khi mở phần mềm để nối tự động."
+    return "VPN tắt — bật nút Bật VPN để siết bảo mật và nối tự động."
 
 
 class VpnClient:
@@ -386,6 +386,34 @@ class VpnClient:
             self.save()
         return ""
 
+    def arm_security(self) -> dict[str, Any]:
+        """One switch: every privacy step follows when VPN is on."""
+        item = dict(self.profile)
+        if item["kind"] == "windows" and not item["name"] and not item["config"] and not item["connect_cmd"]:
+            item["kind"] = "free"
+        item["enabled"] = True
+        item["disconnect_on_exit"] = True
+        item["privacy_lock"] = True
+        item["block_ipv6"] = True
+        self.save(item)
+        return self.profile
+
+    def turn_on(self) -> dict[str, Any]:
+        self.arm_security()
+        return self.prepare()
+
+    def turn_off(self) -> dict[str, Any]:
+        result = {"ok": True, "error": "", "ip": self.profile.get("last_ip") or ""}
+        if self.profile.get("connected") or self.profile.get("enabled") or self.profile.get("last_source"):
+            result = self.disconnect()
+        item = dict(self.profile)
+        item["enabled"] = False
+        item["privacy_lock"] = False
+        item["block_ipv6"] = False
+        item["connected"] = False
+        self.save(item)
+        return result
+
     def prepare(self) -> dict[str, Any]:
         """Harden DNS/WebRTC, install WARP if missing, then connect."""
         self._install_warp()
@@ -453,7 +481,7 @@ class VpnClient:
     def autostart(self) -> dict[str, Any] | None:
         if not self.profile["enabled"]:
             return None
-        return self.prepare()
+        return self.turn_on()
 
     def shutdown(self) -> dict[str, Any] | None:
         if not self.profile["disconnect_on_exit"] or not self.profile["connected"]:

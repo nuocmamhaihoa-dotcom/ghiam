@@ -215,6 +215,41 @@ class PrivacyClientTests(unittest.TestCase):
             self.assertNotIn("--inprivate", browser)
             self.assertTrue(any(background for cmd, background in calls if cmd and cmd[0] == r"C:\chrome.exe"))
 
+    def test_one_switch_turns_all_security(self) -> None:
+        calls: list[list[str]] = []
+
+        def runner(cmd: list[str], background: bool = False) -> _Done:
+            calls.append(list(cmd))
+            return _Done()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            client = VpnClient(
+                Path(tmp) / "vpn.json",
+                runner=runner,
+                ip_fetch=_shift_ip(),
+                ip6_fetch=lambda: "",
+                tools={"warp": "warp-cli"},
+                servers=[],
+                proxies=[],
+            )
+            client.save({"kind": "windows", "enabled": False})
+            armed = client.arm_security()
+            self.assertEqual(armed["kind"], "free")
+            self.assertTrue(armed["enabled"])
+            self.assertTrue(armed["privacy_lock"])
+            self.assertTrue(armed["block_ipv6"])
+            self.assertTrue(armed["disconnect_on_exit"])
+            result = client.turn_on()
+            self.assertTrue(result["ok"])
+            self.assertTrue(any(cmd[:2] == ["warp-cli", "connect"] for cmd in calls))
+            self.assertTrue(any("flushdns" in " ".join(cmd) for cmd in calls))
+            dropped = client.turn_off()
+            self.assertTrue(dropped["ok"])
+            self.assertFalse(client.profile["enabled"])
+            self.assertFalse(client.profile["privacy_lock"])
+            self.assertFalse(client.profile["block_ipv6"])
+            self.assertFalse(client.profile["connected"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -168,7 +168,13 @@ class VpnClientTests(unittest.TestCase):
             client.shutdown()
             self.assertFalse(client.profile["connected"])
 
-            off = VpnClient(path, runner=runner, ip_fetch=lambda: "")
+            box = {"n": 0}
+
+            def shift() -> str:
+                box["n"] += 1
+                return "203.0.113.1" if box["n"] == 1 else "198.51.100.8"
+
+            off = VpnClient(path, runner=runner, ip_fetch=shift, ip6_fetch=lambda: "")
             off.profile["enabled"] = False
             self.assertIsNone(off.autostart())
             off.profile["enabled"] = True
@@ -176,6 +182,8 @@ class VpnClientTests(unittest.TestCase):
             started = off.autostart()
             assert started is not None
             self.assertTrue(started["ok"])
+            self.assertTrue(off.profile["privacy_lock"])
+            self.assertTrue(off.profile["block_ipv6"])
 
     def test_openvpn_starts_child(self) -> None:
         child = _Done()
