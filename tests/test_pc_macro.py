@@ -10,6 +10,7 @@ import unittest
 import zipfile
 from contextlib import redirect_stdout
 from pathlib import Path
+from typing import Any
 
 from pc_macro.desktop import key_name
 from pc_macro.events import default_title, point_in_box, sanitize_events, schedule, script_lines
@@ -26,10 +27,12 @@ from pc_macro.numbers import (
     parse_number_list,
     pick_span,
 )
+from pc_macro.lanes_play import emit_scheduled, play_type_then_enter
 from pc_macro.script import (
     compile_script,
     delete_step,
     events_to_steps,
+    field_clear_steps,
     insert_steps,
     merge_recording,
     move_step,
@@ -415,10 +418,94 @@ class FourLaneTests(unittest.TestCase):
         result = player.play([], times=0, gap_ms=0, prepare=prepare)
         self.assertEqual(result["loops"], 1)
         self.assertEqual(sent.count("enter"), 4)
-        typed = [key for key in sent if key != "enter"]
+        typed = [key for key in sent if key not in {"enter", "end", "backspace"}]
         self.assertEqual("".join(typed), "SPXAB00001SPXAB00002SPXAB00003SPXAB00004")
         self.assertEqual(sent[-4:], ["enter", "enter", "enter", "enter"])
         self.assertTrue(queue.exhausted)
+
+    def test_type_then_enter_clears_field_and_waits_between_enters(self) -> None:
+        clicks = [{"x": 10, "y": 20}, {"x": 30, "y": 40}, {"x": 50, "y": 60}, {"x": 70, "y": 80}]
+        codes = ["SPXAB00001", "SPXAB00002", "SPXAB00003", "SPXAB00004"]
+        wipe = field_clear_steps()
+        self.assertEqual(wipe[0]["key"], "end")
+        self.assertEqual([step["key"] for step in wipe[1:]], ["backspace"] * 12)
+        typed = four_lane_type_steps(codes, clicks)
+        self.assertEqual([step["kind"] for step in typed].count("type"), 4)
+        self.assertGreaterEqual([step["kind"] for step in typed].count("key"), 13 * 4)
+        clock = {"t": 0.0}
+        sent: list[dict[str, Any]] = []
+
+        def send(event: dict[str, Any]) -> None:
+            sent.append(
+                {
+                    "t": clock["t"],
+                    "kind": event.get("kind"),
+                    "action": event.get("action"),
+                    "key": event.get("key"),
+                    "x": event.get("x"),
+                }
+            )
+
+        def sleep(seconds: float) -> None:
+            clock["t"] += float(seconds)
+
+        result = play_type_then_enter(codes, clicks, send, sleep, settle=0.5)
+        self.assertEqual(result["stopped"], 0)
+        enter_downs = [
+            item
+            for item in sent
+            if item["kind"] == "key" and item["key"] == "enter" and item["action"] == "down"
+        ]
+        self.assertEqual(len(enter_downs), 4)
+        gaps = [enter_downs[index]["t"] - enter_downs[index - 1]["t"] for index in range(1, 4)]
+        self.assertTrue(all(gap >= 0.05 for gap in gaps), gaps)
+        letters = "".join(
+            str(item["key"])
+            for item in sent
+            if item["kind"] == "key" and item["action"] == "down" and len(str(item["key"] or "")) == 1
+        )
+        self.assertEqual(letters, "SPXAB00001SPXAB00002SPXAB00003SPXAB00004")
+        self.assertGreater(clock["t"], 1.0)
+        instant: list[float] = []
+        emit_scheduled(
+            [{"t": 0, "kind": "key", "action": "down", "key": "enter"}],
+            lambda event: instant.append(clock["t"]),
+            sleep,
+        )
+        self.assertEqual(len(instant), 1)
+
+    def test_type_then_enter_fills_four_fake_browser_fields(self) -> None:
+        clicks = [{"x": 10, "y": 20}, {"x": 30, "y": 40}, {"x": 50, "y": 60}, {"x": 70, "y": 80}]
+        codes = ["SPXAB00001", "SPXAB00002", "SPXAB00003", "SPXAB00004"]
+        fields = {(item["x"], item["y"]): "OLD99" for item in clicks}
+        submitted: dict[tuple[int, int], list[str]] = {point: [] for point in fields}
+        focus: list[tuple[int, int] | None] = [None]
+
+        def send(event: dict[str, Any]) -> None:
+            if event.get("kind") == "click" and event.get("action") == "down":
+                point = (int(event["x"]), int(event["y"]))
+                focus[0] = point if point in fields else None
+                return
+            if event.get("kind") != "key" or event.get("action") != "down":
+                return
+            point = focus[0]
+            if point is None:
+                return
+            key = str(event.get("key") or "")
+            if key == "enter":
+                submitted[point].append(fields[point])
+                return
+            if key == "backspace":
+                fields[point] = fields[point][:-1]
+                return
+            if key == "end":
+                return
+            if len(key) == 1:
+                fields[point] += key
+
+        play_type_then_enter(codes, clicks, send, lambda _s: None, settle=0)
+        self.assertEqual([fields[item["x"], item["y"]] for item in clicks], codes)
+        self.assertEqual([submitted[item["x"], item["y"]] for item in clicks], [[code] for code in codes])
 
     def test_pause_only_changed_browser_others_keep_running(self) -> None:
         clicks = [{"x": 10, "y": 20}, {"x": 30, "y": 40}, {"x": 50, "y": 60}, {"x": 70, "y": 80}]

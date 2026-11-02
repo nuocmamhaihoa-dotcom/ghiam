@@ -36,13 +36,8 @@ from pc_macro.screen import (
     start_both_scripts_status,
     watch_changed,
 )
-from pc_macro.script import (
-    compile_script,
-    four_lane_enter_burst_steps,
-    four_lane_enter_steps,
-    four_lane_type_steps,
-    number_enter_steps,
-)
+from pc_macro.lanes_play import enter_lane_burst
+from pc_macro.script import compile_script, four_lane_enter_steps, four_lane_type_steps, number_enter_steps
 from pc_macro.session import Player, Recorder, ignore_window
 from pc_macro.store import MacroStore
 from pc_macro.updater import consume_just_updated
@@ -1237,10 +1232,7 @@ class App:
 
     def _run_play2(self, delay: float) -> None:
         if not self._ensure_vpn():
-            if self.player2 is not None:
-                self.player2.cancel()
-            self.player2 = None
-            return
+            self._set_status("VPN chưa nối — hướng 2 vẫn gõ số rồi Enter trên cửa sổ đang mở.")
         remaining = delay
         while remaining > 0 and self.player2 is not None and not self.player2.cancelled:
             self._set_status(f"Hướng 2 bắt đầu sau {int(remaining)} giây…")
@@ -1254,10 +1246,7 @@ class App:
         def prepare(_loop: int) -> list[dict[str, Any]]:
             leak = self.vpn.check_leak()
             if leak:
-                self._set_status(leak)
-                if self.player2 is not None:
-                    self.player2.cancel()
-                return []
+                self._set_status(f"{leak} Vẫn gõ số rồi Enter.")
             active = self.lanes.peek_active()
             if not active:
                 return []
@@ -1287,16 +1276,18 @@ class App:
                     befores[index] = capture_watch(self._lane_frame(index))
                 except Exception:
                     befores[index] = None
-            _script, burst = compile_script(four_lane_enter_burst_steps(clicks, count=len(active)))
             try:
-                for event in burst:
-                    if self.player2 is None or self.player2.cancelled:
-                        return []
-                    self.desktop.send(event)
+                enter_lane_burst(
+                    clicks,
+                    len(active),
+                    self.desktop.send,
+                    time.sleep,
+                    cancelled=lambda: self.player2 is None or self.player2.cancelled,
+                )
             except Exception as exc:
                 self._set_status(f"Hướng 2 lỗi Enter: {exc}.")
                 return []
-            time.sleep(0.5)
+            time.sleep(0.6)
             if self.player2 is None or self.player2.cancelled:
                 return []
             paused: list[str] = []
