@@ -307,6 +307,8 @@ VPN trên PC: một nút Bật VPN
 không đưa lên VPS.
 
 Lần sau chỉ bấm đúp CHAY-O-DAY.cmd (hoặc icon Desktop). Máy tự hỏi hub bản mới.
+Cửa sổ đang mở tự tải bản mới rồi tự mở lại. Không cần ấn gì.
+Mở máy: tự chạy nếu đã mở một lần (Startup + PcMacroAuto).
 Muốn cập nhật im lặng: python -m pc_macro update
 Đồng bộ kịch bản: python -m pc_macro pull   /   python -m pc_macro push
 Kiểm tra máy: python -m pc_macro doctor
@@ -503,14 +505,14 @@ foreach ($LinkPath in @(
   $Shortcut.Description = "Go so roi Enter — tự cập nhật từ hub"
   $Shortcut.Save()
 }
-$Action = New-ScheduledTaskAction -Execute $Python -Argument "-m pc_macro update" -WorkingDirectory $Root
+$Action = New-ScheduledTaskAction -Execute $Python -Argument "-m pc_macro" -WorkingDirectory $Root
 $Trigger = New-ScheduledTaskTrigger -AtLogOn
 try {
-  Register-ScheduledTask -TaskName "PcMacroUpdate" -Action $Action -Trigger $Trigger -Force | Out-Null
+  Register-ScheduledTask -TaskName "PcMacroAuto" -Action $Action -Trigger $Trigger -Force | Out-Null
 } catch {
-  schtasks /Create /TN "PcMacroUpdate" /TR "`"$Python`" -m pc_macro update" /SC ONLOGON /F | Out-Null
+  schtasks /Create /TN "PcMacroAuto" /TR "`"$Python`" -m pc_macro" /SC ONLOGON /F | Out-Null
 }
-Write-Host "Da cai. Lan sau may tu cap nhat, khong can tai zip."
+Write-Host "Da cai. May tu cap nhat va tu mo cua so, khong can an."
 Write-Host "Mo cua so Ghi / Lam lai. F8 de dung."
 & $Python -m pc_macro
 """

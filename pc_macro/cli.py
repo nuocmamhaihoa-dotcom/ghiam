@@ -181,7 +181,7 @@ def _sync(store: MacroStore, action: str, name: str | None) -> int:
 
 
 def _run_update(*, then_gui: bool) -> int:
-    result = apply_if_needed(relaunch=False)
+    result = apply_if_needed(relaunch=then_gui)
     if result.get("error"):
         print(result["error"])
         return 1 if not then_gui else _launch_gui(skip_update=True)
@@ -190,6 +190,8 @@ def _run_update(*, then_gui: bool) -> int:
     elif result.get("updated"):
         applied = result.get("applied") or {}
         print(f"Đã tự cập nhật lên bản {applied.get('build') or '?'}.")
+        if result.get("relaunch"):
+            return 0
     else:
         current = result.get("current") or {}
         print(f"Đã là bản mới nhất ({current.get('build') or '?'}).")
@@ -205,6 +207,8 @@ def _launch_gui(*, skip_update: bool = False) -> int:
         result = apply_if_needed(relaunch=True)
         if result.get("relaunch"):
             return 0
+        if result.get("updated"):
+            return _launch_gui(skip_update=True)
     try:
         from pc_macro.gui import main as gui_main
     except Exception as exc:

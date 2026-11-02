@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import sys
 import tempfile
@@ -1359,7 +1360,16 @@ class CliTests(unittest.TestCase):
 
 class UpdateTests(unittest.TestCase):
     def test_needs_update_and_apply_keeps_data(self) -> None:
-        from pc_macro.updater import apply_package, needs_update, skip_update
+        from pc_macro.updater import (
+            apply_if_needed,
+            apply_package,
+            autostart_cmd_text,
+            ensure_autostart,
+            needs_update,
+            poll_seconds,
+            relaunch_cmd_text,
+            skip_update,
+        )
         from pc_macro.version import REQUIRES, digest_files, package_info
 
         self.assertTrue(needs_update({"build": 1, "digest": "a"}, {"build": 2, "digest": "b"}))
@@ -1403,6 +1413,90 @@ class UpdateTests(unittest.TestCase):
             self.assertTrue((root / "CHAY-O-DAY.cmd").is_file())
             info = package_info(files)
             self.assertEqual(info["digest"], applied["digest"])
+
+        script = relaunch_cmd_text(Path("C:/pc-macro"), python=r"C:\Python312\python.exe", pid=4321, hub="http://hub")
+        self.assertIn("4321", script)
+        self.assertIn("-m pc_macro --updated", script)
+        self.assertIn(r"C:\Python312\python.exe", script)
+        self.assertIn("tasklist", script)
+        boot = autostart_cmd_text(Path("C:/pc-macro"), python=r"C:\Python312\python.exe", hub="http://hub")
+        self.assertIn("-m pc_macro", boot)
+        self.assertNotIn("--updated", boot)
+        self.assertIn("http://hub", boot)
+        self.assertGreaterEqual(poll_seconds(), 5)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "pc_macro").mkdir()
+            (root / "pc_macro" / "gui.py").write_text("OLD = 1\n", encoding="utf-8")
+            (root / "pc_macro" / "version.py").write_text("PC_MACRO_BUILD = 1\n", encoding="utf-8")
+            incoming = {
+                "pc_macro/gui.py": b"NEW = 2\n",
+                "pc_macro/version.py": b"PC_MACRO_BUILD = 9\n",
+            }
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w") as archive:
+                for name, raw in incoming.items():
+                    archive.writestr(f"pc-macro/{name}", raw)
+            zip_bytes = buf.getvalue()
+            remote = {
+                "build": 9,
+                "digest": digest_files(incoming),
+            }
+
+            def fetch(request: object, _timeout: float) -> tuple[int, bytes]:
+                url = str(getattr(request, "full_url", request))
+                if url.endswith("/v1/pc-macro/version"):
+                    return 200, json.dumps(remote).encode("utf-8")
+                if url.endswith("/tai/pc-macro.zip"):
+                    return 200, zip_bytes
+                return 404, b""
+
+            launched: list[str] = []
+
+            def relaunch(folder: Path) -> bool:
+                launched.append(str(folder))
+                return True
+
+            waiting = apply_if_needed(
+                relaunch=True,
+                fetch=fetch,
+                root=root,
+                hub="http://hub",
+                relaunch_fn=relaunch,
+                busy=True,
+            )
+            self.assertTrue(waiting["waiting"])
+            self.assertFalse(waiting["updated"])
+            self.assertEqual(launched, [])
+            self.assertIn("OLD = 1", (root / "pc_macro" / "gui.py").read_text(encoding="utf-8"))
+
+            done = apply_if_needed(
+                relaunch=True,
+                fetch=fetch,
+                root=root,
+                hub="http://hub",
+                relaunch_fn=relaunch,
+                busy=False,
+            )
+            self.assertTrue(done["updated"])
+            self.assertTrue(done["relaunch"])
+            self.assertEqual(launched, [str(root)])
+            self.assertIn("NEW = 2", (root / "pc_macro" / "gui.py").read_text(encoding="utf-8"))
+
+            startup = Path(tmp) / "Startup"
+            tasks: list[list[str]] = []
+            pin = ensure_autostart(
+                root,
+                python=r"C:\Python312\python.exe",
+                hub="http://hub",
+                startup_dir=startup,
+                run_task=lambda argv: tasks.append(argv) or 0,
+            )
+            self.assertTrue((root / "data" / "updates" / "autostart.cmd").is_file())
+            self.assertTrue((startup / "Go-so-roi-Enter.cmd").is_file())
+            self.assertIn("PcMacroAuto", " ".join(tasks[0]))
+            self.assertTrue(pin["task"])
 
 
 class _FakeWin:

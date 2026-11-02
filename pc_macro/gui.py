@@ -54,7 +54,16 @@ from pc_macro.script import (
 )
 from pc_macro.session import Player, Recorder, ignore_window
 from pc_macro.store import MacroStore
-from pc_macro.updater import consume_just_updated
+from pc_macro.updater import (
+    apply_if_needed,
+    consume_just_updated,
+    ensure_autostart,
+    local_info,
+    needs_update,
+    poll_seconds,
+    remote_info,
+    skip_update,
+)
 from pc_macro.version import PC_MACRO_BUILD
 from pc_macro.vpn import KIND_LABELS, VpnClient, status_label
 from pc_macro.win_focus import (
@@ -150,6 +159,8 @@ class App:
         self._picking_lane_index: int | None = None
         self._picking_frame_index: int | None = None
         self._run_after_pick = False
+        self._update_pending = False
+        self._updating = False
         self._mods = {"ctrl": False, "shift": False, "alt": False, "cmd": False}
         self._build()
         self._fill_vpn()
@@ -167,7 +178,9 @@ class App:
     def run(self) -> None:
         self.desktop.start()
         self.root.after(200, self._vpn_autostart)
+        self.root.after(400, self._install_autostart)
         self.root.after(900, self._poll_run_cmd)
+        self.root.after(2500, self._poll_update)
         self.root.mainloop()
 
     def _card(self, parent: tk.Misc, title: str) -> tk.Frame:
@@ -1220,6 +1233,7 @@ class App:
         except tk.TclError:
             pass
         self.status.set(f"Đã tắt. {'Chờ Tiếp tục tại ' if self.lanes.waiting else 'Tiếp theo: '}{nxt}.")
+        self.root.after(400, self._flush_pending_update)
 
     def save_lanes(self) -> None:
         self._persist_lanes(silent=False)
@@ -1435,6 +1449,96 @@ class App:
 
         threading.Thread(target=work, daemon=True).start()
 
+    def _install_autostart(self) -> None:
+        threading.Thread(target=self._install_autostart_worker, daemon=True).start()
+
+    def _install_autostart_worker(self) -> None:
+        if skip_update():
+            return
+        try:
+            ensure_autostart()
+        except OSError:
+            return
+
+    def _poll_update(self) -> None:
+        try:
+            wait_ms = int(poll_seconds() * 1000)
+            self.root.after(wait_ms, self._poll_update)
+        except tk.TclError:
+            return
+        if skip_update() or self._updating:
+            return
+        threading.Thread(target=self._update_worker, daemon=True).start()
+
+    def _update_worker(self) -> None:
+        try:
+            remote = remote_info()
+            local = local_info()
+        except Exception:
+            return
+        if not needs_update(local, remote):
+            return
+        self.root.after(0, self._finish_downloaded_update)
+
+    def _finish_downloaded_update(self) -> None:
+        if self._busy():
+            self._update_pending = True
+            self._set_status("Có bản mới. Xong nhịp đang chạy sẽ tự cập nhật, không cần bấm.")
+            return
+        self._apply_pending_update()
+
+    def _apply_pending_update(self) -> None:
+        if self._updating or skip_update():
+            return
+        if self._busy():
+            self._update_pending = True
+            return
+        self._updating = True
+        self._update_pending = False
+        self._persist(silent=True)
+        self._persist_lanes(silent=True)
+        self._set_status("Đang tự tải bản mới — cửa sổ sẽ tự mở lại, không cần bấm.")
+
+        def work() -> None:
+            result = apply_if_needed(relaunch=True, busy=False)
+            self.root.after(0, lambda: self._after_silent_update(result))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _after_silent_update(self, result: dict[str, Any]) -> None:
+        if result.get("relaunch"):
+            self._quit_for_update()
+            return
+        self._updating = False
+        if result.get("updated"):
+            self._set_status("Đã ghi bản mới. Đang mở lại cửa sổ.")
+            again = apply_if_needed(relaunch=True)
+            if again.get("relaunch"):
+                self._quit_for_update()
+                return
+        if result.get("error"):
+            self._set_status("Tự cập nhật lỗi: " + str(result.get("error")) + ". Sẽ thử lại.")
+
+    def _quit_for_update(self) -> None:
+        self.stop_all()
+        self._close_overlay()
+        self._close_framer()
+        self._close_painter()
+        self._persist(silent=True)
+        self._persist_lanes(silent=True)
+        try:
+            self.desktop.stop()
+        except Exception:
+            pass
+        try:
+            self.root.destroy()
+        except tk.TclError:
+            pass
+
+    def _flush_pending_update(self) -> None:
+        if self._update_pending and not self._busy() and not self._updating:
+            self.root.after(300, self._apply_pending_update)
+
     def _poll_run_cmd(self) -> None:
         try:
             self.root.after(1200, self._poll_run_cmd)
@@ -1584,6 +1688,7 @@ class App:
             self.root.after(0, self._paint_run_buttons)
             self.root.after(0, self.root.deiconify)
             self._post_run({"play_cmd": "", "status": "idle"})
+            self.root.after(0, self._flush_pending_update)
         self.root.after(0, self._refresh_lanes)
         self.root.after(0, lambda: self._persist_lanes(silent=True))
         if self.lanes.waiting and not self.lanes.peek():

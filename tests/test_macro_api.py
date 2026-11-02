@@ -121,6 +121,7 @@ class MacroHubPageTests(unittest.TestCase):
         self.assertIn("F9", home.text)
         self.assertIn("/tai/pc-macro.zip", home.text)
         self.assertIn("tự&nbsp;cập&nbsp;nhật", home.text)
+        self.assertIn("không&nbsp;cần&nbsp;ấn", home.text)
         self.assertIn("CHAY-O-DAY.cmd", home.text)
         self.assertIn("giải&nbsp;nén", home.text)
         self.assertIn("/v1/macros", home.text)
