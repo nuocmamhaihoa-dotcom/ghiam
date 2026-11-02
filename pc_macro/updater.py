@@ -210,8 +210,9 @@ def _write_stamp(root: Path, stamp: dict[str, Any], *, just_updated: bool) -> No
 
 
 def _ensure_requires() -> None:
-    if importlib.util.find_spec("pynput") is None:
-        subprocess.run([sys.executable, "-m", "pip", "install", "--user", "pynput"], check=False)
+    for module, package in (("pynput", "pynput"), ("PIL", "Pillow")):
+        if importlib.util.find_spec(module) is None:
+            subprocess.run([sys.executable, "-m", "pip", "install", "--user", package], check=False)
 
 
 def _relaunch(root: Path) -> bool:

@@ -5,7 +5,11 @@ from __future__ import annotations
 import sys
 from typing import Any
 
-from PIL import Image, ImageGrab
+try:
+    from PIL import Image, ImageGrab
+except ImportError:  # pragma: no cover
+    Image = None  # type: ignore[assignment]
+    ImageGrab = None  # type: ignore[assignment]
 
 from pc_macro.paint import paint_point
 from pc_macro.script import compile_script
@@ -250,6 +254,8 @@ def overlay_banner(
 def current_screen_size(fallback: tuple[int, int] | None = None) -> tuple[int, int]:
     """Width and height of the desktop the clicks must land on."""
     try:
+        if ImageGrab is None:
+            raise RuntimeError("no pillow")
         image = ImageGrab.grab()
         width, height = int(image.size[0]), int(image.size[1])
         if width > 0 and height > 0:

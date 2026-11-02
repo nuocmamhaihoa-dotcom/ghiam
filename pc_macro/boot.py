@@ -27,6 +27,11 @@ def checks() -> list[tuple[str, bool, str]]:
             importlib.util.find_spec("pynput") is not None,
             "pip install pynput",
         ),
+        (
+            "Pillow",
+            importlib.util.find_spec("PIL") is not None,
+            "pip install Pillow",
+        ),
     ]
     return rows
 

@@ -1109,13 +1109,15 @@ class CliTests(unittest.TestCase):
 class UpdateTests(unittest.TestCase):
     def test_needs_update_and_apply_keeps_data(self) -> None:
         from pc_macro.updater import apply_package, needs_update, skip_update
-        from pc_macro.version import digest_files, package_info
+        from pc_macro.version import REQUIRES, digest_files, package_info
 
         self.assertTrue(needs_update({"build": 1, "digest": "a"}, {"build": 2, "digest": "b"}))
         self.assertFalse(needs_update({"build": 2, "digest": "b"}, {"build": 2, "digest": "b"}))
         self.assertFalse(needs_update({"build": 3, "digest": "c"}, {"build": 2, "digest": "b"}))
         self.assertTrue(needs_update({"build": 2, "digest": "old"}, {"build": 2, "digest": "new"}))
         self.assertTrue(skip_update(Path(__file__).resolve().parents[1]))
+        self.assertIn("pynput", REQUIRES)
+        self.assertIn("Pillow", REQUIRES)
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1255,6 +1257,7 @@ class BootTests(unittest.TestCase):
         rows = {name: ok for name, ok, _detail in checks()}
         self.assertTrue(rows["thu muc phan mem"])
         self.assertTrue(rows["python"])
+        self.assertIn("Pillow", rows)
         code = print_report()
         self.assertEqual(code, 0 if ready() else 1)
         self.assertEqual(main(["doctor"]), code)
