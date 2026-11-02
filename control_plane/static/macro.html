@@ -7,6 +7,7 @@
   <meta http-equiv="content-language" content="vi" />
   <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate" />
   <title>Gõ số rồi Enter</title>
+  <meta name="ui-build" content="20261102-2" />
   <style>
     html, body, button, input, textarea {
       font-synthesis: none;
@@ -1034,9 +1035,18 @@
     } else if (waiting2 && pausedShow !== "—") {
       $("current2").textContent = "Đã lưu " + pausedShow + " — bấm Tiếp tục";
     } else {
+      var shown = now.slice();
+      if (!shown.length && prefix2().length === 5) {
+        var preview = bounds2();
+        var bump = step2();
+        for (var p = 0; p < LANE_COUNT; p++) {
+          var num = parseInt(preview.start, 10) + p * bump;
+          if (num <= parseInt(preview.end, 10)) shown.push(prefix2() + pad5(num));
+        }
+      }
       $("current2").textContent = lastUsed2.length
-        ? ("Sẽ gõ 4 làn: " + (now.join(" · ") || "—") + "   (vừa xong: " + lastUsed2.join(" · ") + ")")
-        : ("Sẽ gõ 4 làn: " + (now.join(" · ") || "—"));
+        ? ("Sẽ gõ 4 làn: " + (shown.join(" · ") || "—") + "   (vừa xong: " + lastUsed2.join(" · ") + ")")
+        : ("Sẽ gõ 4 làn: " + (shown.join(" · ") || "—"));
     }
     for (var i = 0; i < LANE_COUNT; i++) {
       var box = $("lane" + i);
@@ -1164,7 +1174,13 @@
     if (prefix2().length !== 5) { setStatus2("Hướng 2: nhập đủ 5 ký tự cố định.", "err"); return; }
     if (!nextActive2().length) {
       if (waiting2) { setStatus2("Hướng 2 đã lưu " + codesText2(pausedCodes2, paused2) + ". Bấm Tiếp tục cho trình duyệt đã dừng.", "err"); return; }
-      setStatus2("Hướng 2 đã hết dãy. Đổi số bắt đầu / kết thúc để chạy lại.", "err");
+      resetCurrents2();
+      lastUsed2 = [];
+      flagged2 = [];
+      renderFlags2();
+    }
+    if (!nextActive2().length) {
+      setStatus2("Hướng 2: nhập số bắt đầu / kết thúc còn trong dãy.", "err");
       return;
     }
     playing2 = true;
@@ -1267,9 +1283,13 @@
         frames2 = Array.isArray(item.numbers.watch_frames) ? item.numbers.watch_frames.slice() : [frame2, null, null, null];
         while (frames2.length < LANE_COUNT) frames2.push(null);
         if (item.numbers.change_threshold) $("threshold2").value = item.numbers.change_threshold;
+        if (exhausted2 && !waiting2) {
+          resetCurrents2();
+          lastUsed2 = [];
+        }
         showLanes();
         if (waiting2) setStatus2("Đã mở hướng 2. Đang chờ Tiếp tục tại " + codesText2(pausedCodes2, paused2) + ".");
-        else if (item.numbers.prefix) setStatus2("Đã mở hướng 2 đã lưu. Bấm Bắt đầu 2.");
+        else if (item.numbers.prefix) setStatus2("Đã mở hướng 2. Bấm Bắt đầu 2.");
       })
       .catch(function () {});
   }
