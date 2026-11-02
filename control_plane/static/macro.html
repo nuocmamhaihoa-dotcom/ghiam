@@ -7,7 +7,7 @@
   <meta http-equiv="content-language" content="vi" />
   <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate" />
   <title>Gõ số rồi Enter</title>
-  <meta name="ui-build" content="20261102-5" />
+    <meta name="ui-build" content="20261102-6" />
   <style>
     html, body, button, input, textarea {
       font-synthesis: none;
@@ -240,6 +240,22 @@
       font-style: normal;
       color: #5c6770;
     }
+    .lanes .line .lane-flags {
+      font-size: 0.72rem;
+      color: #5c6770;
+      min-height: 0.9em;
+    }
+    .lanes .line .lane-acts {
+      display: flex;
+      gap: 4px;
+      margin-top: 4px;
+    }
+    .lanes .line .mini {
+      min-height: 32px;
+      padding: 0 8px;
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
     .lanes .line.bound { border-color: #0b6bcb; background: #f3f8fd; }
     .lanes .line.bound .lane-bind { color: #0b6bcb; font-weight: 700; }
     .lanes .line.on { background: #fff1e8; border-color: #c2410c; }
@@ -281,8 +297,8 @@
   </section>
 
   <section class="card" id="dir2">
-    <label>Hướng&nbsp;2&nbsp;—&nbsp;4&nbsp;mã&nbsp;Enter&nbsp;đồng&nbsp;loạt,&nbsp;mỗi&nbsp;dãy&nbsp;một&nbsp;trình&nbsp;duyệt</label>
-    <p class="hint">Gắn&nbsp;ô&nbsp;trên&nbsp;PC:&nbsp;bấm&nbsp;<b>Gắn&nbsp;4&nbsp;ô</b>,&nbsp;rồi&nbsp;ấn&nbsp;ô&nbsp;5&nbsp;số&nbsp;từng&nbsp;website.&nbsp;Máy&nbsp;gõ&nbsp;4&nbsp;mã&nbsp;rồi&nbsp;Enter&nbsp;đồng&nbsp;loạt.&nbsp;Chỉ&nbsp;lưu&nbsp;mã&nbsp;của&nbsp;trình&nbsp;duyệt&nbsp;có&nbsp;khung&nbsp;5&nbsp;số&nbsp;đổi&nbsp;≥&nbsp;20%.</p>
+    <label>Hướng&nbsp;2&nbsp;—&nbsp;chọn&nbsp;từng&nbsp;trình&nbsp;duyệt&nbsp;rồi&nbsp;ô&nbsp;5&nbsp;số</label>
+    <p class="hint">Mỗi&nbsp;thẻ:&nbsp;<b>Gắn&nbsp;N</b>&nbsp;trên&nbsp;PC&nbsp;=&nbsp;bấm&nbsp;cửa&nbsp;sổ&nbsp;website&nbsp;rồi&nbsp;dòng&nbsp;ô&nbsp;5&nbsp;số.&nbsp;<b>Gắn&nbsp;4&nbsp;ô</b>&nbsp;vẫn&nbsp;gắn&nbsp;lần&nbsp;lượt.&nbsp;<b>Tiếp&nbsp;N</b>&nbsp;chỉ&nbsp;mở&nbsp;lại&nbsp;trình&nbsp;đó&nbsp;khi&nbsp;giao&nbsp;diện&nbsp;đổi.&nbsp;Máy&nbsp;gõ&nbsp;4&nbsp;mã&nbsp;rồi&nbsp;Enter&nbsp;đồng&nbsp;loạt.&nbsp;Chỉ&nbsp;lưu&nbsp;mã&nbsp;của&nbsp;trình&nbsp;có&nbsp;khung&nbsp;đổi&nbsp;≥&nbsp;20%.</p>
     <label for="prefix2">5 ký tự cố định</label>
     <input id="prefix2" class="wide" type="text" maxlength="5" autocomplete="off" spellcheck="false" placeholder="SPXAB" />
     <div class="pair">
@@ -310,13 +326,13 @@
         <input id="threshold2" type="number" value="20" min="1" max="100" />
       </div>
     </div>
-    <p class="hint" id="frame2Label">Chưa gắn khung 5 số — trên PC bấm Gắn 4 ô, ấn ô 5 số từng website.</p>
-    <p class="status" id="status2">Gắn 4 ô trên PC, rồi Bắt đầu 2. Mỗi thẻ = một website + ô 5 số tăng dần.</p>
+    <p class="hint" id="frame2Label">Chưa gắn — trên PC bấm Gắn N: cửa sổ website rồi dòng ô 5 số.</p>
+    <p class="status" id="status2">Mỗi thẻ: Gắn cửa sổ + ô, Bắt đầu 2, Tiếp N khi trình đó đổi giao diện.</p>
     <div class="lanes" id="lanes2">
-      <div class="line" id="lane0" data-lane="0"><b>Trình 1</b><span class="lane-code">—</span><em class="lane-bind">Chưa gắn ô</em></div>
-      <div class="line" id="lane1" data-lane="1"><b>Trình 2</b><span class="lane-code">—</span><em class="lane-bind">Chưa gắn ô</em></div>
-      <div class="line" id="lane2" data-lane="2"><b>Trình 3</b><span class="lane-code">—</span><em class="lane-bind">Chưa gắn ô</em></div>
-      <div class="line" id="lane3" data-lane="3"><b>Trình 4</b><span class="lane-code">—</span><em class="lane-bind">Chưa gắn ô</em></div>
+      <div class="line" id="lane0" data-lane="0"><b>Trình 1</b><span class="lane-code">—</span><em class="lane-bind">Chưa gắn ô</em><small class="lane-flags"></small><div class="lane-acts"><button type="button" class="mini" data-bind="0">Gắn 1</button><button type="button" class="mini go" data-resume="0">Tiếp 1</button></div></div>
+      <div class="line" id="lane1" data-lane="1"><b>Trình 2</b><span class="lane-code">—</span><em class="lane-bind">Chưa gắn ô</em><small class="lane-flags"></small><div class="lane-acts"><button type="button" class="mini" data-bind="1">Gắn 2</button><button type="button" class="mini go" data-resume="1">Tiếp 2</button></div></div>
+      <div class="line" id="lane2" data-lane="2"><b>Trình 3</b><span class="lane-code">—</span><em class="lane-bind">Chưa gắn ô</em><small class="lane-flags"></small><div class="lane-acts"><button type="button" class="mini" data-bind="2">Gắn 3</button><button type="button" class="mini go" data-resume="2">Tiếp 3</button></div></div>
+      <div class="line" id="lane3" data-lane="3"><b>Trình 4</b><span class="lane-code">—</span><em class="lane-bind">Chưa gắn ô</em><small class="lane-flags"></small><div class="lane-acts"><button type="button" class="mini" data-bind="3">Gắn 4</button><button type="button" class="mini go" data-resume="3">Tiếp 4</button></div></div>
     </div>
     <div class="row">
       <button type="button" class="go" id="btnStart2">Bắt&nbsp;đầu&nbsp;2</button>
@@ -453,6 +469,8 @@
   var currentDigits2 = "00001";
   var exhausted2 = false;
   var flagged2 = [];
+  var flaggedLanes2 = [[], [], [], []];
+  var laneTitles2 = ["", "", "", ""];
   var paused2 = "";
   var pausedCodes2 = [];
   var pausedLanes2 = ["", "", "", ""];
@@ -979,7 +997,10 @@
     return laneClicks2.filter(function (click) { return click && click.x != null; }).length;
   }
   function bindLabel2(index) {
-    return laneClicks2[index] && laneClicks2[index].x != null ? "Đã gắn ô 5 số" : "Chưa gắn ô";
+    var click = laneClicks2[index];
+    if (!click || click.x == null) return "Chưa gắn ô";
+    if (click.wx != null && click.wx >= 0) return "Đã gắn cửa sổ + ô";
+    return "Đã gắn ô 5 số";
   }
   function laneCodeOf(index) {
     if (waitingLanes2[index]) return pausedLanes2[index] || "";
@@ -994,8 +1015,15 @@
     var shown = laneCodeOf(index);
     var codeEl = box.querySelector(".lane-code");
     var bindEl = box.querySelector(".lane-bind");
+    var flagsEl = box.querySelector(".lane-flags");
+    var titleEl = box.querySelector("b");
     if (codeEl) codeEl.textContent = shown || "—";
     if (bindEl) bindEl.textContent = bindLabel2(index) + (waitingLanes2[index] ? " · dừng" : "");
+    if (titleEl) titleEl.textContent = laneTitles2[index] || ("Trình " + (index + 1));
+    if (flagsEl) {
+      var saved = (flaggedLanes2[index] || []).slice(-4);
+      flagsEl.textContent = saved.length ? ("Lưu: " + saved.join(" · ")) : "";
+    }
     var klass = "line";
     if (laneClicks2[index] && laneClicks2[index].x != null) klass += " bound";
     if (waitingLanes2[index]) klass += " stop";
@@ -1007,13 +1035,13 @@
     var n = boundCount2();
     var ready = frames2.filter(Boolean).length;
     if (n >= LANE_COUNT) {
-      $("frame2Label").textContent = "Đã gắn 4 ô 5 số trên PC. Khung theo dõi tự lấy quanh mỗi ô" + (ready ? " (" + ready + " khung)." : ".");
+      $("frame2Label").textContent = "Đã gắn 4 trình trên PC. Khung theo dõi tự lấy quanh mỗi ô" + (ready ? " (" + ready + " khung)." : ".");
     } else if (n) {
-      $("frame2Label").textContent = "Đã gắn " + n + "/4 ô — trên PC bấm Gắn 4 ô, ấn lần lượt ô 5 số.";
+      $("frame2Label").textContent = "Đã gắn " + n + "/4 trình — trên PC bấm Gắn N trên thẻ còn thiếu.";
     } else if (frame2) {
       $("frame2Label").textContent = "Đã chọn khung 5 số: " + frame2.w + "×" + frame2.h;
     } else {
-      $("frame2Label").textContent = "Chưa gắn khung 5 số — trên PC bấm Gắn 4 ô, ấn ô 5 số từng website.";
+      $("frame2Label").textContent = "Chưa gắn — trên PC bấm Gắn N: cửa sổ website rồi dòng ô 5 số.";
     }
   }
   function nextActive2() {
@@ -1056,6 +1084,8 @@
   function pauseLane2(index, code) {
     if (!code) return;
     addFlag2(code);
+    if (!flaggedLanes2[index]) flaggedLanes2[index] = [];
+    if (flaggedLanes2[index].indexOf(code) < 0) flaggedLanes2[index].push(code);
     pausedLanes2[index] = code;
     waitingLanes2[index] = true;
     currents2[index] = pad5(code.slice(-5));
@@ -1139,6 +1169,8 @@
         step: step2(),
         last_used: lastUsed2.slice(),
         flagged: flagged2.slice(),
+        flagged_lanes: flaggedLanes2.map(function (items) { return (items || []).slice(); }),
+        lane_titles: laneTitles2.slice(),
         paused: paused2,
         paused_codes: pausedCodes2.slice(),
         paused_lanes: pausedLanes2.slice(),
@@ -1243,20 +1275,45 @@
       oneTurn2();
     }, delay * 1000);
   }
-  function resumePaused2() {
-    var unlocked = pausedLanes2.filter(Boolean);
-    for (var i = 0; i < LANE_COUNT; i++) {
-      if (waitingLanes2[i] && pausedLanes2[i]) currents2[i] = pad5(pausedLanes2[i].slice(-5));
-      waitingLanes2[i] = false;
-      pausedLanes2[i] = "";
-    }
-    waiting2 = false;
-    paused2 = "";
-    pausedCodes2 = [];
+  function resumeLane2(index) {
+    if (!waitingLanes2[index]) return "";
+    var code = pausedLanes2[index] || "";
+    if (code) currents2[index] = pad5(code.slice(-5));
+    waitingLanes2[index] = false;
+    pausedLanes2[index] = "";
+    pausedCodes2 = pausedLanes2.filter(Boolean);
+    paused2 = pausedCodes2[0] || "";
+    waiting2 = waitingLanes2.some(Boolean);
     exhausted2 = false;
     currentDigits2 = currents2[0];
     forcePause2 = false;
+    return code;
+  }
+  function resumePaused2() {
+    var unlocked = pausedLanes2.filter(Boolean);
+    for (var i = 0; i < LANE_COUNT; i++) resumeLane2(i);
     return unlocked.join(" · ");
+  }
+  function continueLane2(index) {
+    if (playing) { setStatus2("Đang chạy hướng 1. Bấm Dừng rồi hãy tiếp tục hướng 2.", "err"); return; }
+    if (!waitingLanes2[index]) { setStatus2("Trình " + (index + 1) + " không đang dừng."); return; }
+    var nxt = resumeLane2(index);
+    showLanes();
+    persist2().catch(function () {});
+    if (playing2) {
+      setStatus2("Tiếp tục trình " + (index + 1) + ": " + (nxt || "—") + ". Các mã khác vẫn chạy.");
+      return;
+    }
+    playing2 = true;
+    setStatus2("Tiếp tục trình " + (index + 1) + " từ " + (nxt || nextLanes()[0] || "—") + ".");
+    if (timer2) window.clearTimeout(timer2);
+    timer2 = window.setTimeout(function () {
+      if (!playing2) return;
+      oneTurn2();
+    }, 0);
+  }
+  function bindLaneHint(index) {
+    setStatus2("Trình " + (index + 1) + ": trên PC bấm Gắn " + (index + 1) + " — bước 1 cửa sổ website, bước 2 dòng ô 5 số, rồi Lưu.");
   }
   function continuePlay2() {
     if (playing) { setStatus2("Đang chạy hướng 1. Bấm Dừng rồi hãy tiếp tục hướng 2.", "err"); return; }
@@ -1317,6 +1374,21 @@
         exhausted2 = !!item.numbers.exhausted && !nextActive2().length;
         lastUsed2 = Array.isArray(item.numbers.last_used) ? item.numbers.last_used.slice() : [];
         flagged2 = Array.isArray(item.numbers.flagged) ? item.numbers.flagged.slice() : [];
+        flaggedLanes2 = [[], [], [], []];
+        if (Array.isArray(item.numbers.flagged_lanes)) {
+          for (var f = 0; f < LANE_COUNT; f++) {
+            var raw = item.numbers.flagged_lanes[f];
+            flaggedLanes2[f] = Array.isArray(raw) ? raw.slice() : (raw ? [raw] : []);
+          }
+        } else if (flagged2.length) {
+          flagged2.forEach(function (code) {
+            var off = parseInt(pad5(code.slice(-5)), 10) - parseInt(pad5(item.numbers.start || "00001"), 10);
+            var found = off >= 0 ? (off / (item.numbers.step || 1)) % LANE_COUNT : -1;
+            if (found >= 0 && flaggedLanes2[found].indexOf(code) < 0) flaggedLanes2[found].push(code);
+          });
+        }
+        laneTitles2 = Array.isArray(item.numbers.lane_titles) ? item.numbers.lane_titles.slice() : ["", "", "", ""];
+        while (laneTitles2.length < LANE_COUNT) laneTitles2.push("");
         pausedLanes2 = Array.isArray(item.numbers.paused_lanes) ? item.numbers.paused_lanes.slice() : ["", "", "", ""];
         while (pausedLanes2.length < LANE_COUNT) pausedLanes2.push("");
         pausedCodes2 = Array.isArray(item.numbers.paused_codes) ? item.numbers.paused_codes.slice() : (item.numbers.paused ? [item.numbers.paused] : []);
@@ -1373,16 +1445,24 @@
     pauseBatch2(codes, threshold2());
   };
   $("btnFrame2").onclick = function () {
-    setStatus2("Gắn ô trên PC: mở phần mềm → Gắn 4 ô → ấn lần lượt ô 5 số trên 4 website. Mỗi lần ấn gắn cửa sổ + ô + khung 5 số quanh ô.");
+    setStatus2("Gắn trên PC: mỗi thẻ Gắn N — bước 1 bấm cửa sổ website, bước 2 bấm dòng ô 5 số, rồi Lưu. Gắn 4 ô vẫn gắn lần lượt 4 ô.");
   };
   $("lanes2").onclick = function (ev) {
+    var btn = ev.target.closest ? ev.target.closest("button") : null;
+    if (btn) {
+      var bindAt = btn.getAttribute("data-bind");
+      var resumeAt = btn.getAttribute("data-resume");
+      if (bindAt != null) { bindLaneHint(parseInt(bindAt, 10)); return; }
+      if (resumeAt != null) { continueLane2(parseInt(resumeAt, 10)); return; }
+      return;
+    }
     var card = ev.target.closest ? ev.target.closest(".line") : ev.target;
     if (!card || !card.id || card.id.indexOf("lane") !== 0) return;
     var index = parseInt(card.getAttribute("data-lane") || card.id.slice(4), 10);
     if (isNaN(index)) return;
     var code = laneCodeOf(index) || "—";
     var bound = bindLabel2(index);
-    setStatus2("Trình " + (index + 1) + " (" + code + "): " + bound + ". Trên PC bấm Gắn 4 ô, rồi ấn ô 5 số của website này ở bước " + (index + 1) + "/4.");
+    setStatus2("Trình " + (index + 1) + " (" + code + "): " + bound + ". Trên PC bấm Gắn " + (index + 1) + " — cửa sổ website rồi dòng ô 5 số.");
   };
   $("btnStop").onclick = stopPlay;
   $("btnFlag").onclick = flagNow;

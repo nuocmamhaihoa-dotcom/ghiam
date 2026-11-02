@@ -201,9 +201,18 @@ def _launch_gui(*, skip_update: bool = False) -> int:
         result = apply_if_needed(relaunch=True)
         if result.get("relaunch"):
             return 0
-    from pc_macro.gui import main as gui_main
-
-    gui_main()
+    try:
+        from pc_macro.gui import main as gui_main
+    except Exception as exc:
+        print(f"Không mở được cửa sổ: {exc}")
+        print(install_hint())
+        print("Cần Python 3.11+ (tick tcl/tk) rồi chạy Cai-dat.ps1 trong thư mục phần mềm.")
+        return 1
+    try:
+        gui_main()
+    except SystemExit as exc:
+        code = exc.code
+        return int(code) if isinstance(code, int) else 1
     return 0
 
 

@@ -165,13 +165,15 @@ Cài một lần:
 Sau đó không cần tải zip hay cài lại. Mỗi lần mở (hoặc khi đăng nhập Windows)
 máy tự hỏi hub bản mới, tự tải, tự ghi đè file, rồi tự mở lại.
 
-Hướng 2: Gắn 4 ô = bấm ô 5 số từng website. Bắt đầu 2 gõ 4 mã rồi Enter đồng loạt.
-Chỉ lưu mã của trình duyệt có khung đổi ≥ 20%. VPN trên PC: một nút Bật VPN (DNS, IPv6,
-kill switch, WARP, VPN Gate, miễn phí). Mật khẩu chỉ lưu trên máy, không đưa lên VPS.
+Hướng 2: mỗi thẻ Gắn N = bấm cửa sổ website rồi dòng ô 5 số. Gắn 4 ô vẫn gắn lần lượt.
+Bắt đầu 2 gõ rồi Enter đồng loạt. Chỉ lưu mã của trình duyệt có khung đổi ≥ 20%.
+Tiếp N chỉ mở lại trình đó. VPN trên PC: một nút Bật VPN (DNS, IPv6, kill switch,
+WARP, VPN Gate, miễn phí). Mật khẩu chỉ lưu trên máy, không đưa lên VPS.
 
 Lần sau chỉ cần:
   .\\Chay.cmd
-hoặc icon trên Desktop / Menu Start. Muốn cập nhật im lặng:
+hoặc icon trên Desktop / Menu Start. Nếu cửa sổ không mở, chạy lại Cai-dat.ps1.
+Muốn cập nhật im lặng:
   python -m pc_macro update
 
 Đồng bộ kịch bản:
@@ -182,8 +184,25 @@ hoặc icon trên Desktop / Menu Start. Muốn cập nhật im lặng:
 _RUN_CMD = r"""@echo off
 cd /d "%~dp0"
 if not defined PC_MACRO_HUB set PC_MACRO_HUB=http://103.200.20.245:8088
-python -m pc_macro
-if errorlevel 1 py -3 -m pc_macro
+set "PY="
+where py >nul 2>nul && set "PY=py -3"
+if not defined PY where python >nul 2>nul && set "PY=python"
+if not defined PY (
+  echo Can Python 3.11+ tu python.org. Tick Add python.exe to PATH, roi chay Cai-dat.ps1.
+  pause
+  exit /b 1
+)
+%PY% -c "import tkinter, pynput" >nul 2>nul
+if errorlevel 1 (
+  echo Dang cai pynput...
+  %PY% -m pip install --disable-pip-version-check pynput
+)
+%PY% -m pc_macro
+if errorlevel 1 (
+  echo Khong mo duoc cua so. Chay Cai-dat.ps1 trong thu muc nay.
+  pause
+  exit /b 1
+)
 """
 
 _INSTALL_PS1 = r"""param(
@@ -193,15 +212,37 @@ _INSTALL_PS1 = r"""param(
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $Root
-$Py = Get-Command python -ErrorAction SilentlyContinue
-if (-not $Py) { $Py = Get-Command py -ErrorAction SilentlyContinue }
-if (-not $Py) {
-  Write-Host "Can Python 3.11+. Cai tu python.org (tick Add to PATH) roi mo lai PowerShell."
+function Find-Python {
+  $pyLauncher = Get-Command py -ErrorAction SilentlyContinue
+  if ($pyLauncher) {
+    try {
+      $resolved = & $pyLauncher.Source -3 -c "import sys; print(sys.executable)" 2>$null
+      if ($LASTEXITCODE -eq 0 -and $resolved -and $resolved -notmatch "WindowsApps") { return $resolved.Trim() }
+    } catch {}
+  }
+  foreach ($name in @("python", "python3")) {
+    $cmd = Get-Command $name -ErrorAction SilentlyContinue
+    if ($cmd -and $cmd.Source -and $cmd.Source -notmatch "WindowsApps") { return $cmd.Source }
+  }
+  return $null
+}
+$Python = Find-Python
+if (-not $Python) {
+  Write-Host "Can Python 3.11+. Cai tu python.org (tick Add python.exe to PATH va tcl/tk) roi mo lai PowerShell."
   exit 1
 }
-$Python = $Py.Source
+& $Python -c "import tkinter" 2>$null
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "Python thieu tkinter. Cai lai Python 3.11+ tu python.org, tick tcl/tk."
+  exit 1
+}
 & $Python -m pip install --upgrade pip
 & $Python -m pip install pynput
+& $Python -c "import pynput, tkinter" 2>$null
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "Cai pynput that bai. Mo PowerShell trong thu muc nay roi: $Python -m pip install pynput"
+  exit 1
+}
 [Environment]::SetEnvironmentVariable("PC_MACRO_HUB", $Hub, "User")
 $env:PC_MACRO_HUB = $Hub
 if ($Token) {

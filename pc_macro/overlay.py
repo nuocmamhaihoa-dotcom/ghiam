@@ -40,6 +40,7 @@ class ClickOverlay:
         step: int | None = None,
         noun: str = "nút",
         save_text: str | None = None,
+        phases: int = 1,
     ) -> None:
         self._on_done = on_done
         self._on_cancel = on_cancel
@@ -47,6 +48,8 @@ class ClickOverlay:
         self._awaiting_save = False
         self._noun = noun or "nút"
         self._step = step if step is not None and 0 <= int(step) < RECOVER_CLICKS else None
+        self._phases = 2 if phases >= 2 and self._step is not None else 1
+        self._window_xy: tuple[int, int] | None = None
         self.screen_w = max(1, int(root.winfo_screenwidth()))
         self.screen_h = max(1, int(root.winfo_screenheight()))
         self.clicks = sanitize_clicks(clicks or [])
@@ -132,7 +135,23 @@ class ClickOverlay:
         if x < 0 or y < 0:
             return
         if self._step is not None:
-            self.clicks = upsert_slot(self.clicks, self._step, x, y, self.screen_w, self.screen_h, via="point")
+            if self._phases >= 2 and self._window_xy is None:
+                self._window_xy = (x, y)
+                self._sync_bar()
+                self._redraw()
+                return
+            wx, wy = self._window_xy if self._window_xy is not None else (None, None)
+            self.clicks = upsert_slot(
+                self.clicks,
+                self._step,
+                x,
+                y,
+                self.screen_w,
+                self.screen_h,
+                via="point",
+                wx=wx,
+                wy=wy,
+            )
             self._recording = False
             self._awaiting_save = True
         else:
@@ -162,6 +181,7 @@ class ClickOverlay:
             slots = click_slots(self.clicks)
             slots[self._step] = None
             self.clicks = [item for item in slots if item is not None]
+            self._window_xy = None
         else:
             self.clicks = []
         self._recording = True
@@ -188,13 +208,20 @@ class ClickOverlay:
     def _sync_bar(self) -> None:
         if self._awaiting_save:
             self.btn_save.configure(state="normal")
-            if self._step is not None:
+            if self._step is not None and self._phases >= 2:
+                self.hint.configure(text=f"Trình {self._step + 1}: đã chọn cửa sổ + ô. Bấm Lưu, hoặc Ghi lại.")
+            elif self._step is not None:
                 self.hint.configure(text=f"Đã chọn {self._noun} {self._step + 1}. Bấm Lưu vị trí, hoặc Ghi lại.")
             else:
                 self.hint.configure(text=f"Đã chọn 4 {self._noun}. Bấm Lưu để giữ, hoặc Ghi lại.")
             return
         self.btn_save.configure(state="disabled")
-        if self._recording and self._step is not None:
+        if self._recording and self._step is not None and self._phases >= 2:
+            if self._window_xy is None:
+                self.hint.configure(text=f"Trình {self._step + 1} · bước 1/2: bấm cửa sổ website")
+            else:
+                self.hint.configure(text=f"Trình {self._step + 1} · bước 2/2: bấm dòng ô 5 số")
+        elif self._recording and self._step is not None:
             self.hint.configure(text=f"Bấm trái trên màn hình · {self._noun} {self._step + 1}")
         elif self._recording:
             self.hint.configure(text=f"Bấm trái trên màn hình · {self._noun} {len(self.clicks) + 1}/{RECOVER_CLICKS}")
@@ -210,6 +237,8 @@ class ClickOverlay:
             awaiting_save=self._awaiting_save,
             step=self._step,
             noun=self._noun,
+            phase=0 if self._window_xy is None else 1,
+            phases=self._phases,
         )
         self.canvas.create_rectangle(0, 0, width, 72, fill="#0b6bcb", outline="")
         self.canvas.create_text(20, 24, text=banner, fill=_TEXT, font=("Segoe UI", 16, "bold"), anchor="w")
@@ -251,6 +280,7 @@ def show_click_overlay(
     step: int | None = None,
     noun: str = "nút",
     save_text: str | None = None,
+    phases: int = 1,
 ) -> ClickOverlay:
     return ClickOverlay(
         root,
@@ -261,6 +291,7 @@ def show_click_overlay(
         step=step,
         noun=noun,
         save_text=save_text,
+        phases=phases,
     )
 
 
