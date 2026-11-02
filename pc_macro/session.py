@@ -70,6 +70,10 @@ class Player:
     def cancel(self) -> None:
         self.cancelled = True
 
+    def emit(self, events: list[dict[str, Any]], speed: float = 1.0) -> int:
+        """Replay one batch with compiled delays. Used for the Hướng 2 Enter burst."""
+        return self._emit(sanitize_events(events), speed)
+
     def play(
         self,
         events: list[dict[str, Any]],

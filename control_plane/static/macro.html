@@ -235,6 +235,27 @@
       font-weight: 800;
       letter-spacing: 0.04em;
     }
+    .lanes .line .lane-box {
+      width: 100%;
+      box-sizing: border-box;
+      margin: 2px 0 0;
+      padding: 6px 8px;
+      border: 1px solid #c5cdd4;
+      border-radius: 6px;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 1.05rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      background: #fff;
+    }
+    .lanes .line.on .lane-box { border-color: #c2410c; background: #fff7f0; }
+    .lanes .line .lane-enter {
+      display: none;
+      font-size: 0.78rem;
+      font-weight: 800;
+      color: #c2410c;
+    }
+    .lanes .line.hit .lane-enter { display: inline; }
     .lanes .line .lane-bind {
       font-size: 0.78rem;
       font-style: normal;
@@ -315,7 +336,7 @@
     <div class="pair">
       <div>
         <label for="delay2">Chờ (giây)</label>
-        <input id="delay2" type="number" value="2" min="0" />
+        <input id="delay2" type="number" value="0" min="0" />
       </div>
       <div>
         <label for="step2">Mỗi lần cộng</label>
@@ -329,10 +350,10 @@
     <p class="hint" id="frame2Label">Chưa gắn — trên PC bấm Gắn N: cửa sổ website rồi dòng ô 5 số.</p>
     <p class="status" id="status2">Mỗi thẻ: Gắn cửa sổ + ô, Bắt đầu 2, Tiếp N khi trình đó đổi giao diện.</p>
     <div class="lanes" id="lanes2">
-      <div class="line" id="lane0" data-lane="0"><b>Trình 1</b><span class="lane-code">—</span><em class="lane-bind">Chưa gắn ô</em><small class="lane-flags"></small><div class="lane-acts"><button type="button" class="mini" data-bind="0">Gắn 1</button><button type="button" class="mini go" data-resume="0">Tiếp 1</button></div></div>
-      <div class="line" id="lane1" data-lane="1"><b>Trình 2</b><span class="lane-code">—</span><em class="lane-bind">Chưa gắn ô</em><small class="lane-flags"></small><div class="lane-acts"><button type="button" class="mini" data-bind="1">Gắn 2</button><button type="button" class="mini go" data-resume="1">Tiếp 2</button></div></div>
-      <div class="line" id="lane2" data-lane="2"><b>Trình 3</b><span class="lane-code">—</span><em class="lane-bind">Chưa gắn ô</em><small class="lane-flags"></small><div class="lane-acts"><button type="button" class="mini" data-bind="2">Gắn 3</button><button type="button" class="mini go" data-resume="2">Tiếp 3</button></div></div>
-      <div class="line" id="lane3" data-lane="3"><b>Trình 4</b><span class="lane-code">—</span><em class="lane-bind">Chưa gắn ô</em><small class="lane-flags"></small><div class="lane-acts"><button type="button" class="mini" data-bind="3">Gắn 4</button><button type="button" class="mini go" data-resume="3">Tiếp 4</button></div></div>
+      <div class="line" id="lane0" data-lane="0"><b>Trình 1</b><span class="lane-code">—</span><input class="lane-box" id="laneBox0" maxlength="12" readonly tabindex="-1" /><span class="lane-enter" id="laneEnter0">Enter</span><em class="lane-bind">Chưa gắn ô</em><small class="lane-flags"></small><div class="lane-acts"><button type="button" class="mini" data-bind="0">Gắn 1</button><button type="button" class="mini go" data-resume="0">Tiếp 1</button></div></div>
+      <div class="line" id="lane1" data-lane="1"><b>Trình 2</b><span class="lane-code">—</span><input class="lane-box" id="laneBox1" maxlength="12" readonly tabindex="-1" /><span class="lane-enter" id="laneEnter1">Enter</span><em class="lane-bind">Chưa gắn ô</em><small class="lane-flags"></small><div class="lane-acts"><button type="button" class="mini" data-bind="1">Gắn 2</button><button type="button" class="mini go" data-resume="1">Tiếp 2</button></div></div>
+      <div class="line" id="lane2" data-lane="2"><b>Trình 3</b><span class="lane-code">—</span><input class="lane-box" id="laneBox2" maxlength="12" readonly tabindex="-1" /><span class="lane-enter" id="laneEnter2">Enter</span><em class="lane-bind">Chưa gắn ô</em><small class="lane-flags"></small><div class="lane-acts"><button type="button" class="mini" data-bind="2">Gắn 3</button><button type="button" class="mini go" data-resume="2">Tiếp 3</button></div></div>
+      <div class="line" id="lane3" data-lane="3"><b>Trình 4</b><span class="lane-code">—</span><input class="lane-box" id="laneBox3" maxlength="12" readonly tabindex="-1" /><span class="lane-enter" id="laneEnter3">Enter</span><em class="lane-bind">Chưa gắn ô</em><small class="lane-flags"></small><div class="lane-acts"><button type="button" class="mini" data-bind="3">Gắn 4</button><button type="button" class="mini go" data-resume="3">Tiếp 4</button></div></div>
     </div>
     <div class="row">
       <button type="button" class="go" id="btnStart2">Bắt&nbsp;đầu&nbsp;2</button>
@@ -1129,7 +1150,7 @@
       $("current2").textContent = "Đã lưu " + pausedShow + " — bấm Tiếp tục";
     } else {
       var shown = now.slice();
-      if (!shown.length && prefix2().length === 5) {
+      if (!shown.length && prefix2().length === 5 && !exhausted2 && !lastUsed2.length) {
         var preview = bounds2();
         var bump = step2();
         for (var p = 0; p < LANE_COUNT; p++) {
@@ -1137,9 +1158,13 @@
           if (num <= parseInt(preview.end, 10)) shown.push(prefix2() + pad5(num));
         }
       }
-      $("current2").textContent = lastUsed2.length
-        ? ("Sẽ gõ 4 làn: " + (shown.join(" · ") || "—") + "   (vừa xong: " + lastUsed2.join(" · ") + ")")
-        : ("Sẽ gõ 4 làn: " + (shown.join(" · ") || "—"));
+      if (exhausted2 && lastUsed2.length && !shown.length) {
+        $("current2").textContent = "Hướng 2 đã gõ hết dãy. Vừa xong: " + lastUsed2.join(" · ");
+      } else {
+        $("current2").textContent = lastUsed2.length
+          ? ("Sẽ gõ 4 làn: " + (shown.join(" · ") || "—") + "   (vừa xong: " + lastUsed2.join(" · ") + ")")
+          : ("Sẽ gõ 4 làn: " + (shown.join(" · ") || "—"));
+      }
     }
     for (var i = 0; i < LANE_COUNT; i++) paintLane(i);
     showFrame2();
@@ -1185,19 +1210,47 @@
     return fetch("/v1/macros", { method: "POST", headers: headers(), body: JSON.stringify(body) })
       .then(function (res) { if (!res.ok) throw new Error("Không lưu được hướng 2."); return res.json(); });
   }
-  function flashAllLanes(active, done) {
+  function laneBox(index) {
+    return $("laneBox" + index);
+  }
+  function typeIntoLanes(active, done) {
     for (var i = 0; i < LANE_COUNT; i++) {
-      if (waitingLanes2[i]) {
-        paintLane(i);
-        continue;
-      }
+      var box = laneBox(i);
+      if (box && !waitingLanes2[i]) box.value = "";
       var hit = active.filter(function (item) { return item.i === i; })[0];
-      paintLane(i, hit ? "on" : "");
+      paintLane(i, waitingLanes2[i] ? "" : (hit ? "on" : ""));
     }
-    timer2 = window.setTimeout(function () {
-      for (var i = 0; i < LANE_COUNT; i++) paintLane(i);
-      done();
-    }, 420);
+    var pos = 0;
+    function typeNext() {
+      if (!playing2) { done(); return; }
+      if (pos >= active.length) {
+        active.forEach(function (item) { paintLane(item.i, "on hit"); });
+        setStatus2("Hướng 2 đang ấn Enter đồng loạt trên " + codesText2(active.map(function (item) { return item.code; })) + ".");
+        timer2 = window.setTimeout(function () {
+          active.forEach(function (item) { paintLane(item.i, "on"); });
+          done();
+        }, 380);
+        return;
+      }
+      var item = active[pos];
+      var box = laneBox(item.i);
+      var chars = String(item.code || "").split("");
+      var at = 0;
+      paintLane(item.i, "on");
+      function typeChar() {
+        if (!playing2) { done(); return; }
+        if (box) box.value = chars.slice(0, at + 1).join("");
+        at += 1;
+        if (at >= chars.length) {
+          pos += 1;
+          timer2 = window.setTimeout(typeNext, 50);
+          return;
+        }
+        timer2 = window.setTimeout(typeChar, 40);
+      }
+      typeChar();
+    }
+    typeNext();
   }
   function oneTurn2() {
     if (!playing2) return;
@@ -1211,7 +1264,7 @@
     var codes = active.map(function (item) { return item.code; });
     showLanes();
     setStatus2("Hướng 2 đang gõ " + codesText2(codes) + " rồi Enter đồng loạt. Chỉ lưu mã của trình duyệt đổi ≥" + threshold2() + "%.");
-    flashAllLanes(active, function () {
+    typeIntoLanes(active, function () {
       if (!playing2) return;
       var paused = [];
       var kept = [];

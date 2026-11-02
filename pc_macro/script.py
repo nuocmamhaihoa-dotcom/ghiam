@@ -13,6 +13,9 @@ _MAX_WAIT = 30_000
 _MAX_TEXT = 500
 _MAX_COORD = 100_000
 _STEP_GAP = 80
+_CHAR_GAP = 30
+_FOCUS_WAIT = 80
+_CLEAR_KEYS = 12
 
 
 def events_to_steps(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -81,21 +84,21 @@ def steps_to_events(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 if key is None:
                     continue
                 events.append({"t": clock, "kind": "key", "action": "down", "key": key})
-                clock += 20
+                clock += _CHAR_GAP
                 events.append({"t": clock, "kind": "key", "action": "up", "key": key})
-                clock += 20
+                clock += _CHAR_GAP
             continue
         if kind == "key":
             key = str(step.get("key") or "")
             events.append({"t": clock, "kind": "key", "action": "down", "key": key})
-            clock += 20
+            clock += _CHAR_GAP
             events.append({"t": clock, "kind": "key", "action": "up", "key": key})
             clock += _STEP_GAP
             continue
         if kind == "click":
             point = {"x": int(step["x"]), "y": int(step["y"]), "button": step.get("button") or "left"}
             events.append({"t": clock, "kind": "click", "action": "down", **point})
-            clock += 30
+            clock += 40
             events.append({"t": clock, "kind": "click", "action": "up", **point})
             clock += _STEP_GAP
             continue
@@ -152,6 +155,19 @@ def number_enter_steps(sample: str = "1") -> list[dict[str, Any]]:
     return [*number_type_steps(sample), *enter_key_steps()]
 
 
+def field_clear_steps(*, wait: int = 20) -> list[dict[str, Any]]:
+    """Wipe the focused 5-digit field so the next code replaces, not appends."""
+    steps: list[dict[str, Any]] = []
+    end = new_step("key", key="end", wait=wait)
+    if end is not None:
+        steps.append(end)
+    for _index in range(_CLEAR_KEYS):
+        wipe = new_step("key", key="backspace", wait=0)
+        if wipe is not None:
+            steps.append(wipe)
+    return steps
+
+
 def click_focus_step(click: Any, *, wait: int = 40) -> dict[str, Any] | None:
     """One left-click so that process's input gets the following keys."""
     if not isinstance(click, dict):
@@ -194,12 +210,14 @@ def click_focus_steps(click: Any, *, wait: int = 40) -> list[dict[str, Any]]:
 
 
 def four_lane_type_steps(codes: list[str] | tuple[str, ...], clicks: Any = None) -> list[dict[str, Any]]:
-    """Type all four codes first. Optional clicks focus each of the four processes."""
+    """Focus each bound field, clear it, then type that lane's code."""
     steps: list[dict[str, Any]] = []
     slots = list(clicks or [])
     for index, raw in enumerate(codes or []):
+        focus_wait = _FOCUS_WAIT if index else 40
         if index < len(slots):
-            steps.extend(click_focus_steps(slots[index], wait=40 if index else 0))
+            steps.extend(click_focus_steps(slots[index], wait=focus_wait))
+        steps.extend(field_clear_steps(wait=20 if index or steps else 0))
         typed = number_type_steps(str(raw))
         if typed and index and (index >= len(slots) or not isinstance(slots[index], dict)):
             first = dict(typed[0])
@@ -210,7 +228,7 @@ def four_lane_type_steps(codes: list[str] | tuple[str, ...], clicks: Any = None)
 
 
 def four_lane_enter_burst_steps(clicks: Any = None, count: int = 4) -> list[dict[str, Any]]:
-    """Send Enter to every process in one burst so all four receive it."""
+    """Send Enter to every process after refocusing, with delays the OS can keep."""
     slots = list(clicks or [])
     total = max(1, int(count or 0))
     if slots:
@@ -218,11 +236,11 @@ def four_lane_enter_burst_steps(clicks: Any = None, count: int = 4) -> list[dict
     steps: list[dict[str, Any]] = []
     for index in range(total):
         if index < len(slots):
-            steps.extend(click_focus_steps(slots[index], wait=20))
+            steps.extend(click_focus_steps(slots[index], wait=_FOCUS_WAIT))
         enter = enter_key_steps()
         if enter:
             first = dict(enter[0])
-            first["wait"] = 20
+            first["wait"] = 40
             steps.append(first)
     return steps
 
