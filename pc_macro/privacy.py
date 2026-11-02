@@ -36,9 +36,11 @@ LAYERS = (
     "DoH 1.1.1.1 / 9.9.9.9",
     "Tắt IPv6 + Teredo",
     "Khóa WebRTC / STUN",
-    "Tắt LLMNR / NetBIOS",
+    "Tắt LLMNR / NetBIOS / mDNS",
+    "Chặn SSDP / UPnP",
     "Kill switch tường lửa",
     "WARP / VPN Gate",
+    "Muối + mật mã địa chỉ máy",
     "Ẩn IP (cấm gõ nếu lộ)",
 )
 LIMITS = (
@@ -234,6 +236,26 @@ def harden_commands() -> list[list[str]]:
         "-Protocol UDP -RemotePort 3478,19302,19305,5349 -Enabled True -Profile Any "
         "-ErrorAction SilentlyContinue | Out-Null"
     )
+    mdns = (
+        "New-Item -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient' -Force | Out-Null; "
+        "Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\DNSClient' "
+        "-Name EnableMDNS -Value 0 -Type DWord -ErrorAction SilentlyContinue; "
+        "Get-NetFirewallRule -DisplayName 'PcMacroKS-Mdns' -ErrorAction SilentlyContinue | "
+        "Remove-NetFirewallRule -ErrorAction SilentlyContinue; "
+        "New-NetFirewallRule -DisplayName 'PcMacroKS-Mdns' -Direction Outbound -Action Block "
+        "-Protocol UDP -RemotePort 5353 -Enabled True -Profile Any "
+        "-ErrorAction SilentlyContinue | Out-Null"
+    )
+    upnp = (
+        "Get-NetFirewallRule -DisplayName 'PcMacroKS-Upnp' -ErrorAction SilentlyContinue | "
+        "Remove-NetFirewallRule -ErrorAction SilentlyContinue; "
+        "New-NetFirewallRule -DisplayName 'PcMacroKS-Upnp' -Direction Outbound -Action Block "
+        "-Protocol UDP -RemotePort 1900 -Enabled True -Profile Any "
+        "-ErrorAction SilentlyContinue | Out-Null; "
+        "New-NetFirewallRule -DisplayName 'PcMacroKS-UpnpTcp' -Direction Outbound -Action Block "
+        "-Protocol TCP -RemotePort 2869,5000 -Enabled True -Profile Any "
+        "-ErrorAction SilentlyContinue | Out-Null"
+    )
     return [
         ["netsh", "interface", "teredo", "set", "state", "disabled"],
         ["netsh", "interface", "6to4", "set", "state", "disabled"],
@@ -248,6 +270,8 @@ def harden_commands() -> list[list[str]]:
         _ps(llmnr),
         _ps(identity),
         _ps(stun),
+        _ps(mdns),
+        _ps(upnp),
         ["ipconfig", "/flushdns"],
     ]
 

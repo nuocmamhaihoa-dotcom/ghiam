@@ -7,7 +7,7 @@
   <meta http-equiv="content-language" content="vi" />
   <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate" />
   <title>Gõ số rồi Enter</title>
-    <meta name="ui-build" content="20261102-14" />
+    <meta name="ui-build" content="20261102-15" />
   <style>
     html, body, button, input, textarea {
       font-synthesis: none;
@@ -328,7 +328,7 @@
     <div class="vpn-row">
       <div>
         <label>VPN + hệ thống bảo&nbsp;mật</label>
-        <p class="hint">Một&nbsp;nút&nbsp;<b>Bật&nbsp;VPN</b>&nbsp;bật&nbsp;hết&nbsp;lớp&nbsp;ẩn&nbsp;IP.&nbsp;Không&nbsp;ẩn&nbsp;tuyệt&nbsp;đối.&nbsp;Hub&nbsp;không&nbsp;lưu&nbsp;mật&nbsp;khẩu.</p>
+        <p class="hint">Trên&nbsp;PC:&nbsp;nút&nbsp;<b>Bật&nbsp;VPN</b>&nbsp;và&nbsp;<b>Bảo&nbsp;mật</b>&nbsp;ở&nbsp;màn&nbsp;hình&nbsp;chính.&nbsp;Muối&nbsp;+&nbsp;mật&nbsp;mã&nbsp;địa&nbsp;chỉ&nbsp;máy&nbsp;—&nbsp;hub&nbsp;không&nbsp;đọc&nbsp;được&nbsp;IP.&nbsp;Không&nbsp;ẩn&nbsp;tuyệt&nbsp;đối.&nbsp;Hub&nbsp;không&nbsp;lưu&nbsp;mật&nbsp;khẩu.</p>
       </div>
       <label class="switch" id="vpnSwitch">
         <input type="checkbox" id="vpnToggle" />
@@ -341,6 +341,7 @@
       <li>WebRTC</li>
       <li>Kill&nbsp;switch</li>
       <li>WARP / VPN&nbsp;Gate</li>
+      <li>Muối&nbsp;+&nbsp;mật&nbsp;mã</li>
       <li>Ẩn&nbsp;IP</li>
     </ul>
     <p class="status" id="vpnStatus">VPN&nbsp;nối&nbsp;trên&nbsp;PC.&nbsp;Tải&nbsp;phần&nbsp;mềm&nbsp;rồi&nbsp;bật&nbsp;nút&nbsp;này&nbsp;(WARP,&nbsp;miễn&nbsp;phí).</p>
@@ -518,7 +519,7 @@
     <p class="hint">3.&nbsp;Bắt&nbsp;đầu&nbsp;gồm&nbsp;cả&nbsp;hai&nbsp;kịch&nbsp;bản:&nbsp;gõ&nbsp;mã,&nbsp;Enter,&nbsp;cộng&nbsp;1.</p>
     <p class="hint">4.&nbsp;Sau&nbsp;Enter,&nbsp;nếu&nbsp;màn&nbsp;đổi&nbsp;≥&nbsp;80%&nbsp;tự&nbsp;bấm&nbsp;4&nbsp;nút&nbsp;trái,&nbsp;lưu&nbsp;số,&nbsp;rồi&nbsp;tăng&nbsp;số&nbsp;tiếp.</p>
     <p class="hint">5.&nbsp;Hướng&nbsp;2:&nbsp;chọn&nbsp;4&nbsp;ô&nbsp;nhập&nbsp;và&nbsp;4&nbsp;khung.&nbsp;Gõ&nbsp;4&nbsp;mã&nbsp;rồi&nbsp;Enter&nbsp;đồng&nbsp;loạt.&nbsp;Chỉ&nbsp;lưu&nbsp;mã&nbsp;của&nbsp;trình&nbsp;duyệt&nbsp;đổi&nbsp;≥&nbsp;20%;&nbsp;các&nbsp;mã&nbsp;khác&nbsp;vẫn&nbsp;chạy.</p>
-    <p class="hint">6.&nbsp;VPN&nbsp;trên&nbsp;PC:&nbsp;tự&nbsp;chọn&nbsp;miễn&nbsp;phí&nbsp;+&nbsp;ẩn&nbsp;IP&nbsp;(không&nbsp;chạy&nbsp;nếu&nbsp;lộ&nbsp;địa&nbsp;chỉ).&nbsp;Mật&nbsp;khẩu&nbsp;chỉ&nbsp;lưu&nbsp;trên&nbsp;máy,&nbsp;không&nbsp;đưa&nbsp;lên&nbsp;VPS.</p>
+    <p class="hint">6.&nbsp;VPN&nbsp;trên&nbsp;PC:&nbsp;tự&nbsp;chọn&nbsp;miễn&nbsp;phí&nbsp;+&nbsp;ẩn&nbsp;IP&nbsp;(không&nbsp;chạy&nbsp;nếu&nbsp;lộ&nbsp;địa&nbsp;chỉ).&nbsp;Bảo&nbsp;mật:&nbsp;muối&nbsp;+&nbsp;mật&nbsp;mã&nbsp;địa&nbsp;chỉ&nbsp;máy.&nbsp;Mật&nbsp;khẩu&nbsp;chỉ&nbsp;lưu&nbsp;trên&nbsp;máy,&nbsp;không&nbsp;đưa&nbsp;lên&nbsp;VPS.</p>
     <div class="row">
       <button type="button"><span class="w">Lưu</span></button>
       <a class="btn" href="/tai/pc-macro.zip"><span class="w">Tải</span><span class="w">phần</span><span class="w">mềm</span><span class="w">PC</span></a>

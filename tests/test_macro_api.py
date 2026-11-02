@@ -90,6 +90,9 @@ class MacroHubPageTests(unittest.TestCase):
         self.assertIn('id="frameChange2_0"', home.text)
         self.assertIn('id="vpn"', home.text)
         self.assertIn("Bật&nbsp;VPN", home.text)
+        self.assertIn("Bảo&nbsp;mật", home.text)
+        self.assertIn("Muối", home.text)
+        self.assertIn("mật&nbsp;mã", home.text)
         self.assertIn("không&nbsp;lưu&nbsp;mật&nbsp;khẩu", home.text)
         self.assertIn("VPN&nbsp;Gate", home.text)
         self.assertIn("miễn&nbsp;phí", home.text)
@@ -152,6 +155,7 @@ class MacroHubPageTests(unittest.TestCase):
         self.assertIn("pc-macro/pc_macro/vpn.py", names)
         self.assertIn("pc-macro/pc_macro/free_vpn.py", names)
         self.assertIn("pc-macro/pc_macro/privacy.py", names)
+        self.assertIn("pc-macro/pc_macro/cloak.py", names)
         self.assertIn("pc-macro/Cai-dat.ps1", names)
         self.assertIn("pc-macro/Chay.cmd", names)
         self.assertIn("pc-macro/CHAY-O-DAY.cmd", names)
@@ -185,6 +189,9 @@ class MacroHubPageTests(unittest.TestCase):
         self.assertIn("VPN Gate", readme)
         self.assertIn("miễn phí", readme)
         self.assertIn("Bật VPN", readme)
+        self.assertIn("Bảo mật", readme)
+        self.assertIn("muối", readme)
+        self.assertIn("mật mã", readme)
         self.assertIn("IPv6", readme)
         self.assertIn("WARP", readme)
         self.assertIn("tự hỏi hub bản mới", readme)
@@ -196,6 +203,7 @@ class MacroHubPageTests(unittest.TestCase):
         self.assertGreater(body["build"], 0)
         self.assertEqual(len(body["digest"]), 64)
         self.assertIn("pc_macro/updater.py", body["files"])
+        self.assertIn("pc_macro/cloak.py", body["files"])
         self.assertIn("Chay.cmd", body["files"])
         self.assertIn("CHAY-O-DAY.cmd", body["files"])
         self.assertIn("pc_macro/boot.py", body["files"])
@@ -241,6 +249,19 @@ class MacroHubPageTests(unittest.TestCase):
         self.assertEqual(board.json()["changed"], ["00003", "00007"])
         self.assertEqual(board.json()["turns"][0]["digits"], "00007")
         self.assertEqual(board.json()["turns"][1]["state"], "changed")
+        cloaked = self.client.post(
+            "/v1/pc-macro/run",
+            headers=self.headers,
+            json={
+                "cloak_token": "ab" * 32,
+                "last_ip": "203.0.113.10",
+                "hostname": "PC-NHA",
+                "machine_id": "DESKTOP-1",
+            },
+        )
+        self.assertEqual(cloaked.json()["cloak_token"], "ab" * 32)
+        self.assertNotIn("203.0.113.10", json.dumps(cloaked.json()))
+        self.assertNotIn("PC-NHA", json.dumps(cloaked.json()))
         stopped = self.client.post(
             "/v1/pc-macro/run",
             headers=self.page,

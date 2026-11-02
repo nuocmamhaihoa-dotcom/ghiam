@@ -14,7 +14,7 @@ from typing import Any, Callable
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-from pc_macro import free_vpn, privacy
+from pc_macro import cloak, free_vpn, privacy
 
 FREE_KINDS = ("free", "warp", "vpngate", "proxy")
 VPN_KINDS = ("windows", "wireguard", "openvpn", "command") + FREE_KINDS
@@ -91,12 +91,13 @@ def sanitize_profile(raw: Any) -> dict[str, Any]:
         "password": password,
         "connect_cmd": connect_cmd,
         "disconnect_cmd": disconnect_cmd,
-        "last_ip": str(data.get("last_ip") or "").strip()[:64],
-        "baseline_ip": privacy.normalize_ip(data.get("baseline_ip")),
+        "last_ip": cloak.hold_address(data.get("last_ip")),
+        "baseline_ip": cloak.hold_address(data.get("baseline_ip")),
         "last_source": free_vpn.persist_source(data.get("last_source")),
         "privacy_lock": _flag(data, "privacy_lock", kind in FREE_KINDS),
         "block_ipv6": _flag(data, "block_ipv6", kind in FREE_KINDS),
         "kill_switch": _flag(data, "kill_switch", kind in FREE_KINDS),
+        "cloak_lock": _flag(data, "cloak_lock", kind in FREE_KINDS),
         "connected": bool(data.get("connected")),
     }
 
@@ -106,6 +107,10 @@ def public_profile(profile: Any) -> dict[str, Any]:
     item = sanitize_profile(profile)
     item["password"] = ""
     item["has_password"] = bool(sanitize_profile(profile)["password"])
+    if item.get("cloak_lock"):
+        item["last_ip"] = ""
+        item["baseline_ip"] = ""
+        item["cloak_token"] = ""
     return item
 
 
@@ -231,6 +236,9 @@ def status_label(profile: Any, ip: str = "") -> str:
     if source and item["kind"] in FREE_KINDS:
         kind = source
     before = item.get("baseline_ip") or ""
+    hidden = bool(item.get("cloak_lock"))
+    if hidden and item["connected"]:
+        return f"VPN đã nối ({kind}) · địa chỉ đã muối"
     if item["connected"] and shown and before and shown != before:
         return f"VPN đã nối ({kind}) · ẩn {before} → {shown}"
     if item["connected"] and shown:
@@ -265,6 +273,7 @@ class VpnClient:
         ip_extra_fetch: Callable[[], str] | None = None,
     ) -> None:
         self.path = Path(path) if path is not None else vpn_path()
+        self.vault = cloak.CloakVault(self.path.parent / "cloak")
         self.runner = runner or _run
         self.ip_fetch = ip_fetch or fetch_public_ip
         self.ip6_fetch = ip6_fetch or privacy.fetch_ipv6
@@ -289,6 +298,7 @@ class VpnClient:
             except (OSError, json.JSONDecodeError):
                 raw = {}
             self.profile = sanitize_profile(raw)
+            self._unlock_profile()
         return self.profile
 
     def save(self, raw: Any = None) -> dict[str, Any]:
@@ -304,9 +314,27 @@ class VpnClient:
             if not incoming["baseline_ip"] and keep_baseline:
                 incoming["baseline_ip"] = keep_baseline
             self.profile = incoming
+            self._unlock_profile()
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(self.profile, ensure_ascii=False, indent=2), encoding="utf-8")
+        self.path.write_text(json.dumps(self._disk_profile(), ensure_ascii=False, indent=2), encoding="utf-8")
         return self.profile
+
+    def _unlock_profile(self) -> None:
+        self.profile["last_ip"] = self.vault.open(self.profile.get("last_ip"))
+        self.profile["baseline_ip"] = self.vault.open(self.profile.get("baseline_ip"))
+
+    def _disk_profile(self) -> dict[str, Any]:
+        item = dict(self.profile)
+        last = str(item.get("last_ip") or "")
+        base = str(item.get("baseline_ip") or "")
+        item["last_ip"] = self.vault.seal(last)
+        item["baseline_ip"] = self.vault.seal(base)
+        item["cloak_token"] = self.vault.token(last) if last and item.get("cloak_lock") else ""
+        return item
+
+    def identity_token(self) -> str:
+        extra = str(self.profile.get("last_ip") or "")
+        return cloak.public_token(self.vault, extra)
 
     def connect(self) -> dict[str, Any]:
         self._begin_privacy()
@@ -412,6 +440,7 @@ class VpnClient:
         item["privacy_lock"] = True
         item["block_ipv6"] = True
         item["kill_switch"] = True
+        item["cloak_lock"] = True
         self.save(item)
         return self.profile
 
@@ -431,6 +460,17 @@ class VpnClient:
         item["connected"] = False
         self.save(item)
         return result
+
+    def turn_cloak(self, on: bool) -> dict[str, Any]:
+        item = dict(self.profile)
+        item["cloak_lock"] = bool(on)
+        if on:
+            item["privacy_lock"] = True
+            item["block_ipv6"] = True
+        self.save(item)
+        if on and self._privacy_os():
+            self._apply_privacy()
+        return self.profile
 
     def prepare(self) -> dict[str, Any]:
         """Harden DNS/WebRTC, install WARP if missing, then connect."""

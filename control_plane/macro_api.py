@@ -141,6 +141,18 @@ class RunBody(BaseModel):
     digits: str | None = None
     changed: list[str] | None = None
     turns: list[dict[str, Any]] | None = None
+    cloak_token: str | None = None
+    last_ip: str | None = None
+    baseline_ip: str | None = None
+    ip: str | None = None
+    hostname: str | None = None
+    machine_id: str | None = None
+    client_host: str | None = None
+
+
+def _cloak_token(raw: Any) -> str:
+    text = "".join(ch for ch in str(raw or "").lower() if ch in "0123456789abcdef")
+    return text[:64]
 
 
 def _run_codes(raw: Any) -> list[str]:
@@ -186,6 +198,7 @@ def _empty_run() -> dict[str, Any]:
         "digits": "",
         "changed": [],
         "turns": [],
+        "cloak_token": "",
     }
 
 
@@ -215,6 +228,7 @@ def _read_run() -> dict[str, Any]:
         "digits": str(raw.get("digits") or "")[:8],
         "changed": _run_codes(raw.get("changed")),
         "turns": _run_turns(raw.get("turns")),
+        "cloak_token": _cloak_token(raw.get("cloak_token")),
     }
 
 
@@ -248,6 +262,7 @@ def set_pc_macro_run(body: RunBody, authorization: str | None = Header(default=N
         or body.digits is not None
         or body.changed is not None
         or body.turns is not None
+        or body.cloak_token is not None
     ):
         patch["pc_seen"] = int(time.time())
     if body.pc_bound is not None:
@@ -262,6 +277,8 @@ def set_pc_macro_run(body: RunBody, authorization: str | None = Header(default=N
         patch["changed"] = _run_codes(body.changed)
     if body.turns is not None:
         patch["turns"] = _run_turns(body.turns)
+    if body.cloak_token is not None:
+        patch["cloak_token"] = _cloak_token(body.cloak_token)
     return _write_run(patch)
 
 
@@ -302,9 +319,10 @@ Cửa sổ lỗi sẽ đứng lại (không tắt ngay) để đọc được ch
 Hướng 2: chỉ 1 tiến trình. Trên PC: nhập mã, bấm Ctrl+F7 hoặc CHẠY, rồi
 bấm 1 lần vào ô Mã khách hàng / số điện thoại trên Evoshop (Gắn trình khách,
 không bấm trang hub). Mỗi số gõ xong ấn Enter một lần rồi tăng 1. F8 tắt.
-VPN trên PC: một nút Bật VPN
-(DNS, IPv6, kill switch, WARP, VPN Gate, miễn phí). Mật khẩu chỉ lưu trên máy,
-không đưa lên VPS.
+VPN trên PC: nút Bật VPN và nút Bảo mật trên màn hình chính
+(DNS, IPv6, kill switch, WARP, VPN Gate, miễn phí).
+Bảo mật: muối + mật mã địa chỉ máy — hub không đọc được IP / hostname.
+Mật khẩu chỉ lưu trên máy, không đưa lên VPS.
 
 Lần sau chỉ bấm đúp CHAY-O-DAY.cmd (hoặc icon Desktop). Máy tự hỏi hub bản mới.
 Cửa sổ đang mở tự tải bản mới rồi tự mở lại. Không cần ấn gì.

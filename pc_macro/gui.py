@@ -65,6 +65,7 @@ from pc_macro.updater import (
     skip_update,
 )
 from pc_macro.version import PC_MACRO_BUILD
+from pc_macro.cloak import mask_address
 from pc_macro.vpn import KIND_LABELS, VpnClient, status_label
 from pc_macro.win_focus import (
     bring_window_at,
@@ -91,8 +92,8 @@ class App:
         self.store = MacroStore()
         self.root = tk.Tk()
         self.root.title("Gõ số rồi Enter")
-        self.root.geometry("380x620")
-        self.root.minsize(360, 560)
+        self.root.geometry("380x700")
+        self.root.minsize(360, 640)
         self.root.configure(bg="#102033")
         self.root.attributes("-topmost", True)
         self.status = tk.StringVar(value=_startup_status())
@@ -128,6 +129,7 @@ class App:
         self.vpn_pass = tk.StringVar(value="")
         self.vpn_disconnect = tk.StringVar(value="")
         self.vpn_enabled = tk.BooleanVar(value=False)
+        self.vpn_cloak = tk.BooleanVar(value=True)
         self.vpn_exit = tk.BooleanVar(value=True)
         self.vpn_privacy = tk.BooleanVar(value=False)
         self.vpn_ipv6 = tk.BooleanVar(value=False)
@@ -270,6 +272,22 @@ class App:
         self.root.bind("<Control-F7>", lambda _event: self._on_hotkey_start())
         self.root.bind("<F8>", lambda _event: self._on_stop_hotkey())
 
+        sec = tk.Frame(self.root, bg=bg)
+        sec.pack(fill="x", padx=16, pady=(4, 2))
+        self._btn_vpn = self._action_btn(sec, "BẬT VPN", self._on_vpn_tap, fill="#0ea5e9")
+        self._btn_vpn.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        self._btn_cloak = self._action_btn(sec, "BẢO MẬT", self._on_cloak_tap, fill="#7c3aed")
+        self._btn_cloak.pack(side="left", fill="x", expand=True)
+        tk.Label(
+            self.root,
+            textvariable=self.vpn_label,
+            bg=bg,
+            fg="#7dd3fc",
+            font=("Segoe UI", 8),
+            wraplength=340,
+            justify="center",
+        ).pack(fill="x", padx=16, pady=(2, 2))
+
         board = tk.Frame(self.root, bg="#16324f", highlightbackground="#1e4970", highlightthickness=1)
         board.pack(fill="both", expand=True, padx=16, pady=(10, 4))
         tk.Label(
@@ -301,14 +319,9 @@ class App:
             anchor="w",
         ).pack(fill="x", padx=10, pady=(0, 8))
 
-        foot = tk.Frame(self.root, bg=bg)
-        foot.pack(fill="x", padx=16, pady=(8, 4))
-        ttk.Checkbutton(foot, text="VPN", variable=self.vpn_enabled, command=self._on_vpn_toggle).pack(side="left")
-        tk.Label(foot, textvariable=self.vpn_label, bg=bg, fg="#64748b", font=("Segoe UI", 8)).pack(
-            side="left", padx=8
-        )
-
         hidden = tk.Frame(self.root)
+        ttk.Checkbutton(hidden, text="VPN", variable=self.vpn_enabled, command=self._on_vpn_toggle)
+        ttk.Checkbutton(hidden, text="Bảo mật", variable=self.vpn_cloak, command=self._on_cloak_toggle)
         ttk.Entry(hidden, textvariable=self.delay2)
         ttk.Entry(hidden, textvariable=self.step2)
         ttk.Entry(hidden, textvariable=self.threshold2)
@@ -1442,6 +1455,10 @@ class App:
             body.setdefault("changed", list(self.lanes.changed_digits()))
             body.setdefault("turns", [dict(item) for item in self.lanes.board_rows(40)])
             body.setdefault("pc_bound", customer_target(self.lanes.lane_clicks) is not None)
+            if self.vpn.profile.get("cloak_lock"):
+                body["cloak_token"] = self.vpn.identity_token()
+            for key in ("last_ip", "baseline_ip", "ip", "hostname", "machine_id", "client_host"):
+                body.pop(key, None)
             try:
                 set_run(body)
             except HubError:
@@ -1960,6 +1977,7 @@ class App:
             "privacy_lock": on,
             "block_ipv6": on,
             "kill_switch": on,
+            "cloak_lock": bool(self.vpn_cloak.get()),
         }
 
     def _fill_vpn(self) -> None:
@@ -1982,14 +2000,18 @@ class App:
             self.vpn_disconnect.set(item["disconnect_cmd"])
             on = bool(item["enabled"])
             self.vpn_enabled.set(on)
+            self.vpn_cloak.set(bool(item.get("cloak_lock")))
             self.vpn_exit.set(on)
             self.vpn_privacy.set(on)
             self.vpn_ipv6.set(on)
             self.vpn_label.set(status_label(item))
+            self._paint_sec_buttons()
         finally:
             self._filling_vpn = False
         if empty:
+            self.vpn_cloak.set(True)
             self._persist_vpn()
+            self._paint_sec_buttons()
 
     def _persist_vpn(self) -> None:
         try:
@@ -1997,18 +2019,64 @@ class App:
         except OSError:
             return
 
+    def _paint_sec_buttons(self) -> None:
+        if self.vpn_enabled.get():
+            self._btn_vpn.configure(text="TẮT VPN", bg="#0369a1", activebackground="#0369a1")
+        else:
+            self._btn_vpn.configure(text="BẬT VPN", bg="#0ea5e9", activebackground="#0ea5e9")
+        if self.vpn_cloak.get():
+            self._btn_cloak.configure(text="TẮT BẢO MẬT", bg="#5b21b6", activebackground="#5b21b6")
+        else:
+            self._btn_cloak.configure(text="BẢO MẬT", bg="#7c3aed", activebackground="#7c3aed")
+
+    def _on_vpn_tap(self) -> None:
+        if self._filling_vpn or self._vpn_busy:
+            return
+        self.vpn_enabled.set(not self.vpn_enabled.get())
+        self._on_vpn_toggle()
+
+    def _on_cloak_tap(self) -> None:
+        if self._filling_vpn or self._vpn_busy:
+            return
+        self.vpn_cloak.set(not self.vpn_cloak.get())
+        self._on_cloak_toggle()
+
+    def _on_cloak_toggle(self) -> None:
+        if self._filling_vpn or self._vpn_busy:
+            return
+        on = bool(self.vpn_cloak.get())
+        self.vpn_label.set("Đang bật muối + mật mã địa chỉ…" if on else "Đang tắt lớp bảo mật…")
+        self._paint_sec_buttons()
+        self._vpn_busy = True
+        threading.Thread(target=self._cloak_worker, args=(on,), daemon=True).start()
+
+    def _cloak_worker(self, on: bool) -> None:
+        result = self.vpn.turn_cloak(on)
+        self.root.after(0, lambda r=result, flag=on: self._cloak_finished(r, flag))
+
+    def _cloak_finished(self, _result: dict[str, Any], on: bool) -> None:
+        self._vpn_busy = False
+        self._fill_vpn()
+        if on:
+            self.vpn_label.set("Bảo mật: muối + mật mã — hub không đọc được địa chỉ máy.")
+        else:
+            self.vpn_label.set("Đã tắt lớp muối địa chỉ. VPN vẫn giữ nếu đang nối.")
+
     def _on_vpn_toggle(self) -> None:
         if self._filling_vpn or self._vpn_busy:
             return
         if self.vpn_enabled.get():
             if self.vpn_kind.get() == KIND_LABELS["windows"] and not self.vpn_name.get().strip() and not self.vpn_config.get().strip():
                 self.vpn_kind.set(KIND_LABELS["free"])
+            self.vpn_cloak.set(True)
             self.vpn.save(self._vpn_form())
             self.vpn_label.set("Đang bật VPN và mọi bước bảo mật…")
+            self._paint_sec_buttons()
             self._vpn_busy = True
             threading.Thread(target=self._vpn_on_worker, daemon=True).start()
             return
         self.vpn_label.set("Đang tắt VPN…")
+        self._paint_sec_buttons()
         self._vpn_busy = True
         threading.Thread(target=self._vpn_off_worker, daemon=True).start()
 
@@ -2036,7 +2104,10 @@ class App:
 
         def done() -> None:
             self._fill_vpn()
-            self.vpn_label.set(f"IP công cộng: {ip}" if ip else "Không lấy được IP công cộng.")
+            if self.vpn.profile.get("cloak_lock"):
+                self.vpn_label.set("Địa chỉ công cộng đã muối — không hiện số.")
+            else:
+                self.vpn_label.set(f"IP công cộng: {ip}" if ip else "Không lấy được IP công cộng.")
 
         self.root.after(0, done)
 
@@ -2045,7 +2116,10 @@ class App:
         self._fill_vpn()
         if result.get("ok"):
             ip = result.get("ip") or self.vpn.profile.get("last_ip") or ""
-            extra = f" · IP {ip}" if ip else ""
+            if self.vpn.profile.get("cloak_lock"):
+                extra = f" · {mask_address(ip)}" if ip else ""
+            else:
+                extra = f" · IP {ip}" if ip else ""
             self.vpn_label.set(f"Đã {action} VPN{extra}.")
             return
         self.vpn_label.set(result.get("error") or f"Không {action} được VPN.")
@@ -2056,7 +2130,9 @@ class App:
         self.root.after(0, self._fill_vpn)
         if result.get("ok"):
             ip = result.get("ip") or self.vpn.profile.get("last_ip") or ""
-            if ip:
+            if ip and self.vpn.profile.get("cloak_lock"):
+                self._set_status(f"VPN đã nối · {mask_address(ip)}.")
+            elif ip:
                 self._set_status(f"VPN đã nối · IP {ip}.")
             return True
         self._set_status(result.get("error") or "Chế độ ẩn IP: chưa nối được — dừng, không chạy trên địa chỉ thật.")
