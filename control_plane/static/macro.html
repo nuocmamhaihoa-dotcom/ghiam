@@ -17,22 +17,60 @@
       color: #17202a;
       background: #eef1f4;
       font-family: -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
-      font-size: 17px;
-      line-height: 1.45;
-      word-spacing: 0.22em;
+      font-size: 16px;
+      line-height: 1.35;
     }
-    main { max-width: 430px; margin: 0 auto; padding: 14px 12px 36px; }
-    h1 { font-size: 1.45rem; margin: 0 0 8px; }
-    p { margin: 0 0 10px; }
-    .hint { color: #5c6770; }
-    .status { min-height: 2.6em; }
+    main { max-width: 430px; margin: 0 auto; padding: 10px 10px 20px; }
+    h1 { font-size: 1.2rem; margin: 0 0 8px; }
+    p { margin: 0 0 6px; }
+    .hint { color: #5c6770; font-size: 0.92rem; }
+    .status { min-height: 0; }
     .card {
       background: #fff;
       border: 1px solid #d5dbe3;
       border-radius: 12px;
-      padding: 12px;
-      margin: 0 0 12px;
+      padding: 10px;
+      margin: 0 0 8px;
     }
+    .dir1 { display: none !important; }
+    .vpn-row, .bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .switch {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 44px;
+      padding: 0 16px;
+      border-radius: 999px;
+      background: #d5dbe3;
+      color: #17202a;
+      font-weight: 800;
+      cursor: pointer;
+      user-select: none;
+    }
+    .switch.on { background: #0b6bcb; color: #fff; }
+    .switch input { display: none; }
+    .sec {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      list-style: none;
+      margin: 8px 0 0;
+      padding: 0;
+    }
+    .sec li {
+      background: #eef6ff;
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+    .sec li.on { background: #d1fae5; color: #065f46; }
     label { display: block; font-weight: 700; margin: 0 0 6px; }
     input[type="text"], input[type="number"] {
       width: 100%;
@@ -45,10 +83,11 @@
     }
     input.wide { font-size: 1.35rem; letter-spacing: 0.08em; }
     .now {
-      font-size: 1.35rem;
+      font-size: 1.05rem;
       font-weight: 700;
-      margin: 8px 0 0;
+      margin: 6px 0 4px;
     }
+    .lanes .line { min-height: 36px; padding: 6px 10px; margin: 0 0 4px; }
     .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     .pair { display: flex; gap: 8px; }
     .pair > div { flex: 1; }
@@ -189,8 +228,103 @@
 <main translate="no">
   <p id="translateWarn" hidden></p>
   <h1><span class="w">Gõ</span><span class="w">số</span><span class="w">rồi</span><span class="w">Enter</span></h1>
-  <p class="status" id="status">Bắt&nbsp;đầu&nbsp;gồm&nbsp;cả&nbsp;hai&nbsp;kịch&nbsp;bản:&nbsp;gõ&nbsp;mã&nbsp;rồi&nbsp;Enter;&nbsp;nếu&nbsp;màn&nbsp;đổi&nbsp;≥&nbsp;80%&nbsp;tự&nbsp;bấm&nbsp;4&nbsp;nút&nbsp;trái.</p>
 
+  <section class="card" id="vpn">
+    <div class="vpn-row">
+      <div>
+        <label>VPN + hệ thống bảo mật</label>
+        <p class="hint">Một&nbsp;nút&nbsp;<b>Bật&nbsp;VPN</b>&nbsp;bật&nbsp;hết&nbsp;bước&nbsp;bảo&nbsp;mật.&nbsp;Hub&nbsp;không&nbsp;lưu&nbsp;mật&nbsp;khẩu.</p>
+      </div>
+      <label class="switch" id="vpnSwitch">
+        <input type="checkbox" id="vpnToggle" />
+        Bật&nbsp;VPN
+      </label>
+    </div>
+    <ul class="sec" id="vpnSteps">
+      <li>DNS 1.1.1.1</li>
+      <li>Chặn IPv6</li>
+      <li>WebRTC</li>
+      <li>WARP / VPN&nbsp;Gate</li>
+      <li>Ẩn&nbsp;IP</li>
+    </ul>
+    <p class="status" id="vpnStatus">VPN&nbsp;nối&nbsp;trên&nbsp;PC.&nbsp;Tải&nbsp;phần&nbsp;mềm&nbsp;rồi&nbsp;bật&nbsp;nút&nbsp;này&nbsp;(WARP,&nbsp;miễn&nbsp;phí).</p>
+    <div class="row">
+      <a class="btn" href="/tai/pc-macro.zip">Tải phần mềm PC</a>
+    </div>
+  </section>
+
+  <section class="card" id="dir2">
+    <label>Hướng&nbsp;2&nbsp;—&nbsp;4&nbsp;mã&nbsp;Enter&nbsp;đồng&nbsp;loạt,&nbsp;mỗi&nbsp;dãy&nbsp;một&nbsp;trình&nbsp;duyệt</label>
+    <p class="hint">Gõ&nbsp;4&nbsp;mã&nbsp;rồi&nbsp;Enter&nbsp;đồng&nbsp;loạt.&nbsp;Chỉ&nbsp;lưu&nbsp;mã&nbsp;của&nbsp;trình&nbsp;duyệt&nbsp;có&nbsp;khung&nbsp;5&nbsp;số&nbsp;đổi&nbsp;≥&nbsp;20%;&nbsp;các&nbsp;mã&nbsp;khác&nbsp;vẫn&nbsp;chạy.</p>
+    <label for="prefix2">5 ký tự cố định</label>
+    <input id="prefix2" class="wide" type="text" maxlength="5" autocomplete="off" spellcheck="false" placeholder="SPXAB" />
+    <div class="pair">
+      <div>
+        <label for="start2">Số bắt đầu</label>
+        <input id="start2" class="wide" type="text" inputmode="numeric" maxlength="5" autocomplete="off" value="00001" />
+      </div>
+      <div>
+        <label for="end2">Số kết thúc</label>
+        <input id="end2" class="wide" type="text" inputmode="numeric" maxlength="5" autocomplete="off" value="00010" />
+      </div>
+    </div>
+    <p class="now" id="current2">Sẽ gõ 4 làn: —</p>
+    <div class="pair">
+      <div>
+        <label for="delay2">Chờ (giây)</label>
+        <input id="delay2" type="number" value="2" min="0" />
+      </div>
+      <div>
+        <label for="step2">Mỗi lần cộng</label>
+        <input id="step2" type="number" value="1" />
+      </div>
+      <div>
+        <label for="threshold2">Khung đổi ≥ %</label>
+        <input id="threshold2" type="number" value="20" min="1" max="100" />
+      </div>
+    </div>
+    <p class="hint" id="frame2Label">Chưa chọn khung 5 số — trên PC kéo 4 khung, mỗi trình duyệt một khung.</p>
+    <p class="status" id="status2">Bắt đầu 2: gõ 4 mã rồi Enter đồng loạt; chỉ lưu mã của trình duyệt đổi.</p>
+    <div class="lanes" id="lanes2">
+      <div class="line" id="lane0" contenteditable="true"></div>
+      <div class="line" id="lane1" contenteditable="true"></div>
+      <div class="line" id="lane2" contenteditable="true"></div>
+      <div class="line" id="lane3" contenteditable="true"></div>
+    </div>
+    <div class="row">
+      <button type="button" class="go" id="btnStart2">Bắt&nbsp;đầu&nbsp;2</button>
+      <button type="button" id="btnStop2">Dừng&nbsp;2</button>
+      <button type="button" class="go" id="btnContinue2">Tiếp&nbsp;tục</button>
+    </div>
+    <div class="row">
+      <button type="button" id="btnFrame2">Chọn&nbsp;khung&nbsp;5&nbsp;số</button>
+      <button type="button" class="warn" id="btnPause2">Khung đổi</button>
+      <button type="button" id="btnSave">Lưu</button>
+    </div>
+    <div class="pcts" hidden>
+      <div>
+        <label for="frameChange2_0">Trình 1 đổi %</label>
+        <input id="frameChange2_0" type="number" value="0" min="0" max="100" />
+      </div>
+      <div>
+        <label for="frameChange2_1">Trình 2 đổi %</label>
+        <input id="frameChange2_1" type="number" value="0" min="0" max="100" />
+      </div>
+      <div>
+        <label for="frameChange2_2">Trình 3 đổi %</label>
+        <input id="frameChange2_2" type="number" value="0" min="0" max="100" />
+      </div>
+      <div>
+        <label for="frameChange2_3">Trình 4 đổi %</label>
+        <input id="frameChange2_3" type="number" value="0" min="0" max="100" />
+      </div>
+    </div>
+    <p class="hint">Mã dừng khi khung 5 số đổi (đủ 5 ký tự + 5 số)</p>
+    <ul class="flags" id="flags2"></ul>
+  </section>
+
+  <div class="dir1">
+  <p class="status" id="status">Bắt&nbsp;đầu&nbsp;gồm&nbsp;cả&nbsp;hai&nbsp;kịch&nbsp;bản:&nbsp;gõ&nbsp;mã&nbsp;rồi&nbsp;Enter;&nbsp;nếu&nbsp;màn&nbsp;đổi&nbsp;≥&nbsp;80%&nbsp;tự&nbsp;bấm&nbsp;4&nbsp;nút&nbsp;trái.</p>
   <section class="card">
     <label for="prefix"><span class="w">5</span><span class="w">ký</span><span class="w">tự</span><span class="w">cố</span><span class="w">định</span></label>
     <p class="hint"><span class="w">Đứng</span><span class="w">trước,</span><span class="w">đổi</span><span class="w">được</span><span class="w">bất</span><span class="w">cứ</span><span class="w">lúc</span><span class="w">nào.</span></p>
@@ -230,83 +364,6 @@
     </div>
   </section>
 
-  <section class="card" id="dir2">
-    <label>Hướng&nbsp;2&nbsp;—&nbsp;4&nbsp;mã&nbsp;Enter&nbsp;đồng&nbsp;loạt,&nbsp;mỗi&nbsp;dãy&nbsp;một&nbsp;trình&nbsp;duyệt</label>
-    <p class="hint">Không&nbsp;đụng&nbsp;hướng&nbsp;1.&nbsp;Gõ&nbsp;4&nbsp;mã&nbsp;rồi&nbsp;Enter&nbsp;đồng&nbsp;loạt.&nbsp;Chỉ&nbsp;lưu&nbsp;mã&nbsp;của&nbsp;trình&nbsp;duyệt&nbsp;có&nbsp;khung&nbsp;5&nbsp;số&nbsp;đổi&nbsp;≥&nbsp;20%;&nbsp;các&nbsp;mã&nbsp;khác&nbsp;vẫn&nbsp;chạy.</p>
-    <label for="prefix2"><span class="w">5</span><span class="w">ký</span><span class="w">tự</span><span class="w">cố</span><span class="w">định</span></label>
-    <input id="prefix2" class="wide" type="text" maxlength="5" autocomplete="off" spellcheck="false" placeholder="SPXAB" />
-    <div class="pair">
-      <div>
-        <label for="start2"><span class="w">Số</span><span class="w">bắt</span><span class="w">đầu</span></label>
-        <input id="start2" class="wide" type="text" inputmode="numeric" maxlength="5" autocomplete="off" value="00001" />
-      </div>
-      <div>
-        <label for="end2"><span class="w">Số</span><span class="w">kết</span><span class="w">thúc</span></label>
-        <input id="end2" class="wide" type="text" inputmode="numeric" maxlength="5" autocomplete="off" value="00010" />
-      </div>
-    </div>
-    <p class="now" id="current2"><span class="w">Sẽ</span><span class="w">gõ</span><span class="w">4</span><span class="w">làn:</span> —</p>
-    <div class="pair">
-      <div>
-        <label for="delay2"><span class="w">Chờ</span><span class="w">(giây)</span></label>
-        <input id="delay2" type="number" value="2" min="0" />
-      </div>
-      <div>
-        <label for="step2"><span class="w">Mỗi</span><span class="w">lần</span><span class="w">cộng</span></label>
-        <input id="step2" type="number" value="1" />
-      </div>
-    </div>
-    <div class="pair">
-      <div>
-        <label for="threshold2"><span class="w">Khung</span><span class="w">đổi</span><span class="w">≥</span><span class="w">%</span></label>
-        <input id="threshold2" type="number" value="20" min="1" max="100" />
-      </div>
-    </div>
-    <p class="hint" id="frame2Label">Chưa&nbsp;chọn&nbsp;khung&nbsp;5&nbsp;số&nbsp;—&nbsp;trên&nbsp;PC&nbsp;kéo&nbsp;4&nbsp;khung,&nbsp;mỗi&nbsp;trình&nbsp;duyệt&nbsp;một&nbsp;khung.</p>
-    <p class="status" id="status2">Bắt&nbsp;đầu&nbsp;2:&nbsp;gõ&nbsp;4&nbsp;mã&nbsp;rồi&nbsp;Enter&nbsp;đồng&nbsp;loạt;&nbsp;chỉ&nbsp;lưu&nbsp;mã&nbsp;của&nbsp;trình&nbsp;duyệt&nbsp;đổi.</p>
-    <div class="lanes" id="lanes2">
-      <div class="line" id="lane0" contenteditable="true"></div>
-      <div class="line" id="lane1" contenteditable="true"></div>
-      <div class="line" id="lane2" contenteditable="true"></div>
-      <div class="line" id="lane3" contenteditable="true"></div>
-    </div>
-    <div class="pcts">
-      <div>
-        <label for="frameChange2_0">Trình&nbsp;1&nbsp;đổi&nbsp;%</label>
-        <input id="frameChange2_0" type="number" value="0" min="0" max="100" />
-      </div>
-      <div>
-        <label for="frameChange2_1">Trình&nbsp;2&nbsp;đổi&nbsp;%</label>
-        <input id="frameChange2_1" type="number" value="0" min="0" max="100" />
-      </div>
-      <div>
-        <label for="frameChange2_2">Trình&nbsp;3&nbsp;đổi&nbsp;%</label>
-        <input id="frameChange2_2" type="number" value="0" min="0" max="100" />
-      </div>
-      <div>
-        <label for="frameChange2_3">Trình&nbsp;4&nbsp;đổi&nbsp;%</label>
-        <input id="frameChange2_3" type="number" value="0" min="0" max="100" />
-      </div>
-    </div>
-    <div class="row">
-      <button type="button" class="go" id="btnStart2">Bắt&nbsp;đầu&nbsp;2</button>
-      <button type="button" id="btnStop2">Dừng&nbsp;2</button>
-      <button type="button" class="go" id="btnContinue2">Tiếp&nbsp;tục</button>
-    </div>
-    <div class="row">
-      <button type="button" id="btnFrame2">Chọn&nbsp;khung&nbsp;5&nbsp;số</button>
-      <button type="button" class="warn" id="btnPause2">Khung&nbsp;đổi</button>
-    </div>
-    <p class="hint">Mã&nbsp;dừng&nbsp;khi&nbsp;khung&nbsp;5&nbsp;số&nbsp;đổi&nbsp;(đủ&nbsp;5&nbsp;ký&nbsp;tự&nbsp;+&nbsp;5&nbsp;số)</p>
-    <ul class="flags" id="flags2"></ul>
-  </section>
-
-  <section class="card" id="vpn">
-    <label>VPN&nbsp;trên&nbsp;PC</label>
-    <p class="hint">Một&nbsp;nút&nbsp;<b>Bật&nbsp;VPN</b>&nbsp;bật&nbsp;hết&nbsp;bước&nbsp;bảo&nbsp;mật:&nbsp;siết&nbsp;DNS/IPv6/WebRTC,&nbsp;cài&nbsp;WARP,&nbsp;rồi&nbsp;nối&nbsp;(WARP,&nbsp;VPN&nbsp;Gate,&nbsp;proxy&nbsp;miễn&nbsp;phí).&nbsp;Tắt&nbsp;là&nbsp;ngắt.&nbsp;<b>Ẩn&nbsp;IP</b>&nbsp;đi&nbsp;kèm&nbsp;nút.&nbsp;Hub&nbsp;không&nbsp;lưu&nbsp;mật&nbsp;khẩu.</p>
-    <p class="status" id="vpnStatus">VPN&nbsp;chỉ&nbsp;nối&nbsp;trên&nbsp;PC&nbsp;—&nbsp;tải&nbsp;phần&nbsp;mềm&nbsp;rồi&nbsp;bật&nbsp;trong&nbsp;cửa&nbsp;sổ.</p>
-  </section>
-
   <section class="card">
     <label>4&nbsp;nút&nbsp;chuột&nbsp;trái</label>
     <p class="hint">Từng&nbsp;bước:&nbsp;nhập&nbsp;tên,&nbsp;bấm&nbsp;<b>Thêm&nbsp;ảnh</b>&nbsp;rồi&nbsp;<b>Bôi&nbsp;màu</b>&nbsp;chỗ&nbsp;cần&nbsp;ấn,&nbsp;hoặc&nbsp;<b>Chọn&nbsp;vị&nbsp;trí</b>&nbsp;trên&nbsp;ảnh.&nbsp;Máy&nbsp;bấm&nbsp;trái&nbsp;đúng&nbsp;chỗ&nbsp;tô.</p>
@@ -340,10 +397,11 @@
     <p class="hint">5.&nbsp;Hướng&nbsp;2:&nbsp;chọn&nbsp;4&nbsp;ô&nbsp;nhập&nbsp;và&nbsp;4&nbsp;khung.&nbsp;Gõ&nbsp;4&nbsp;mã&nbsp;rồi&nbsp;Enter&nbsp;đồng&nbsp;loạt.&nbsp;Chỉ&nbsp;lưu&nbsp;mã&nbsp;của&nbsp;trình&nbsp;duyệt&nbsp;đổi&nbsp;≥&nbsp;20%;&nbsp;các&nbsp;mã&nbsp;khác&nbsp;vẫn&nbsp;chạy.</p>
     <p class="hint">6.&nbsp;VPN&nbsp;trên&nbsp;PC:&nbsp;tự&nbsp;chọn&nbsp;miễn&nbsp;phí&nbsp;+&nbsp;ẩn&nbsp;IP&nbsp;(không&nbsp;chạy&nbsp;nếu&nbsp;lộ&nbsp;địa&nbsp;chỉ).&nbsp;Mật&nbsp;khẩu&nbsp;chỉ&nbsp;lưu&nbsp;trên&nbsp;máy,&nbsp;không&nbsp;đưa&nbsp;lên&nbsp;VPS.</p>
     <div class="row">
-      <button type="button" id="btnSave"><span class="w">Lưu</span></button>
+      <button type="button"><span class="w">Lưu</span></button>
       <a class="btn" href="/tai/pc-macro.zip"><span class="w">Tải</span><span class="w">phần</span><span class="w">mềm</span><span class="w">PC</span></a>
     </div>
   </section>
+  </div>
 </main>
 <div id="paintModal" hidden>
   <div class="paint-bar">
@@ -1393,6 +1451,33 @@
     if (ev.key === "F8") { ev.preventDefault(); stopPlay(); stopPlay2(); }
     if (ev.key === "F9") { ev.preventDefault(); flagNow(); }
   });
+  function setVpnSwitch(on) {
+    var box = $("vpnToggle");
+    var sw = $("vpnSwitch");
+    var status = $("vpnStatus");
+    var chips = $("vpnSteps");
+    if (!box || !sw || !status) return;
+    box.checked = !!on;
+    sw.className = "switch" + (on ? " on" : "");
+    if (chips) {
+      Array.prototype.forEach.call(chips.children, function (li) {
+        li.className = on ? "on" : "";
+      });
+    }
+    status.textContent = on
+      ? "Đã bật VPN + bảo mật trên PC: DNS, IPv6, WebRTC, WARP / VPN Gate, Ẩn IP."
+      : "VPN nối trên PC. Tải phần mềm rồi bật nút này (WARP, miễn phí).";
+  }
+  if ($("vpnToggle") && $("vpnSwitch")) {
+    $("vpnToggle").onchange = function () {
+      setVpnSwitch($("vpnToggle").checked);
+    };
+    $("vpnSwitch").onclick = function (ev) {
+      ev.preventDefault();
+      setVpnSwitch(!$("vpnToggle").checked);
+    };
+    setVpnSwitch(false);
+  }
   renderRecover();
   showCurrent();
   showLanes();
