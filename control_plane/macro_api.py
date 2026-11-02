@@ -167,7 +167,7 @@ máy tự hỏi hub bản mới, tự tải, tự ghi đè file, rồi tự mở
 
 Hướng 2: Gắn 4 ô = bấm ô 5 số từng website. Bắt đầu 2 gõ 4 mã rồi Enter đồng loạt.
 Chỉ lưu mã của trình duyệt có khung đổi ≥ 20%. VPN trên PC: một nút Bật VPN (DNS, IPv6,
-WARP, VPN Gate, miễn phí). Mật khẩu chỉ lưu trên máy, không đưa lên VPS.
+kill switch, WARP, VPN Gate, miễn phí). Mật khẩu chỉ lưu trên máy, không đưa lên VPS.
 
 Lần sau chỉ cần:
   .\\Chay.cmd

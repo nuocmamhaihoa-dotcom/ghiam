@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 PC_MACRO_NAME = "pc-macro"
-PC_MACRO_BUILD = 2026110201
+PC_MACRO_BUILD = 2026110202
 DEFAULT_HUB = "http://103.200.20.245:8088"
 REQUIRES = ["pynput"]
 _EXTRA_NAMES = ("Cai-dat.ps1", "Chay.cmd", "README.txt")

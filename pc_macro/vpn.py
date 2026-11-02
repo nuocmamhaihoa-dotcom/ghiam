@@ -96,6 +96,7 @@ def sanitize_profile(raw: Any) -> dict[str, Any]:
         "last_source": free_vpn.persist_source(data.get("last_source")),
         "privacy_lock": _flag(data, "privacy_lock", kind in FREE_KINDS),
         "block_ipv6": _flag(data, "block_ipv6", kind in FREE_KINDS),
+        "kill_switch": _flag(data, "kill_switch", kind in FREE_KINDS),
         "connected": bool(data.get("connected")),
     }
 
@@ -199,9 +200,12 @@ def disconnect_command(profile: Any) -> list[str]:
     return []
 
 
-def fetch_public_ip(opener: Callable[..., Any] | None = None) -> str:
+def fetch_public_ip(
+    opener: Callable[..., Any] | None = None,
+    urls: tuple[str, ...] | None = None,
+) -> str:
     take = opener or urlopen
-    for url in _IP_URLS:
+    for url in urls or _IP_URLS:
         try:
             with take(Request(url, headers={"User-Agent": "pc-macro-vpn"}), timeout=8) as reply:
                 text = reply.read().decode("utf-8", errors="replace").strip()
@@ -211,6 +215,12 @@ def fetch_public_ip(opener: Callable[..., Any] | None = None) -> str:
         if ip:
             return ip[:64]
     return ""
+
+
+def fetch_second_ip(opener: Callable[..., Any] | None = None) -> str:
+    """Second public-IP source so a split tunnel cannot hide a leak."""
+    extras = _IP_URLS[1:] or _IP_URLS
+    return fetch_public_ip(opener, urls=extras)
 
 
 def status_label(profile: Any, ip: str = "") -> str:
@@ -252,11 +262,15 @@ class VpnClient:
         servers: list[dict[str, Any]] | None = None,
         proxies: list[dict[str, str]] | None = None,
         ip6_fetch: Callable[[], str] | None = None,
+        ip_extra_fetch: Callable[[], str] | None = None,
     ) -> None:
         self.path = Path(path) if path is not None else vpn_path()
         self.runner = runner or _run
         self.ip_fetch = ip_fetch or fetch_public_ip
         self.ip6_fetch = ip6_fetch or privacy.fetch_ipv6
+        self.ip_extra_fetch = ip_extra_fetch
+        if self.ip_extra_fetch is None and ip_fetch is None:
+            self.ip_extra_fetch = fetch_second_ip
         self.fetcher = fetcher
         self.tools = tools
         self.servers = servers
@@ -374,10 +388,12 @@ class VpnClient:
             current,
             ipv6,
             block_ipv6=bool(self.profile.get("block_ipv6")),
+            extra=self._snapshot_extra_ip(),
         )
         self._leak_at = now
         self._leak_text = text
         if text:
+            self._seal_on_leak()
             self.profile["connected"] = False
             self.save()
             return text
@@ -395,6 +411,7 @@ class VpnClient:
         item["disconnect_on_exit"] = True
         item["privacy_lock"] = True
         item["block_ipv6"] = True
+        item["kill_switch"] = True
         self.save(item)
         return self.profile
 
@@ -410,6 +427,7 @@ class VpnClient:
         item["enabled"] = False
         item["privacy_lock"] = False
         item["block_ipv6"] = False
+        item["kill_switch"] = False
         item["connected"] = False
         self.save(item)
         return result
@@ -429,6 +447,7 @@ class VpnClient:
             ipv6,
             privacy_lock=bool(self.profile.get("privacy_lock")),
             block_ipv6=bool(self.profile.get("block_ipv6")),
+            extra=self._snapshot_extra_ip(),
         )
         hidden = bool(
             current
@@ -596,10 +615,12 @@ class VpnClient:
             ipv6,
             privacy_lock=bool(self.profile.get("privacy_lock")),
             block_ipv6=bool(self.profile.get("block_ipv6")),
+            extra=self._snapshot_extra_ip(),
         )
         if not check["ok"]:
             self._rollback()
             return {"ok": False, "error": check["error"], "ip": ip}
+        self._apply_kill_switch()
         if self._privacy_applied:
             self._run_cmd(["ipconfig", "/flushdns"])
         self.profile["connected"] = True
@@ -637,6 +658,33 @@ class VpnClient:
             return privacy.normalize_ip(self.ip6_fetch() or "")
         except Exception:
             return ""
+
+    def _snapshot_extra_ip(self) -> str:
+        if self.ip_extra_fetch is None:
+            return ""
+        try:
+            return privacy.normalize_ip(self.ip_extra_fetch() or "")
+        except Exception:
+            return ""
+
+    def _apply_kill_switch(self) -> None:
+        if not self.profile.get("kill_switch"):
+            return
+        if not self._privacy_os():
+            return
+        for cmd in privacy.kill_switch_on_commands():
+            self._run_cmd(cmd)
+
+    def _seal_on_leak(self) -> None:
+        """Cut the tunnel but keep the firewall lock so the real address stays dark."""
+        self._apply_kill_switch()
+        if self.profile["kind"] in FREE_KINDS:
+            self._disconnect_free()
+        else:
+            cmd = disconnect_command(self.profile)
+            if cmd:
+                self._run_cmd(cmd)
+        self._stop_child()
 
     def _privacy_os(self) -> bool:
         return sys.platform == "win32" or self.tools is not None
