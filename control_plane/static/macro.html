@@ -7,7 +7,7 @@
   <meta http-equiv="content-language" content="vi" />
   <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate" />
   <title>Gõ số rồi Enter</title>
-  <meta name="ui-build" content="20261102-4" />
+  <meta name="ui-build" content="20261102-5" />
   <style>
     html, body, button, input, textarea {
       font-synthesis: none;
@@ -257,8 +257,8 @@
   <section class="card" id="vpn">
     <div class="vpn-row">
       <div>
-        <label>VPN + hệ thống bảo mật</label>
-        <p class="hint">Một&nbsp;nút&nbsp;<b>Bật&nbsp;VPN</b>&nbsp;bật&nbsp;hết&nbsp;bước&nbsp;bảo&nbsp;mật.&nbsp;Hub&nbsp;không&nbsp;lưu&nbsp;mật&nbsp;khẩu.</p>
+        <label>VPN + hệ thống bảo&nbsp;mật</label>
+        <p class="hint">Một&nbsp;nút&nbsp;<b>Bật&nbsp;VPN</b>&nbsp;bật&nbsp;hết&nbsp;lớp&nbsp;ẩn&nbsp;IP.&nbsp;Không&nbsp;ẩn&nbsp;tuyệt&nbsp;đối.&nbsp;Hub&nbsp;không&nbsp;lưu&nbsp;mật&nbsp;khẩu.</p>
       </div>
       <label class="switch" id="vpnSwitch">
         <input type="checkbox" id="vpnToggle" />
@@ -266,9 +266,10 @@
       </label>
     </div>
     <ul class="sec" id="vpnSteps">
-      <li>DNS 1.1.1.1</li>
-      <li>Chặn IPv6</li>
+      <li>DoH</li>
+      <li>IPv6</li>
       <li>WebRTC</li>
+      <li>Kill&nbsp;switch</li>
       <li>WARP / VPN&nbsp;Gate</li>
       <li>Ẩn&nbsp;IP</li>
     </ul>
@@ -1497,7 +1498,7 @@
       });
     }
     status.textContent = on
-      ? "Đã bật VPN + bảo mật trên PC: DNS, IPv6, WebRTC, WARP / VPN Gate, Ẩn IP."
+      ? "Đã bật VPN + nhiều lớp trên PC: DoH, IPv6, WebRTC, kill switch, WARP. Không ẩn tuyệt đối."
       : "VPN nối trên PC. Tải phần mềm rồi bật nút này (WARP, miễn phí).";
   }
   if ($("vpnToggle") && $("vpnSwitch")) {

@@ -147,7 +147,7 @@ class App:
         ttk.Label(self.root, text="VPN trên máy này", font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=12, pady=(4, 0))
         ttk.Label(
             self.root,
-            text="Bật VPN = DNS + IPv6 + WebRTC + WARP + Ẩn IP, rồi nối. Tắt = ngắt.",
+            text="Bật VPN = DoH + IPv6 + WebRTC + kill switch + WARP + Ẩn IP. Tắt = ngắt. Không ẩn tuyệt đối.",
             wraplength=390,
         ).pack(anchor="w", padx=12, pady=(2, 2))
         flags = ttk.Frame(self.root)
@@ -1471,6 +1471,7 @@ class App:
             "last_source": self.vpn.profile.get("last_source") or "",
             "privacy_lock": on,
             "block_ipv6": on,
+            "kill_switch": on,
         }
 
     def _fill_vpn(self) -> None:
