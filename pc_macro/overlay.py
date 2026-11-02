@@ -16,6 +16,7 @@ from pc_macro.screen import (
     sanitize_frame,
     upsert_slot,
 )
+from pc_macro.win_focus import window_handle_at
 
 _FILL = "#0b6bcb"
 _EDGE = "#ffffff"
@@ -50,6 +51,7 @@ class ClickOverlay:
         self._step = step if step is not None and 0 <= int(step) < RECOVER_CLICKS else None
         self._phases = 2 if phases >= 2 and self._step is not None else 1
         self._window_xy: tuple[int, int] | None = None
+        self._window_hwnd = 0
         self.screen_w = max(1, int(root.winfo_screenwidth()))
         self.screen_h = max(1, int(root.winfo_screenheight()))
         self.clicks = sanitize_clicks(clicks or [])
@@ -137,6 +139,7 @@ class ClickOverlay:
         if self._step is not None:
             if self._phases >= 2 and self._window_xy is None:
                 self._window_xy = (x, y)
+                self._window_hwnd = window_handle_at(x, y)
                 self._sync_bar()
                 self._redraw()
                 return
@@ -151,6 +154,7 @@ class ClickOverlay:
                 via="point",
                 wx=wx,
                 wy=wy,
+                hwnd=self._window_hwnd,
             )
             self._recording = False
             self._awaiting_save = True
@@ -182,6 +186,7 @@ class ClickOverlay:
             slots[self._step] = None
             self.clicks = [item for item in slots if item is not None]
             self._window_xy = None
+            self._window_hwnd = 0
         else:
             self.clicks = []
         self._recording = True
@@ -218,7 +223,7 @@ class ClickOverlay:
         self.btn_save.configure(state="disabled")
         if self._recording and self._step is not None and self._phases >= 2:
             if self._window_xy is None:
-                self.hint.configure(text="Bước 1/2: bấm cửa sổ trình duyệt web khách")
+                self.hint.configure(text="Bước 1/2: bấm cửa sổ Evoshop (không bấm trang hub)")
             else:
                 self.hint.configure(text="Bước 2/2: bấm dòng Mã khách hàng / số điện thoại")
         elif self._recording and self._step is not None:

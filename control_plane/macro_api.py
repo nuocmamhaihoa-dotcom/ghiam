@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hmac
 import io
+import json
+import time
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -130,6 +132,83 @@ def _pc_macro_zip(files: dict[str, bytes]) -> bytes:
     return buf.getvalue()
 
 
+class RunBody(BaseModel):
+    play_cmd: str | None = None
+    pc_seen: int | None = None
+    pc_bound: bool | None = None
+    current: str | None = None
+    status: str | None = None
+
+
+def _run_path() -> Path:
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    return settings.data_dir / "pc-macro-run.json"
+
+
+def _empty_run() -> dict[str, Any]:
+    return {"play_cmd": "", "pc_seen": 0, "pc_bound": False, "current": "", "status": ""}
+
+
+def _read_run() -> dict[str, Any]:
+    path = _run_path()
+    if not path.is_file():
+        return _empty_run()
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError):
+        return _empty_run()
+    if not isinstance(raw, dict):
+        return _empty_run()
+    cmd = str(raw.get("play_cmd") or "").strip().lower()
+    if cmd not in {"run", "stop"}:
+        cmd = ""
+    try:
+        seen = int(raw.get("pc_seen") or 0)
+    except (TypeError, ValueError):
+        seen = 0
+    return {
+        "play_cmd": cmd,
+        "pc_seen": max(0, seen),
+        "pc_bound": bool(raw.get("pc_bound")),
+        "current": str(raw.get("current") or "")[:40],
+        "status": str(raw.get("status") or "")[:40],
+    }
+
+
+def _write_run(item: dict[str, Any]) -> dict[str, Any]:
+    cleaned = _read_run()
+    cleaned.update(item)
+    _run_path().write_text(json.dumps(cleaned, ensure_ascii=False), encoding="utf-8")
+    return cleaned
+
+
+@router.get("/v1/pc-macro/run")
+def get_pc_macro_run(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Hub Bật/Tắt and the PC app share this; the hub never types into Evoshop."""
+    _auth(authorization)
+    return _read_run()
+
+
+@router.post("/v1/pc-macro/run")
+def set_pc_macro_run(body: RunBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _auth(authorization)
+    patch: dict[str, Any] = {}
+    if body.play_cmd is not None:
+        cmd = body.play_cmd.strip().lower()
+        patch["play_cmd"] = cmd if cmd in {"run", "stop"} else ""
+    if body.pc_seen is not None:
+        patch["pc_seen"] = max(0, int(body.pc_seen or 0))
+    elif body.pc_bound is not None or body.current is not None or body.status is not None:
+        patch["pc_seen"] = int(time.time())
+    if body.pc_bound is not None:
+        patch["pc_bound"] = bool(body.pc_bound)
+    if body.current is not None:
+        patch["current"] = body.current[:40]
+    if body.status is not None:
+        patch["status"] = body.status[:40]
+    return _write_run(patch)
+
+
 @router.get("/v1/pc-macro/version")
 def pc_macro_version() -> dict[str, Any]:
     files = _pc_macro_files()
@@ -164,7 +243,7 @@ _INSTALL_README = """BẤM ĐÚP file CHAY-O-DAY.cmd
 Nếu chưa có Python, file đó tự cài. Nếu thiếu pynput, file đó tự cài.
 Cửa sổ lỗi sẽ đứng lại (không tắt ngay) để đọc được chữ.
 
-Hướng 2: chỉ 1 tiến trình. Gắn trình khách = bấm cửa sổ website khách,
+Hướng 2: chỉ 1 tiến trình. Gắn Evoshop (không gắn trang hub),
 rồi dòng Mã khách hàng / số điện thoại. Bật chạy gõ 5 ký tự + 5 số rồi Enter,
 tăng số. Tắt để dừng. Khung đổi ≥ 20% thì lưu mã. VPN trên PC: một nút Bật VPN
 (DNS, IPv6, kill switch, WARP, VPN Gate, miễn phí). Mật khẩu chỉ lưu trên máy,

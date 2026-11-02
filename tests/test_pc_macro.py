@@ -63,6 +63,7 @@ from pc_macro.screen import (
     sanitize_frame,
     sanitize_frames,
     watch_changed,
+    customer_target,
     click_from_paint,
     click_landed,
     click_order_cards,
@@ -80,6 +81,7 @@ from pc_macro.screen import (
 )
 from pc_macro.session import Player, Recorder
 from pc_macro.store import MacroStore
+from pc_macro.win_focus import bring_window_at, focus_handle, window_handle_at
 
 
 class SanitizeTests(unittest.TestCase):
@@ -562,6 +564,14 @@ class FourLaneTests(unittest.TestCase):
         scaled = scale_clicks(clicks, 2000, 1600)
         self.assertEqual(scaled[0]["wx"], 100)
         self.assertEqual(scaled[0]["wy"], 80)
+        self.assertIsNone(customer_target([]))
+        self.assertIsNone(customer_target([{"x": 10, "y": 20}]))
+        bound = upsert_slot([], 0, 200, 150, 1000, 800, via="point", wx=50, wy=40, hwnd=4242)
+        self.assertEqual(customer_target(bound)["hwnd"], 4242)
+        self.assertEqual(scale_clicks(bound, 2000, 1600)[0]["hwnd"], 4242)
+        self.assertFalse(bring_window_at(10, 20))
+        self.assertFalse(focus_handle(0))
+        self.assertEqual(window_handle_at(1, 1), 0)
         typed = four_lane_type_steps(["SPXAB00003"], clicks)
         self.assertGreaterEqual([step["kind"] for step in typed].count("click"), 2)
         self.assertEqual([step for step in typed if step.get("kind") == "click"][0]["x"], 50)

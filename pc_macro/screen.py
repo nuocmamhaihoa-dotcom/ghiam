@@ -130,6 +130,7 @@ def upsert_slot(
     via: str = "",
     wx: Any = None,
     wy: Any = None,
+    hwnd: Any = None,
 ) -> list[dict[str, Any]]:
     """Set one of the four steps without dropping the others."""
     try:
@@ -149,8 +150,27 @@ def upsert_slot(
         screen_h = int(round(float(sh or 0)))
     except (TypeError, ValueError):
         screen_w, screen_h = 0, 0
-    slots[index] = _click_record(px, py, screen_w, screen_h, name=name, step=index, via=via, wx=wx, wy=wy)
+    slots[index] = _click_record(
+        px, py, screen_w, screen_h, name=name, step=index, via=via, wx=wx, wy=wy, hwnd=hwnd
+    )
     return [item for item in slots if item is not None]
+
+
+def customer_target(clicks: Any) -> dict[str, Any] | None:
+    """Window + field of the bound Evoshop browser, or None if not attached."""
+    item = click_slots(clicks)[0]
+    if item is None:
+        return None
+    try:
+        window_x = int(item["wx"])
+        window_y = int(item["wy"])
+        field_x = int(item["x"])
+        field_y = int(item["y"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if min(window_x, window_y, field_x, field_y) < 0:
+        return None
+    return item
 
 
 def click_slots(clicks: Any) -> list[dict[str, Any] | None]:
@@ -199,9 +219,9 @@ def overlay_banner(
         if awaiting_save:
             return "Đã chọn trình duyệt web khách + dòng mã KH / SĐT. Bấm Lưu."
         if recording and phase <= 0:
-            return "Bước 1/2: bấm cửa sổ trình duyệt web khách. Esc hủy."
+            return "Bước 1/2: bấm cửa sổ trình duyệt web khách (Evoshop), không bấm trang hub. Esc hủy."
         if recording:
-            return "Bước 2/2: bấm dòng Mã khách hàng / số điện thoại. Esc hủy."
+            return "Bước 2/2: bấm dòng Mã khách hàng / số điện thoại trên Evoshop. Esc hủy."
         return "Đã nhớ trình duyệt web khách."
     if step is not None:
         if awaiting_save:
@@ -265,6 +285,7 @@ def scale_clicks(clicks: Any, sw: int, sh: int) -> list[dict[str, Any]]:
                 via=str(item.get("via") or ""),
                 wx=window_x,
                 wy=window_y,
+                hwnd=item.get("hwnd"),
             )
         )
     return out
@@ -328,6 +349,7 @@ def _click_record(
     via: str = "",
     wx: Any = None,
     wy: Any = None,
+    hwnd: Any = None,
 ) -> dict[str, Any]:
     record: dict[str, Any] = {"kind": "click", "x": x, "y": y, "button": "left", "wait": wait}
     label = normalize_click_name(name)
@@ -355,7 +377,18 @@ def _click_record(
     if 0 <= window_x <= _MAX_COORD and 0 <= window_y <= _MAX_COORD:
         record["wx"] = window_x
         record["wy"] = window_y
+    handle = _hwnd(hwnd)
+    if handle:
+        record["hwnd"] = handle
     return record
+
+
+def _hwnd(raw: Any) -> int:
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return 0
+    return value if value > 0 else 0
 
 
 def _parse_click(item: Any) -> dict[str, Any] | None:
@@ -390,6 +423,7 @@ def _parse_click(item: Any) -> dict[str, Any] | None:
         via=str(item.get("via") or ""),
         wx=item.get("wx"),
         wy=item.get("wy"),
+        hwnd=item.get("hwnd"),
     )
     ratio = _ratio(item)
     if ratio is not None and sw > 0 and sh > 0:

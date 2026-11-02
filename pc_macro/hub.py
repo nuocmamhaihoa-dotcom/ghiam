@@ -38,6 +38,16 @@ def describe() -> str:
     return f"{url} ({token})"
 
 
+def get_run(*, fetch: Fetcher | None = None) -> dict[str, Any]:
+    body = _call("GET", "/v1/pc-macro/run", fetch=fetch)
+    return body if isinstance(body, dict) else {}
+
+
+def set_run(payload: dict[str, Any], *, fetch: Fetcher | None = None) -> dict[str, Any]:
+    body = _call("POST", "/v1/pc-macro/run", payload, fetch=fetch)
+    return body if isinstance(body, dict) else {}
+
+
 def list_remote(*, fetch: Fetcher | None = None) -> list[dict[str, Any]]:
     body = _call("GET", "/v1/macros", fetch=fetch)
     items = body.get("items") if isinstance(body, dict) else None
