@@ -338,7 +338,7 @@ class VpnClient:
         item = self.profile
         if not item.get("privacy_lock"):
             if item.get("enabled") and not item.get("connected") and profile_ready(item):
-                result = self.connect()
+                result = self.prepare()
                 result["blocked"] = False
                 return result
             return {"ok": True, "error": "", "ip": item.get("last_ip") or "", "blocked": False}
@@ -350,7 +350,7 @@ class VpnClient:
                 "blocked": True,
             }
         if not item.get("connected"):
-            result = self.connect()
+            result = self.prepare()
             result["blocked"] = not result["ok"]
             return result
         leak = self.check_leak(force=True)
@@ -386,10 +386,74 @@ class VpnClient:
             self.save()
         return ""
 
+    def prepare(self) -> dict[str, Any]:
+        """Harden DNS/WebRTC, install WARP if missing, then connect."""
+        self._install_warp()
+        return self.connect()
+
+    def inspect(self) -> dict[str, Any]:
+        current = self._snapshot_ip()
+        ipv6 = self._snapshot_ip6()
+        baseline = str(self.profile.get("baseline_ip") or "")
+        check = privacy.assess(
+            baseline,
+            current,
+            ipv6,
+            privacy_lock=bool(self.profile.get("privacy_lock")),
+            block_ipv6=bool(self.profile.get("block_ipv6")),
+        )
+        hidden = bool(
+            current
+            and baseline
+            and current != baseline
+            and check["ok"]
+            and self.profile.get("connected")
+        )
+        report = {
+            "ok": hidden,
+            "error": "" if hidden else (check["error"] or "Chưa ẩn được địa chỉ."),
+            "ip": current,
+            "baseline": baseline,
+            "ipv6": ipv6,
+            "source": free_vpn.persist_source(self.profile.get("last_source")),
+            "connected": bool(self.profile.get("connected")),
+        }
+        report["label"] = privacy.inspect_label(report)
+        return report
+
+    def open_private_browser(self) -> dict[str, Any]:
+        exe = ""
+        edge = False
+        if self.tools:
+            if self.tools.get("chrome"):
+                exe = self.tools["chrome"]
+            elif self.tools.get("edge"):
+                exe = self.tools["edge"]
+                edge = True
+        if not exe:
+            for path in privacy.chrome_paths():
+                if Path(path).is_file():
+                    exe = path
+                    break
+        if not exe:
+            for path in privacy.edge_paths():
+                if Path(path).is_file():
+                    exe = path
+                    edge = True
+                    break
+        if not exe:
+            return {"ok": False, "error": "Không tìm thấy Chrome hoặc Edge.", "ip": ""}
+        cmd = privacy.browser_command(exe, edge=edge)
+        try:
+            self.runner(cmd, background=True)
+        except Exception as exc:
+            return {"ok": False, "error": str(exc), "ip": ""}
+        return {"ok": True, "error": "", "ip": self.profile.get("last_ip") or ""}
+
     def autostart(self) -> dict[str, Any] | None:
         if not self.profile["enabled"]:
             return None
-        return self.connect()
+        return self.prepare()
 
     def shutdown(self) -> dict[str, Any] | None:
         if not self.profile["disconnect_on_exit"] or not self.profile["connected"]:
@@ -508,6 +572,8 @@ class VpnClient:
         if not check["ok"]:
             self._rollback()
             return {"ok": False, "error": check["error"], "ip": ip}
+        if self._privacy_applied:
+            self._run_cmd(["ipconfig", "/flushdns"])
         self.profile["connected"] = True
         if ip:
             self.profile["last_ip"] = ip
@@ -520,8 +586,17 @@ class VpnClient:
         baseline = self._snapshot_ip()
         if baseline:
             self.profile["baseline_ip"] = baseline
-        if self.profile.get("block_ipv6"):
-            self._apply_privacy()
+        self._apply_privacy()
+
+    def _install_warp(self) -> None:
+        if self.profile["kind"] not in FREE_KINDS:
+            return
+        if self._discover_tools().get("warp"):
+            return
+        if not self._privacy_os():
+            return
+        for cmd in privacy.warp_install_commands():
+            self._run_cmd(cmd)
 
     def _snapshot_ip(self) -> str:
         try:
@@ -535,8 +610,11 @@ class VpnClient:
         except Exception:
             return ""
 
+    def _privacy_os(self) -> bool:
+        return sys.platform == "win32" or self.tools is not None
+
     def _apply_privacy(self) -> None:
-        if self._privacy_applied or sys.platform != "win32":
+        if self._privacy_applied or not self._privacy_os():
             return
         for cmd in privacy.harden_commands():
             self._run_cmd(cmd)

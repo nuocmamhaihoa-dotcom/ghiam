@@ -181,12 +181,12 @@ class FreeVpnClientTests(unittest.TestCase):
             result = client.connect()
             self.assertTrue(result["ok"])
             self.assertEqual(client.profile["last_source"], "warp")
-            self.assertEqual(calls[0], ["warp-cli", "registration", "new"])
-            self.assertEqual(calls[1], ["warp-cli", "connect"])
+            self.assertIn(["warp-cli", "registration", "new"], calls)
+            self.assertIn(["warp-cli", "connect"], calls)
             saved = json.loads((Path(tmp) / "vpn.json").read_text(encoding="utf-8"))
             self.assertEqual(saved["last_source"], "warp")
             client.disconnect()
-            self.assertEqual(calls[-1], ["warp-cli", "disconnect"])
+            self.assertIn(["warp-cli", "disconnect"], calls)
 
     def test_falls_back_to_proxy(self) -> None:
         calls: list[list[str]] = []
@@ -236,8 +236,8 @@ class FreeVpnClientTests(unittest.TestCase):
             result = client.connect()
             self.assertTrue(result["ok"])
             self.assertEqual(client.profile["last_source"], "vpngate")
-            self.assertEqual(calls[-1][0], ["rasdial", L2TP_NAME, L2TP_USER, L2TP_PASS])
-            self.assertFalse(calls[-1][1])
+            self.assertIn(["rasdial", L2TP_NAME, L2TP_USER, L2TP_PASS], [cmd for cmd, _bg in calls])
+            self.assertTrue(any(cmd == ["rasdial", L2TP_NAME, L2TP_USER, L2TP_PASS] and not bg for cmd, bg in calls))
 
             child = VpnClient(
                 Path(tmp) / "vpn.json",
@@ -256,7 +256,7 @@ class FreeVpnClientTests(unittest.TestCase):
             text = dest.read_text(encoding="utf-8")
             self.assertIn("remote 203.0.113.10 1194", text)
             self.assertNotIn("script-security", text)
-            self.assertEqual(calls[-1], (["openvpn", "--config", str(dest)], True))
+            self.assertIn((["openvpn", "--config", str(dest)], True), calls)
 
     def test_missing_free_source_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

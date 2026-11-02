@@ -58,8 +58,8 @@ class App:
         self.store = MacroStore()
         self.root = tk.Tk()
         self.root.title("Gõ số rồi Enter")
-        self.root.geometry("430x1680")
-        self.root.minsize(400, 1200)
+        self.root.geometry("430x1760")
+        self.root.minsize(400, 1240)
         self.root.attributes("-topmost", True)
         self.status = tk.StringVar(
             value="Bắt đầu gồm cả hai kịch bản: gõ mã + Enter; màn đổi ≥80% thì tự bấm 4 nút trái."
@@ -141,7 +141,7 @@ class App:
         ttk.Label(self.root, text="VPN trên máy này", font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=12, pady=(4, 0))
         ttk.Label(
             self.root,
-            text="Ẩn địa chỉ: chế độ ẩn IP cấm gõ số nếu VPN hỏng hoặc IP không đổi. Chặn IPv6 + WebRTC. Ưu tiên WARP hơn VPN Gate. Nhà cung cấp VPN vẫn thấy bạn — không có cách nào ẩn tuyệt đối.",
+            text="Ẩn địa chỉ: lần đầu tự bật miễn phí + ẩn IP. Chuẩn bị siết DNS/WebRTC/Firefox, cài WARP (winget) nếu thiếu, rồi nối. Mở ẩn danh cho Chrome/Edge. Nhà cung cấp VPN vẫn thấy bạn — không ẩn tuyệt đối.",
             wraplength=390,
         ).pack(anchor="w", padx=12, pady=(2, 4))
         kinds = ttk.Frame(self.root)
@@ -178,6 +178,11 @@ class App:
         ttk.Button(vpn_btns, text="Ngắt", command=self.disconnect_vpn).pack(side="left", padx=2)
         ttk.Button(vpn_btns, text="Xem IP", command=self.refresh_vpn_ip).pack(side="left", padx=2)
         ttk.Button(vpn_btns, text="Lưu VPN", command=self.save_vpn).pack(side="left", padx=2)
+        extra_btns = ttk.Frame(self.root)
+        extra_btns.pack(fill="x", **pad)
+        ttk.Button(extra_btns, text="Chuẩn bị", command=self.prepare_vpn).pack(side="left", padx=2)
+        ttk.Button(extra_btns, text="Kiểm tra ẩn IP", command=self.inspect_vpn).pack(side="left", padx=2)
+        ttk.Button(extra_btns, text="Mở ẩn danh", command=self.open_private_browser).pack(side="left", padx=2)
         ttk.Label(self.root, textvariable=self.vpn_label, wraplength=390).pack(anchor="w", padx=12, pady=(0, 6))
         ttk.Separator(self.root).pack(fill="x", padx=12, pady=4)
 
@@ -1469,6 +1474,8 @@ class App:
         self.vpn_privacy.set(True if empty else bool(item.get("privacy_lock")))
         self.vpn_ipv6.set(True if empty else bool(item.get("block_ipv6")))
         self.vpn_label.set(status_label(item))
+        if empty:
+            self._persist_vpn()
 
     def _persist_vpn(self) -> None:
         try:
@@ -1482,9 +1489,20 @@ class App:
         self.vpn_label.set("Đã lưu hồ sơ VPN trên máy (không gửi lên VPS).")
 
     def connect_vpn(self) -> None:
+        self.prepare_vpn()
+
+    def prepare_vpn(self) -> None:
         self.vpn.save(self._vpn_form())
-        self.vpn_label.set("Đang nối VPN…")
+        self.vpn_label.set("Đang chuẩn bị ẩn IP và nối VPN…")
         threading.Thread(target=self._vpn_connect_worker, daemon=True).start()
+
+    def inspect_vpn(self) -> None:
+        self.vpn_label.set("Đang kiểm tra địa chỉ…")
+        threading.Thread(target=self._vpn_inspect_worker, daemon=True).start()
+
+    def open_private_browser(self) -> None:
+        self.vpn_label.set("Đang mở trình duyệt ẩn danh…")
+        threading.Thread(target=self._vpn_browser_worker, daemon=True).start()
 
     def disconnect_vpn(self) -> None:
         self.vpn.save(self._vpn_form())
@@ -1499,7 +1517,7 @@ class App:
         self._persist_vpn()
         if not self.vpn.profile.get("enabled"):
             return
-        self.vpn_label.set("Đang nối VPN khi mở phần mềm…")
+        self.vpn_label.set("Đang chuẩn bị ẩn IP khi mở phần mềm…")
         threading.Thread(target=self._vpn_autostart_worker, daemon=True).start()
 
     def _vpn_autostart_worker(self) -> None:
@@ -1509,8 +1527,29 @@ class App:
         self.root.after(0, lambda r=result: self._vpn_finished(r, "nối"))
 
     def _vpn_connect_worker(self) -> None:
-        result = self.vpn.connect()
+        result = self.vpn.prepare()
         self.root.after(0, lambda r=result: self._vpn_finished(r, "nối"))
+
+    def _vpn_inspect_worker(self) -> None:
+        report = self.vpn.inspect()
+
+        def done() -> None:
+            self._fill_vpn()
+            self.vpn_label.set(report.get("label") or report.get("error") or "Chưa kiểm tra được địa chỉ.")
+
+        self.root.after(0, done)
+
+    def _vpn_browser_worker(self) -> None:
+        result = self.vpn.open_private_browser()
+
+        def done() -> None:
+            self._fill_vpn()
+            if result.get("ok"):
+                self.vpn_label.set("Đã mở Chrome/Edge ẩn danh (WebRTC hạn chế).")
+                return
+            self.vpn_label.set(result.get("error") or "Không mở được trình duyệt ẩn danh.")
+
+        self.root.after(0, done)
 
     def _vpn_disconnect_worker(self) -> None:
         result = self.vpn.disconnect()

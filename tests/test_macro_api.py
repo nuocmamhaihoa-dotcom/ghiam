@@ -75,6 +75,8 @@ class MacroHubPageTests(unittest.TestCase):
         self.assertIn("miễn&nbsp;phí", home.text)
         self.assertIn("Ẩn&nbsp;IP", home.text)
         self.assertIn("IPv6", home.text)
+        self.assertIn("Chuẩn&nbsp;bị", home.text)
+        self.assertIn("ẩn&nbsp;danh", home.text)
         self.assertIn("day-so-enter-2", home.text)
         self.assertIn('id="btnFlag"', home.text)
         self.assertIn('id="prefix"', home.text)
@@ -138,6 +140,8 @@ class MacroHubPageTests(unittest.TestCase):
         self.assertIn("miễn phí", readme)
         self.assertIn("Ẩn IP", readme)
         self.assertIn("IPv6", readme)
+        self.assertIn("Chuẩn bị", readme)
+        self.assertIn("ẩn danh", readme)
 
     def test_save_list_get_delete(self) -> None:
         empty = self.client.get("/v1/macros", headers=self.headers)
