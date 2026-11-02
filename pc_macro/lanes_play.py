@@ -87,6 +87,6 @@ def play_one_code_enter(
     played = emit_scheduled(batch, send, sleep, cancelled)
     downs = [event for event in batch if event.get("kind") == "key" and event.get("action") == "down"]
     enters = sum(1 for event in downs if event.get("key") == "enter")
-    letters = sum(1 for event in downs if len(str(event.get("key") or "")) == 1)
+    letters = sum(1 for char in str(code or "") if char.isalnum())
     stopped = 1 if cancelled and cancelled() else 0
     return {"played": played, "typed": letters, "enters": enters, "stopped": stopped}

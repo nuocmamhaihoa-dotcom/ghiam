@@ -1518,6 +1518,7 @@ class App:
             self._post_run({"status": "play"})
             steps: list[dict[str, Any]] = []
             for (_index, code), click in zip(active, clicks):
+                # Xóa mã cũ rồi gõ mã hiện tại. Enter và +1 chỉ chạy sau bước này.
                 steps.extend(one_code_type_steps(code, click))
             _script, batch = compile_script(steps)
             return batch

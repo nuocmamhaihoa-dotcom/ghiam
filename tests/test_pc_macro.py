@@ -454,7 +454,7 @@ class FourLaneTests(unittest.TestCase):
         result = player.play([], times=0, gap_ms=0, prepare=prepare)
         self.assertEqual(result["loops"], 4)
         self.assertEqual(sent.count("enter"), 4)
-        typed = [key for key in sent if key not in {"enter", "end", "home", "delete", "backspace"}]
+        typed = [key for key in sent if key not in {"enter", "end", "home", "delete", "backspace", "ctrl", "a"}]
         self.assertEqual("".join(typed), "SPXAB00001SPXAB00002SPXAB00003SPXAB00004")
         self.assertTrue(queue.exhausted)
 
@@ -463,10 +463,12 @@ class FourLaneTests(unittest.TestCase):
         codes = ["SPXAB00001", "SPXAB00002", "SPXAB00003", "SPXAB00004"]
         wipe = field_clear_steps()
         keys = [step["key"] for step in wipe]
-        self.assertEqual(keys[0], "home")
-        self.assertEqual(keys[1:13], ["delete"] * 12)
-        self.assertEqual(keys[13], "end")
-        self.assertEqual(keys[14:], ["backspace"] * 12)
+        self.assertEqual(keys[0], "ctrl+a")
+        self.assertEqual(keys[1], "delete")
+        self.assertEqual(keys[2], "home")
+        self.assertEqual(keys[3:15], ["delete"] * 12)
+        self.assertEqual(keys[15], "end")
+        self.assertEqual(keys[16:], ["backspace"] * 12)
         typed = four_lane_type_steps(codes, clicks)
         self.assertEqual([step["kind"] for step in typed].count("type"), 4)
         self.assertGreaterEqual([step["kind"] for step in typed].count("key"), 13 * 4)
@@ -500,7 +502,10 @@ class FourLaneTests(unittest.TestCase):
         letters = "".join(
             str(item["key"])
             for item in sent
-            if item["kind"] == "key" and item["action"] == "down" and len(str(item["key"] or "")) == 1
+            if item["kind"] == "key"
+            and item["action"] == "down"
+            and len(str(item["key"] or "")) == 1
+            and item["key"] != "a"
         )
         self.assertEqual(letters, "SPXAB00001SPXAB00002SPXAB00003SPXAB00004")
         self.assertGreater(clock["t"], 1.0)
@@ -517,31 +522,49 @@ class FourLaneTests(unittest.TestCase):
         codes = ["SPXAB00001", "SPXAB00002", "SPXAB00003", "SPXAB00004"]
         fields = {(item["x"], item["y"]): "OLD99" for item in clicks}
         submitted: dict[tuple[int, int], list[str]] = {point: [] for point in fields}
+        selected = {point: False for point in fields}
         focus: list[tuple[int, int] | None] = [None]
+        ctrl = {"on": False}
 
         def send(event: dict[str, Any]) -> None:
             if event.get("kind") == "click" and event.get("action") == "down":
                 point = (int(event["x"]), int(event["y"]))
                 focus[0] = point if point in fields else None
                 return
-            if event.get("kind") != "key" or event.get("action") != "down":
+            if event.get("kind") != "key":
+                return
+            key = str(event.get("key") or "")
+            if event.get("action") == "up":
+                if key == "ctrl":
+                    ctrl["on"] = False
+                return
+            if event.get("action") != "down":
                 return
             point = focus[0]
             if point is None:
                 return
-            key = str(event.get("key") or "")
+            if key == "ctrl":
+                ctrl["on"] = True
+                return
+            if key == "a" and ctrl["on"]:
+                selected[point] = True
+                return
             if key == "enter":
                 submitted[point].append(fields[point])
                 return
-            if key == "backspace":
-                fields[point] = fields[point][:-1]
+            if key in {"backspace", "delete"}:
+                if selected[point]:
+                    fields[point] = ""
+                    selected[point] = False
+                    return
+                fields[point] = fields[point][:-1] if key == "backspace" else fields[point][1:]
                 return
-            if key == "delete":
-                fields[point] = fields[point][1:]
+            if key in {"end", "home", "shift", "alt"}:
                 return
-            if key in {"end", "home", "ctrl", "shift", "alt"}:
-                return
-            if len(key) == 1:
+            if len(key) == 1 and not ctrl["on"]:
+                if selected[point]:
+                    fields[point] = ""
+                    selected[point] = False
                 fields[point] += key
 
         play_type_then_enter(codes, clicks, send, lambda _s: None, settle=0)
@@ -882,9 +905,11 @@ class ScriptStepTests(unittest.TestCase):
         keys = [str(event.get("key") or "") for event in downs if event.get("kind") == "key"]
         self.assertEqual(keys.count("enter"), 1)
         self.assertEqual(keys[-1], "enter")
-        self.assertLess(keys.index("home"), keys.index("delete"))
+        self.assertLess(keys.index("ctrl"), keys.index("a"))
+        self.assertLess(keys.index("a"), keys.index("home"))
+        self.assertLess(keys.index("home"), keys.index("S"))
         self.assertLess(keys.index("delete"), keys.index("S"))
-        self.assertEqual("".join(key for key in keys if len(key) == 1), "SPXAB00007")
+        self.assertEqual("".join(key for key in keys if len(key) == 1 and key != "a"), "SPXAB00007")
         clicks = [event for event in downs if event.get("kind") == "click"]
         self.assertEqual(clicks[0]["x"], 40)
         self.assertEqual(clicks[-1]["x"], 120)
@@ -893,36 +918,62 @@ class ScriptStepTests(unittest.TestCase):
         typed_only, typed_events = compile_script(one_code_type_steps("SPXAB00007", click))
         self.assertNotIn("enter", [step.get("key") for step in typed_only])
         self.assertFalse(any(event.get("key") == "enter" for event in typed_events))
+        chord, chord_events = compile_script([new_step("key", key="ctrl+a")])
+        self.assertEqual(chord[0]["key"], "ctrl+a")
+        self.assertEqual(
+            [event["key"] for event in chord_events if event.get("action") == "down"],
+            ["ctrl", "a"],
+        )
+        self.assertEqual(
+            [event["key"] for event in chord_events if event.get("action") == "up"],
+            ["a", "ctrl"],
+        )
 
     def test_player_increments_one_and_enters_once_per_code(self) -> None:
         queue = FourLaneQueue(prefix="SPXAB", start="00001", end="00003", step=1)
         click = {"x": 10, "y": 20}
         sent: list[str] = []
-        field = {"text": "OLD99", "submitted": []}
+        field = {"text": "OLD99", "submitted": [], "selected": False}
         ctrl = {"on": False}
 
         def send(event: dict[str, Any]) -> None:
             if event.get("kind") == "click" and event.get("action") == "down":
                 return
-            if event.get("kind") != "key" or event.get("action") != "down":
+            if event.get("kind") != "key":
                 return
             key = str(event.get("key") or "")
+            if event.get("action") == "up":
+                if key == "ctrl":
+                    ctrl["on"] = False
+                return
+            if event.get("action") != "down":
+                return
             sent.append(key)
             if key == "ctrl":
                 ctrl["on"] = True
                 return
+            if key == "a" and ctrl["on"]:
+                field["selected"] = True
+                return
             if key == "enter":
                 field["submitted"].append(field["text"])
                 return
-            if key == "backspace":
-                field["text"] = field["text"][:-1]
-                return
-            if key == "delete":
-                field["text"] = field["text"][1:]
+            if key in {"backspace", "delete"}:
+                if field["selected"]:
+                    field["text"] = ""
+                    field["selected"] = False
+                    return
+                if key == "backspace":
+                    field["text"] = field["text"][:-1]
+                else:
+                    field["text"] = field["text"][1:]
                 return
             if key in {"end", "home", "shift", "alt"}:
                 return
             if len(key) == 1 and not ctrl["on"]:
+                if field["selected"]:
+                    field["text"] = ""
+                    field["selected"] = False
                 field["text"] += key
 
         def prepare(_loop: int) -> list:
@@ -946,6 +997,100 @@ class ScriptStepTests(unittest.TestCase):
         self.assertEqual(live["enters"], 1)
         self.assertEqual(live["typed"], 10)
         self.assertEqual(live["stopped"], 0)
+
+    def test_gui_play2_wipes_old_types_plus_one_then_enters_before_increment(self) -> None:
+        """Same order as gui._run_play2: xóa cũ → gõ mã mới → Enter một lần → mới +1."""
+        queue = FourLaneQueue(prefix="SPXAB", start="00001", end="00003", step=1)
+        click = {"x": 10, "y": 20, "wx": 4, "wy": 5}
+        field = {"text": "SPXAB00999", "submitted": [], "selected": False}
+        pending: list[tuple[int, str]] = []
+        timeline: list[str] = []
+        sent: list[str] = []
+        ctrl = {"on": False}
+
+        def send(event: dict[str, Any]) -> None:
+            if event.get("kind") != "key":
+                return
+            key = str(event.get("key") or "")
+            if event.get("action") == "up":
+                if key == "ctrl":
+                    ctrl["on"] = False
+                return
+            if event.get("action") != "down":
+                return
+            sent.append(key)
+            if key == "ctrl":
+                ctrl["on"] = True
+                return
+            if key == "a" and ctrl["on"]:
+                field["selected"] = True
+                return
+            if key == "enter":
+                timeline.append("enter:" + field["text"])
+                field["submitted"].append(field["text"])
+                return
+            if key in {"backspace", "delete"}:
+                if field["selected"]:
+                    field["text"] = ""
+                    field["selected"] = False
+                    return
+                field["text"] = field["text"][:-1] if key == "backspace" else field["text"][1:]
+                return
+            if key in {"end", "home", "shift", "alt"}:
+                return
+            if len(key) == 1 and not ctrl["on"]:
+                if field["selected"]:
+                    field["text"] = ""
+                    field["selected"] = False
+                field["text"] += key
+
+        def prepare(_loop: int) -> list:
+            active = queue.peek_active()
+            if not active:
+                return []
+            pending[:] = list(active)
+            leftover = field["text"]
+            timeline.append("wipe:" + leftover)
+            steps: list[dict[str, Any]] = []
+            for _index, code in active:
+                steps.extend(one_code_type_steps(code, click))
+            _script, batch = compile_script(steps)
+            return batch
+
+        player = Player(send, lambda _s: None)
+
+        def after(_loop: int) -> list:
+            active = list(pending)
+            self.assertTrue(active)
+            self.assertEqual(queue.currents[0], code_digits(active[0][1]))
+            _script, burst = compile_script(enter_key_steps())
+            player.emit(burst)
+            for index, code in active:
+                queue.note_enter(code, False)
+                queue.take_lane(index)
+            timeline.append("plus1:" + queue.currents[0])
+            return []
+
+        result = player.play([], times=0, gap_ms=0, prepare=prepare, after=after)
+        self.assertEqual(result["loops"], 3)
+        self.assertEqual(sent.count("enter"), 3)
+        self.assertGreaterEqual(sent.count("ctrl"), 3)
+        self.assertEqual(field["submitted"], ["SPXAB00001", "SPXAB00002", "SPXAB00003"])
+        self.assertNotIn("SPXAB00999", "".join(field["submitted"]))
+        self.assertEqual(
+            [item for item in timeline if item.startswith("enter:") or item.startswith("plus1:")],
+            [
+                "enter:SPXAB00001",
+                "plus1:00002",
+                "enter:SPXAB00002",
+                "plus1:00003",
+                "enter:SPXAB00003",
+                "plus1:00004",
+            ],
+        )
+        self.assertEqual(timeline[0], "wipe:SPXAB00999")
+        self.assertTrue(any(item.startswith("wipe:SPXAB00001") for item in timeline))
+        self.assertTrue(queue.exhausted)
 
     def test_collapses_and_compiles_back(self) -> None:
         events = sanitize_events(

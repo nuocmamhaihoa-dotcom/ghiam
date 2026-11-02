@@ -91,10 +91,16 @@ def steps_to_events(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 clock += _CHAR_GAP
             continue
         if kind == "key":
-            key = str(step.get("key") or "")
-            events.append({"t": clock, "kind": "key", "action": "down", "key": key})
+            parts = _key_chord(str(step.get("key") or ""))
+            if not parts:
+                continue
+            for item in parts:
+                events.append({"t": clock, "kind": "key", "action": "down", "key": item})
+                clock += 8
             clock += _CHAR_GAP
-            events.append({"t": clock, "kind": "key", "action": "up", "key": key})
+            for item in reversed(parts):
+                events.append({"t": clock, "kind": "key", "action": "up", "key": item})
+                clock += 8
             clock += _STEP_GAP
             continue
         if kind == "click":
@@ -160,11 +166,17 @@ def number_enter_steps(sample: str = "1") -> list[dict[str, Any]]:
 def field_clear_steps(*, wait: int = 20) -> list[dict[str, Any]]:
     """Wipe leftover text so the next code replaces, not appends.
 
-    Home + Delete clears from the start; End + Backspace clears from the end.
-    Together they empty both left-to-right and right-to-left fields.
+    Ctrl+A + Delete handles typical web inputs. Home + Delete and End +
+    Backspace still run as a backup when the field ignores select-all.
     """
     steps: list[dict[str, Any]] = []
-    home = new_step("key", key="home", wait=wait)
+    select = new_step("key", key="ctrl+a", wait=wait)
+    if select is not None:
+        steps.append(select)
+    cut = new_step("key", key="delete", wait=0)
+    if cut is not None:
+        steps.append(cut)
+    home = new_step("key", key="home", wait=0)
     if home is not None:
         steps.append(home)
     for _index in range(_CLEAR_KEYS):
@@ -444,9 +456,9 @@ def _one_step(item: Any) -> dict[str, Any] | None:
         step["value"] = value
     elif kind == "key":
         key = str(item.get("key") or "").strip().lower()[:32]
-        if not key:
+        if not key or not _key_chord(key):
             return None
-        step["key"] = key
+        step["key"] = "+".join(_key_chord(key))
     elif kind == "click":
         point = _point(item)
         if point is None:
@@ -481,6 +493,44 @@ def _append(steps: list[dict[str, Any]], raw: dict[str, Any]) -> None:
     step = _one_step(raw)
     if step is not None:
         steps.append(step)
+
+
+def _key_chord(raw: str) -> list[str]:
+    """Split 'ctrl+a' into held keys. A lone key is a one-item list."""
+    parts: list[str] = []
+    for item in str(raw or "").replace("-", "+").split("+"):
+        key = item.strip().lower()
+        if not key:
+            continue
+        if key == "control":
+            key = "ctrl"
+        if key == "return":
+            key = "enter"
+        if key == "escape":
+            key = "esc"
+        if len(key) == 1 or key in {
+            "enter",
+            "tab",
+            "space",
+            "backspace",
+            "delete",
+            "esc",
+            "up",
+            "down",
+            "left",
+            "right",
+            "home",
+            "end",
+            "page_up",
+            "page_down",
+            "shift",
+            "ctrl",
+            "alt",
+            "cmd",
+        }:
+            if key not in parts:
+                parts.append(key)
+    return parts
 
 
 def _typed_key(char: str) -> str | None:
