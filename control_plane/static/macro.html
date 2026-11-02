@@ -7,7 +7,7 @@
   <meta http-equiv="content-language" content="vi" />
   <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate" />
   <title>Gõ số rồi Enter</title>
-    <meta name="ui-build" content="20261102-7" />
+    <meta name="ui-build" content="20261102-8" />
   <style>
     html, body, button, input, textarea {
       font-synthesis: none;
@@ -318,8 +318,8 @@
   </section>
 
   <section class="card" id="dir2">
-    <label>Hướng&nbsp;2&nbsp;—&nbsp;chọn&nbsp;từng&nbsp;trình&nbsp;duyệt&nbsp;rồi&nbsp;ô&nbsp;5&nbsp;số</label>
-    <p class="hint">Mỗi&nbsp;thẻ:&nbsp;<b>Gắn&nbsp;N</b>&nbsp;trên&nbsp;PC&nbsp;=&nbsp;bấm&nbsp;cửa&nbsp;sổ&nbsp;website&nbsp;rồi&nbsp;dòng&nbsp;ô&nbsp;5&nbsp;số.&nbsp;<b>Gắn&nbsp;4&nbsp;ô</b>&nbsp;vẫn&nbsp;gắn&nbsp;lần&nbsp;lượt.&nbsp;<b>Tiếp&nbsp;N</b>&nbsp;chỉ&nbsp;mở&nbsp;lại&nbsp;trình&nbsp;đó&nbsp;khi&nbsp;giao&nbsp;diện&nbsp;đổi.&nbsp;Máy&nbsp;gõ&nbsp;4&nbsp;mã&nbsp;rồi&nbsp;Enter&nbsp;đồng&nbsp;loạt.&nbsp;Chỉ&nbsp;lưu&nbsp;mã&nbsp;của&nbsp;trình&nbsp;có&nbsp;khung&nbsp;đổi&nbsp;≥&nbsp;20%.</p>
+    <label>Hướng&nbsp;2&nbsp;—&nbsp;1&nbsp;tiến&nbsp;trình&nbsp;trên&nbsp;trình&nbsp;duyệt&nbsp;khách</label>
+    <p class="hint">Hub&nbsp;<b>không&nbsp;gõ</b>&nbsp;vào&nbsp;trình&nbsp;duyệt&nbsp;này.&nbsp;Trên&nbsp;PC&nbsp;mở&nbsp;<b>CHAY-O-DAY.cmd</b>,&nbsp;<b>Gắn&nbsp;trình&nbsp;khách</b>:&nbsp;cửa&nbsp;sổ&nbsp;<b>Evoshop</b>&nbsp;(ảnh&nbsp;login&nbsp;evoshop.vn,&nbsp;không&nbsp;bấm&nbsp;trang&nbsp;hub),&nbsp;rồi&nbsp;dòng&nbsp;<b>Mã&nbsp;khách&nbsp;hàng&nbsp;/&nbsp;số&nbsp;điện&nbsp;thoại</b>.&nbsp;Bật&nbsp;chạy&nbsp;=&nbsp;PC&nbsp;thu&nbsp;nhỏ&nbsp;hub,&nbsp;đưa&nbsp;Evoshop&nbsp;lên&nbsp;trước,&nbsp;gõ&nbsp;mã,&nbsp;Enter.</p>
     <label for="prefix2">5 ký tự cố định</label>
     <input id="prefix2" class="wide" type="text" maxlength="5" autocomplete="off" spellcheck="false" placeholder="SPXAB" />
     <div class="pair">
@@ -332,7 +332,7 @@
         <input id="end2" class="wide" type="text" inputmode="numeric" maxlength="5" autocomplete="off" value="00010" />
       </div>
     </div>
-    <p class="now" id="current2">Sẽ gõ 4 làn: —</p>
+    <p class="now" id="current2">Sẽ gõ: —</p>
     <div class="pair">
       <div>
         <label for="delay2">Chờ (giây)</label>
@@ -347,17 +347,25 @@
         <input id="threshold2" type="number" value="20" min="1" max="100" />
       </div>
     </div>
-    <p class="hint" id="frame2Label">Chưa gắn — trên PC bấm Gắn N: cửa sổ website rồi dòng ô 5 số.</p>
-    <p class="status" id="status2">Mỗi thẻ: Gắn cửa sổ + ô, Bắt đầu 2, Tiếp N khi trình đó đổi giao diện.</p>
+    <p class="hint" id="frame2Label">Chưa gắn Evoshop — trên PC bấm Gắn trình khách: cửa sổ Evoshop rồi dòng mã KH / SĐT.</p>
+    <p class="status" id="status2">Mở phần mềm PC, gắn Evoshop (không gắn trang hub), rồi bật chạy. Tắt để dừng.</p>
+    <p class="hint" id="pcLink2">Chưa thấy phần mềm PC. Mở CHAY-O-DAY.cmd trên máy Windows.</p>
     <div class="lanes" id="lanes2">
-      <div class="line" id="lane0" data-lane="0"><b>Trình 1</b><span class="lane-code">—</span><input class="lane-box" id="laneBox0" maxlength="12" readonly tabindex="-1" /><span class="lane-enter" id="laneEnter0">Enter</span><em class="lane-bind">Chưa gắn ô</em><small class="lane-flags"></small><div class="lane-acts"><button type="button" class="mini" data-bind="0">Gắn 1</button><button type="button" class="mini go" data-resume="0">Tiếp 1</button></div></div>
-      <div class="line" id="lane1" data-lane="1"><b>Trình 2</b><span class="lane-code">—</span><input class="lane-box" id="laneBox1" maxlength="12" readonly tabindex="-1" /><span class="lane-enter" id="laneEnter1">Enter</span><em class="lane-bind">Chưa gắn ô</em><small class="lane-flags"></small><div class="lane-acts"><button type="button" class="mini" data-bind="1">Gắn 2</button><button type="button" class="mini go" data-resume="1">Tiếp 2</button></div></div>
-      <div class="line" id="lane2" data-lane="2"><b>Trình 3</b><span class="lane-code">—</span><input class="lane-box" id="laneBox2" maxlength="12" readonly tabindex="-1" /><span class="lane-enter" id="laneEnter2">Enter</span><em class="lane-bind">Chưa gắn ô</em><small class="lane-flags"></small><div class="lane-acts"><button type="button" class="mini" data-bind="2">Gắn 3</button><button type="button" class="mini go" data-resume="2">Tiếp 3</button></div></div>
-      <div class="line" id="lane3" data-lane="3"><b>Trình 4</b><span class="lane-code">—</span><input class="lane-box" id="laneBox3" maxlength="12" readonly tabindex="-1" /><span class="lane-enter" id="laneEnter3">Enter</span><em class="lane-bind">Chưa gắn ô</em><small class="lane-flags"></small><div class="lane-acts"><button type="button" class="mini" data-bind="3">Gắn 4</button><button type="button" class="mini go" data-resume="3">Tiếp 4</button></div></div>
+      <div class="line" id="lane0" data-lane="0"><b>Evoshop — trình duyệt web khách</b><span class="lane-code">—</span><input class="lane-box" id="laneBox0" maxlength="12" readonly tabindex="-1" /><span class="lane-enter" id="laneEnter0">Enter</span><em class="lane-bind">Chưa gắn ô Evoshop</em><small class="lane-flags"></small><div class="lane-acts"><button type="button" class="mini" data-bind="0">Gắn trình khách</button><button type="button" class="mini go" data-resume="0">Tiếp tục</button></div></div>
+    </div>
+    <div class="vpn-row">
+      <div>
+        <label>Chạy tiến trình</label>
+        <p class="hint">Bật&nbsp;=&nbsp;lệnh&nbsp;cho&nbsp;PC&nbsp;gõ&nbsp;Evoshop.&nbsp;Tắt&nbsp;=&nbsp;dừng.&nbsp;Hub&nbsp;không&nbsp;gõ.</p>
+      </div>
+      <label class="switch" id="runSwitch2">
+        <input type="checkbox" id="runToggle2" />
+        Bật&nbsp;chạy
+      </label>
     </div>
     <div class="row">
-      <button type="button" class="go" id="btnStart2">Bắt&nbsp;đầu&nbsp;2</button>
-      <button type="button" id="btnStop2">Dừng&nbsp;2</button>
+      <button type="button" class="go" id="btnStart2">Bật&nbsp;chạy</button>
+      <button type="button" id="btnStop2">Tắt</button>
       <button type="button" class="go" id="btnContinue2">Tiếp&nbsp;tục</button>
     </div>
     <div class="row">
@@ -481,7 +489,7 @@
   var serverToken = __CONTROL_TOKEN__;
   var SLUG = "day-so-enter";
   var SLUG2 = "day-so-enter-2";
-  var LANE_COUNT = 4;
+  var LANE_COUNT = 1;
   var playing = false;
   var playing2 = false;
   var timer = 0;
@@ -490,13 +498,13 @@
   var currentDigits2 = "00001";
   var exhausted2 = false;
   var flagged2 = [];
-  var flaggedLanes2 = [[], [], [], []];
-  var laneTitles2 = ["", "", "", ""];
+  var flaggedLanes2 = [[]];
+  var laneTitles2 = ["Trình duyệt web khách"];
   var paused2 = "";
   var pausedCodes2 = [];
-  var pausedLanes2 = ["", "", "", ""];
-  var waitingLanes2 = [false, false, false, false];
-  var currents2 = ["00001", "00002", "00003", "00004"];
+  var pausedLanes2 = [""];
+  var waitingLanes2 = [false];
+  var currents2 = ["00001"];
   var waiting2 = false;
   var forcePause2 = false;
   var frame2 = null;
@@ -993,8 +1001,9 @@
     for (var i = 0; i < LANE_COUNT; i++) {
       currents2.push(pad5(parseInt(range.start, 10) + i * bump));
     }
-    waitingLanes2 = [false, false, false, false];
-    pausedLanes2 = ["", "", "", ""];
+    waitingLanes2 = [];
+    pausedLanes2 = [];
+    for (var w = 0; w < LANE_COUNT; w++) { waitingLanes2.push(false); pausedLanes2.push(""); }
     waiting2 = false;
     paused2 = "";
     pausedCodes2 = [];
@@ -1019,9 +1028,9 @@
   }
   function bindLabel2(index) {
     var click = laneClicks2[index];
-    if (!click || click.x == null) return "Chưa gắn ô";
-    if (click.wx != null && click.wx >= 0) return "Đã gắn cửa sổ + ô";
-    return "Đã gắn ô 5 số";
+    if (!click || click.x == null) return "Chưa gắn ô Evoshop";
+    if (click.wx != null && click.wx >= 0) return "Đã gắn Evoshop + dòng mã KH / SĐT";
+    return "Đã gắn dòng mã KH / SĐT";
   }
   function laneCodeOf(index) {
     if (waitingLanes2[index]) return pausedLanes2[index] || "";
@@ -1040,7 +1049,7 @@
     var titleEl = box.querySelector("b");
     if (codeEl) codeEl.textContent = shown || "—";
     if (bindEl) bindEl.textContent = bindLabel2(index) + (waitingLanes2[index] ? " · dừng" : "");
-    if (titleEl) titleEl.textContent = laneTitles2[index] || ("Trình " + (index + 1));
+    if (titleEl) titleEl.textContent = laneTitles2[index] || "Trình duyệt web khách";
     if (flagsEl) {
       var saved = (flaggedLanes2[index] || []).slice(-4);
       flagsEl.textContent = saved.length ? ("Lưu: " + saved.join(" · ")) : "";
@@ -1056,13 +1065,11 @@
     var n = boundCount2();
     var ready = frames2.filter(Boolean).length;
     if (n >= LANE_COUNT) {
-      $("frame2Label").textContent = "Đã gắn 4 trình trên PC. Khung theo dõi tự lấy quanh mỗi ô" + (ready ? " (" + ready + " khung)." : ".");
-    } else if (n) {
-      $("frame2Label").textContent = "Đã gắn " + n + "/4 trình — trên PC bấm Gắn N trên thẻ còn thiếu.";
+      $("frame2Label").textContent = "Đã gắn trình duyệt web khách + dòng mã KH / SĐT trên PC." + (ready ? " Có khung theo dõi." : "");
     } else if (frame2) {
       $("frame2Label").textContent = "Đã chọn khung 5 số: " + frame2.w + "×" + frame2.h;
     } else {
-      $("frame2Label").textContent = "Chưa gắn — trên PC bấm Gắn N: cửa sổ website rồi dòng ô 5 số.";
+      $("frame2Label").textContent = "Chưa gắn — trên PC bấm Gắn trình khách: cửa sổ website rồi dòng mã KH / SĐT.";
     }
   }
   function nextActive2() {
@@ -1162,8 +1169,8 @@
         $("current2").textContent = "Hướng 2 đã gõ hết dãy. Vừa xong: " + lastUsed2.join(" · ");
       } else {
         $("current2").textContent = lastUsed2.length
-          ? ("Sẽ gõ 4 làn: " + (shown.join(" · ") || "—") + "   (vừa xong: " + lastUsed2.join(" · ") + ")")
-          : ("Sẽ gõ 4 làn: " + (shown.join(" · ") || "—"));
+          ? ("Sẽ gõ: " + (shown.join(" · ") || "—") + "   (vừa xong: " + lastUsed2.join(" · ") + ")")
+          : ("Sẽ gõ: " + (shown.join(" · ") || "—"));
       }
     }
     for (var i = 0; i < LANE_COUNT; i++) paintLane(i);
@@ -1179,7 +1186,7 @@
     var steps = sampleCodes.map(function (code) { return { kind: "type", value: code }; });
     sampleCodes.forEach(function () { steps.push({ kind: "key", key: "enter", wait: 20 }); });
     var body = {
-      name: "Hướng 2 — 4 làn Enter",
+      name: "Hướng 2 — 1 tiến trình Enter",
       slug: SLUG2,
       steps: steps,
       numbers: {
@@ -1214,102 +1221,57 @@
     return $("laneBox" + index);
   }
   function typeIntoLanes(active, done) {
-    for (var i = 0; i < LANE_COUNT; i++) {
-      var box = laneBox(i);
-      if (box && !waitingLanes2[i]) box.value = "";
-      var hit = active.filter(function (item) { return item.i === i; })[0];
-      paintLane(i, waitingLanes2[i] ? "" : (hit ? "on" : ""));
-    }
-    var pos = 0;
-    function typeNext() {
-      if (!playing2) { done(); return; }
-      if (pos >= active.length) {
-        active.forEach(function (item) { paintLane(item.i, "on hit"); });
-        setStatus2("Hướng 2 đang ấn Enter đồng loạt trên " + codesText2(active.map(function (item) { return item.code; })) + ".");
-        timer2 = window.setTimeout(function () {
-          active.forEach(function (item) { paintLane(item.i, "on"); });
-          done();
-        }, 380);
-        return;
-      }
-      var item = active[pos];
+    active.forEach(function (item) {
       var box = laneBox(item.i);
-      var chars = String(item.code || "").split("");
-      var at = 0;
+      if (box) box.value = item.code || "";
       paintLane(item.i, "on");
-      function typeChar() {
-        if (!playing2) { done(); return; }
-        if (box) box.value = chars.slice(0, at + 1).join("");
-        at += 1;
-        if (at >= chars.length) {
-          pos += 1;
-          timer2 = window.setTimeout(typeNext, 50);
-          return;
-        }
-        timer2 = window.setTimeout(typeChar, 40);
-      }
-      typeChar();
+    });
+    if (done) done();
+  }
+  function postRun2(payload) {
+    return fetch("/v1/pc-macro/run", { method: "POST", headers: headers(), body: JSON.stringify(payload || {}) })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .catch(function () { return null; });
+  }
+  function paintPcLink2(body) {
+    var el = $("pcLink2");
+    if (!el) return;
+    var seen = body && body.pc_seen ? Number(body.pc_seen) : 0;
+    var live = seen > 0 && ((Date.now() / 1000) - seen) < 12;
+    if (!live) {
+      el.textContent = "Chưa thấy phần mềm PC. Mở CHAY-O-DAY.cmd, gắn Evoshop (không gắn trang hub này).";
+      return;
     }
-    typeNext();
+    if (body.pc_bound) {
+      el.textContent = body.status === "play"
+        ? ("PC đang gõ Evoshop" + (body.current ? (": " + body.current) : "."))
+        : ("PC đã gắn Evoshop" + (body.current ? (" · tiếp theo " + body.current) : "."));
+      return;
+    }
+    el.textContent = "PC đang mở nhưng chưa gắn Evoshop. Trên PC bấm Gắn trình khách vào cửa sổ Evoshop.";
   }
   function oneTurn2() {
     if (!playing2) return;
     var active = nextActive2();
     if (!active.length) {
-      playing2 = false;
-      setStatus2(waiting2 ? ("Đã lưu " + codesText2(pausedCodes2, paused2) + ". Bấm Tiếp tục cho trình duyệt đã dừng.") : "Hướng 2 hết dãy.");
+      setStatus2(waiting2 ? ("Đã lưu " + codesText2(pausedCodes2, paused2) + ". Bấm Tiếp tục trên PC khi xong Evoshop.") : "Hướng 2 hết dãy trên PC.");
       showLanes();
       return;
     }
-    var codes = active.map(function (item) { return item.code; });
-    showLanes();
-    setStatus2("Hướng 2 đang gõ " + codesText2(codes) + " rồi Enter đồng loạt. Chỉ lưu mã của trình duyệt đổi ≥" + threshold2() + "%.");
-    typeIntoLanes(active, function () {
-      if (!playing2) return;
-      var paused = [];
-      var kept = [];
-      active.forEach(function (item) {
-        var percent = demoLanePercent(item.i);
-        if (forcePause2 && item.i === active[0].i) percent = threshold2();
-        if (percent >= threshold2()) {
-          pauseLane2(item.i, item.code);
-          paused.push(item.code);
-        } else {
-          takeLane2(item.i);
-          kept.push(item.code);
-        }
-      });
-      forcePause2 = false;
-      lastUsed2 = codes.slice();
-      currentDigits2 = currents2[0];
-      showLanes();
-      persist2().catch(function () {});
-      if (paused.length && kept.length) {
-        setStatus2("Đã lưu " + codesText2(paused) + " vì trình duyệt đổi. Các mã khác vẫn chạy: " + codesText2(kept) + ".");
-      } else if (paused.length) {
-        setStatus2("Đã lưu " + codesText2(paused) + " vì trình duyệt đổi. Bấm Tiếp tục khi xong thao tác tay.");
-      } else {
-        setStatus2("Đã Enter " + codesText2(kept) + ". Không cửa sổ nào đổi — tiếp các trình duyệt còn lại.");
-      }
-      if (!nextActive2().length) {
-        playing2 = false;
-        return;
-      }
-      var wait = Math.max(400, (parseFloat($("delay2").value || "1") || 1) * 1000);
-      timer2 = window.setTimeout(oneTurn2, wait);
-    });
+    typeIntoLanes(active, function () {});
+    setStatus2("Đã gửi lệnh. Phần mềm PC đang gõ " + codesText2(active.map(function (item) { return item.code; })) + " vào Evoshop, không vào trang hub này.");
   }
   function startPlay2() {
-    if (playing) { setStatus2("Đang chạy hướng 1. Bấm Dừng rồi hãy bắt đầu hướng 2.", "err"); return; }
+    if (playing) { setStatus2("Đang chạy hướng 1. Bấm Dừng rồi hãy bắt đầu hướng 2.", "err"); setRunSwitch2(false); return; }
     if (playing2) return;
     var range = bounds2();
     $("start2").value = range.start;
     $("end2").value = range.end;
     $("prefix2").value = prefix2();
     if (currents2.length !== LANE_COUNT) resetCurrents2();
-    if (prefix2().length !== 5) { setStatus2("Hướng 2: nhập đủ 5 ký tự cố định.", "err"); return; }
+    if (prefix2().length !== 5) { setStatus2("Hướng 2: nhập đủ 5 ký tự cố định.", "err"); setRunSwitch2(false); return; }
     if (!nextActive2().length) {
-      if (waiting2) { setStatus2("Hướng 2 đã lưu " + codesText2(pausedCodes2, paused2) + ". Bấm Tiếp tục cho trình duyệt đã dừng.", "err"); return; }
+      if (waiting2) { setStatus2("Hướng 2 đã lưu " + codesText2(pausedCodes2, paused2) + ". Bấm Tiếp tục cho trình duyệt đã dừng.", "err"); setRunSwitch2(false); return; }
       resetCurrents2();
       lastUsed2 = [];
       flagged2 = [];
@@ -1317,16 +1279,15 @@
     }
     if (!nextActive2().length) {
       setStatus2("Hướng 2: nhập số bắt đầu / kết thúc còn trong dãy.", "err");
+      setRunSwitch2(false);
       return;
     }
     playing2 = true;
-    var delay = Math.max(0, parseFloat($("delay2").value || "0") || 0);
-    setStatus2("Hướng 2: gõ 4 mã rồi Enter đồng loạt. Khung ≥" + threshold2() + "% thì chỉ lưu mã của trình duyệt đổi.");
-    if (timer2) window.clearTimeout(timer2);
-    timer2 = window.setTimeout(function () {
-      if (!playing2) return;
-      oneTurn2();
-    }, delay * 1000);
+    setRunSwitch2(true);
+    setStatus2("Đã gửi lệnh cho phần mềm PC. PC sẽ đưa Evoshop lên trước rồi gõ vào Mã khách hàng / SĐT. Trình duyệt hub này không nhận phím.");
+    postRun2({ play_cmd: "run" });
+    persist2().catch(function () {});
+    oneTurn2();
   }
   function resumeLane2(index) {
     if (!waitingLanes2[index]) return "";
@@ -1358,15 +1319,12 @@
       return;
     }
     playing2 = true;
-    setStatus2("Tiếp tục trình " + (index + 1) + " từ " + (nxt || nextLanes()[0] || "—") + ".");
-    if (timer2) window.clearTimeout(timer2);
-    timer2 = window.setTimeout(function () {
-      if (!playing2) return;
-      oneTurn2();
-    }, 0);
+    setRunSwitch2(true);
+    setStatus2("Tiếp tục Evoshop từ " + (nxt || nextLanes()[0] || "—") + ". Phần mềm PC gõ, hub không gõ.");
+    postRun2({ play_cmd: "run" });
   }
   function bindLaneHint(index) {
-    setStatus2("Trình " + (index + 1) + ": trên PC bấm Gắn " + (index + 1) + " — bước 1 cửa sổ website, bước 2 dòng ô 5 số, rồi Lưu.");
+    setStatus2("Trên PC bấm Gắn trình khách — bước 1 cửa sổ Evoshop (không bấm trang hub), bước 2 dòng Mã khách hàng / số điện thoại, rồi Lưu.");
   }
   function continuePlay2() {
     if (playing) { setStatus2("Đang chạy hướng 1. Bấm Dừng rồi hãy tiếp tục hướng 2.", "err"); return; }
@@ -1383,22 +1341,21 @@
     showLanes();
     persist2().catch(function () {});
     playing2 = true;
-    setStatus2("Tiếp tục hướng 2 từ " + (nxt || nextLanes()[0] || "—") + ".");
-    if (timer2) window.clearTimeout(timer2);
-    timer2 = window.setTimeout(function () {
-      if (!playing2) return;
-      oneTurn2();
-    }, 0);
+    setRunSwitch2(true);
+    setStatus2("Tiếp tục hướng 2 từ " + (nxt || nextLanes()[0] || "—") + ". Phần mềm PC gõ Evoshop.");
+    postRun2({ play_cmd: "run" });
   }
   function stopPlay2() {
     playing2 = false;
     forcePause2 = false;
     if (timer2) window.clearTimeout(timer2);
     timer2 = 0;
+    setRunSwitch2(false);
     persist2().catch(function () {});
+    postRun2({ play_cmd: "stop" });
     setStatus2(waiting2
-      ? ("Đã dừng hướng 2. Chờ Tiếp tục tại " + codesText2(pausedCodes2, paused2) + ".")
-      : ("Đã dừng hướng 2. Tiếp theo: " + (nextLanes().join(" · ") || "—") + "."));
+      ? ("Đã gửi tắt cho PC. Chờ Tiếp tục tại " + codesText2(pausedCodes2, paused2) + ".")
+      : ("Đã gửi tắt cho PC. Tiếp theo: " + (nextLanes().join(" · ") || "—") + "."));
   }
   function loadSaved2() {
     fetch("/v1/macros", { headers: headers() })
@@ -1417,7 +1374,7 @@
         if (item.numbers.step) $("step2").value = item.numbers.step;
         currentDigits2 = pad5(item.numbers.current || item.numbers.start || "00001");
         if (Array.isArray(item.numbers.currents) && item.numbers.currents.length) {
-          currents2 = item.numbers.currents.map(function (item) { return pad5(item); });
+          currents2 = item.numbers.currents.map(function (item) { return pad5(item); }).slice(0, LANE_COUNT);
           while (currents2.length < LANE_COUNT) currents2.push(pad5(parseInt(currents2[currents2.length - 1], 10) + step2()));
         } else {
           resetCurrents2();
@@ -1427,7 +1384,7 @@
         exhausted2 = !!item.numbers.exhausted && !nextActive2().length;
         lastUsed2 = Array.isArray(item.numbers.last_used) ? item.numbers.last_used.slice() : [];
         flagged2 = Array.isArray(item.numbers.flagged) ? item.numbers.flagged.slice() : [];
-        flaggedLanes2 = [[], [], [], []];
+        flaggedLanes2 = [[]];
         if (Array.isArray(item.numbers.flagged_lanes)) {
           for (var f = 0; f < LANE_COUNT; f++) {
             var raw = item.numbers.flagged_lanes[f];
@@ -1467,15 +1424,34 @@
         }
         showLanes();
         if (waiting2) setStatus2("Đã mở hướng 2. Đang chờ Tiếp tục tại " + codesText2(pausedCodes2, paused2) + ".");
-        else if (item.numbers.prefix) setStatus2("Đã mở hướng 2. Bấm Bắt đầu 2.");
+        else if (item.numbers.prefix) setStatus2("Đã mở hướng 2. Bật chạy khi sẵn sàng.");
       })
       .catch(function () {});
   }
 
   $("btnStart").onclick = startPlay;
+  function setRunSwitch2(on) {
+    var box = $("runToggle2");
+    var sw = $("runSwitch2");
+    if (!box || !sw) return;
+    box.checked = !!on;
+    sw.className = "switch" + (on ? " on" : "");
+  }
   $("btnStart2").onclick = startPlay2;
   $("btnStop2").onclick = stopPlay2;
   $("btnContinue2").onclick = continuePlay2;
+  if ($("runToggle2") && $("runSwitch2")) {
+    $("runToggle2").onchange = function () {
+      if ($("runToggle2").checked) startPlay2();
+      else stopPlay2();
+    };
+    $("runSwitch2").onclick = function (ev) {
+      ev.preventDefault();
+      if (playing2) stopPlay2();
+      else startPlay2();
+    };
+    setRunSwitch2(false);
+  }
   $("btnPause2").onclick = function () {
     var codes = nextLanes();
     if (!codes.length && pausedCodes2.length) codes = pausedCodes2.slice();
@@ -1498,7 +1474,7 @@
     pauseBatch2(codes, threshold2());
   };
   $("btnFrame2").onclick = function () {
-    setStatus2("Gắn trên PC: mỗi thẻ Gắn N — bước 1 bấm cửa sổ website, bước 2 bấm dòng ô 5 số, rồi Lưu. Gắn 4 ô vẫn gắn lần lượt 4 ô.");
+    setStatus2("Gắn trên PC: bước 1 cửa sổ Evoshop (không bấm trang hub), bước 2 dòng Mã khách hàng / số điện thoại, rồi Lưu.");
   };
   $("lanes2").onclick = function (ev) {
     var btn = ev.target.closest ? ev.target.closest("button") : null;
@@ -1515,7 +1491,7 @@
     if (isNaN(index)) return;
     var code = laneCodeOf(index) || "—";
     var bound = bindLabel2(index);
-    setStatus2("Trình " + (index + 1) + " (" + code + "): " + bound + ". Trên PC bấm Gắn " + (index + 1) + " — cửa sổ website rồi dòng ô 5 số.");
+    setStatus2("Trình duyệt khách (" + code + "): " + bound + ". Trên PC bấm Gắn trình khách — cửa sổ rồi dòng mã KH / SĐT.");
   };
   $("btnStop").onclick = stopPlay;
   $("btnFlag").onclick = flagNow;
@@ -1574,7 +1550,7 @@
   $("paintCanvas").ontouchmove = strokePaint;
   $("btnSave").onclick = function () {
     if (prefix2().length !== 5) { setStatus2("Hướng 2: nhập đủ 5 ký tự cố định rồi lưu.", "err"); return; }
-    persist2().then(function () { setStatus2("Đã lưu 4 làn và chỗ gắn ô.", "ok"); showLanes(); })
+    persist2().then(function () { setStatus2("Đã lưu tiến trình và chỗ gắn dòng mã KH / SĐT.", "ok"); showLanes(); })
       .catch(function (err) { setStatus2(err.message, "err"); });
   };
   $("prefix").oninput = showCurrent;
@@ -1647,8 +1623,33 @@
   renderRecover();
   showCurrent();
   showLanes();
+  function pollRun2() {
+    fetch("/v1/pc-macro/run", { headers: headers() })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (body) {
+        if (!body) return;
+        paintPcLink2(body);
+        if (body.current) {
+          var box = laneBox(0);
+          if (box) box.value = body.current;
+          var codeEl = document.querySelector("#lane0 .lane-code");
+          if (codeEl && body.current) codeEl.textContent = body.current;
+        }
+        if (playing2 && body.play_cmd === "" && body.status === "idle" && body.pc_seen) {
+          playing2 = false;
+          setRunSwitch2(false);
+          setStatus2("Phần mềm PC đã dừng. Tiếp theo trên Evoshop: " + (body.current || nextLanes()[0] || "—") + ".");
+        }
+        if (body.status === "need_bind") {
+          setStatus2("PC chưa gắn Evoshop. Trên phần mềm PC bấm Gắn trình khách vào cửa sổ Evoshop, không bấm trang hub.");
+        }
+      })
+      .catch(function () {});
+  }
   loadSaved();
   loadSaved2();
+  pollRun2();
+  window.setInterval(pollRun2, 1500);
 </script>
 </body>
 </html>

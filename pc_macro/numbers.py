@@ -19,7 +19,7 @@ _MAX_ITEMS = 500
 _MAX_DIGITS = 40
 PREFIX_LEN = 5
 DIGIT_LEN = 5
-LANE_COUNT = 4
+LANE_COUNT = 1
 
 
 def normalize_prefix(raw: str) -> str:

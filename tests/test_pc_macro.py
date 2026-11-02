@@ -63,6 +63,7 @@ from pc_macro.screen import (
     sanitize_frame,
     sanitize_frames,
     watch_changed,
+    customer_target,
     click_from_paint,
     click_landed,
     click_order_cards,
@@ -80,6 +81,16 @@ from pc_macro.screen import (
 )
 from pc_macro.session import Player, Recorder
 from pc_macro.store import MacroStore
+from pc_macro.win_focus import (
+    bring_window_at,
+    find_window_by_title,
+    focus_handle,
+    is_hub_title,
+    is_window_alive,
+    lower_hub_windows,
+    window_handle_at,
+    window_title,
+)
 
 
 class SanitizeTests(unittest.TestCase):
@@ -382,25 +393,27 @@ class PrefixRangeTests(unittest.TestCase):
 
 
 class FourLaneTests(unittest.TestCase):
-    def test_four_lanes_take_distinct_codes_then_enter_together(self) -> None:
-        self.assertEqual(LANE_COUNT, 4)
+    def test_one_lane_takes_codes_one_at_a_time_then_enter(self) -> None:
+        self.assertEqual(LANE_COUNT, 1)
         queue = FourLaneQueue(prefix="SPXAB", start="00001", end="00010", step=1)
         first = queue.peek()
-        self.assertEqual(first, ["SPXAB00001", "SPXAB00002", "SPXAB00003", "SPXAB00004"])
+        self.assertEqual(first, ["SPXAB00001"])
         self.assertEqual(queue.take(), first)
-        self.assertEqual(queue.take(), ["SPXAB00005", "SPXAB00006", "SPXAB00007", "SPXAB00008"])
-        self.assertEqual(queue.take(), ["SPXAB00009", "SPXAB00010"])
+        self.assertEqual(queue.take(), ["SPXAB00002"])
+        self.assertEqual(queue.take(), ["SPXAB00003"])
+        while queue.peek():
+            queue.take()
         self.assertEqual(queue.take(), [])
         self.assertTrue(queue.exhausted)
         again = FourLaneQueue.from_dict(queue.to_dict())
         self.assertTrue(again.exhausted)
-        self.assertEqual(again.last_used, ["SPXAB00009", "SPXAB00010"])
+        self.assertEqual(again.last_used, ["SPXAB00010"])
         self.assertNotIn("recover_clicks", again.to_dict())
         short = FourLaneQueue(prefix="AB", start="00001", end="00010")
         self.assertEqual(short.peek(), [])
         self.assertEqual(short.take(), [])
 
-    def test_player_types_four_codes_and_four_enters_in_one_turn(self) -> None:
+    def test_player_types_one_code_and_enter_each_turn(self) -> None:
         queue = FourLaneQueue(prefix="SPXAB", start="00001", end="00004")
         sent: list[str] = []
 
@@ -416,11 +429,10 @@ class FourLaneTests(unittest.TestCase):
             lambda _s: None,
         )
         result = player.play([], times=0, gap_ms=0, prepare=prepare)
-        self.assertEqual(result["loops"], 1)
+        self.assertEqual(result["loops"], 4)
         self.assertEqual(sent.count("enter"), 4)
         typed = [key for key in sent if key not in {"enter", "end", "backspace"}]
         self.assertEqual("".join(typed), "SPXAB00001SPXAB00002SPXAB00003SPXAB00004")
-        self.assertEqual(sent[-4:], ["enter", "enter", "enter", "enter"])
         self.assertTrue(queue.exhausted)
 
     def test_type_then_enter_clears_field_and_waits_between_enters(self) -> None:
@@ -511,51 +523,45 @@ class FourLaneTests(unittest.TestCase):
         clicks = [{"x": 10, "y": 20}, {"x": 30, "y": 40}, {"x": 50, "y": 60}, {"x": 70, "y": 80}]
         queue = FourLaneQueue(prefix="SPXAB", start="00001", end="00020", step=1, lane_clicks=clicks)
         codes = queue.peek()
-        self.assertEqual(codes, ["SPXAB00001", "SPXAB00002", "SPXAB00003", "SPXAB00004"])
-        typed = four_lane_type_steps(codes, clicks)
-        burst = four_lane_enter_burst_steps(clicks, count=4)
-        self.assertEqual([step["kind"] for step in typed].count("click"), 4)
-        self.assertEqual([step["kind"] for step in typed].count("type"), 4)
-        self.assertEqual([step["kind"] for step in burst].count("click"), 4)
-        self.assertEqual([step["kind"] for step in burst].count("key"), 4)
-        saved = queue.pause_lane(1, "SPXAB00002")
-        self.assertEqual(saved, "SPXAB00002")
+        self.assertEqual(codes, ["SPXAB00001"])
+        typed = four_lane_type_steps(codes, clicks[:1])
+        burst = four_lane_enter_burst_steps(clicks[:1], count=1)
+        self.assertEqual([step["kind"] for step in typed].count("click"), 1)
+        self.assertEqual([step["kind"] for step in typed].count("type"), 1)
+        self.assertEqual([step["kind"] for step in burst].count("click"), 1)
+        self.assertEqual([step["kind"] for step in burst].count("key"), 1)
+        saved = queue.pause_lane(0, "SPXAB00001")
+        self.assertEqual(saved, "SPXAB00001")
         self.assertTrue(queue.waiting)
-        self.assertEqual(queue.paused_codes, ["SPXAB00002"])
-        self.assertEqual(queue.flagged, ["SPXAB00002"])
-        self.assertEqual(queue.peek(), ["SPXAB00001", "SPXAB00003", "SPXAB00004"])
-        self.assertEqual(queue.take(), ["SPXAB00001", "SPXAB00003", "SPXAB00004"])
-        self.assertEqual(queue.peek(), ["SPXAB00005", "SPXAB00007", "SPXAB00008"])
-        self.assertEqual(queue.resume(), "SPXAB00002")
+        self.assertEqual(queue.paused_codes, ["SPXAB00001"])
+        self.assertEqual(queue.flagged, ["SPXAB00001"])
+        self.assertEqual(queue.peek(), [])
+        self.assertEqual(queue.take(), [])
+        self.assertEqual(queue.resume(), "SPXAB00001")
         self.assertFalse(queue.waiting)
-        self.assertEqual(queue.peek(), ["SPXAB00005", "SPXAB00002", "SPXAB00007", "SPXAB00008"])
+        self.assertEqual(queue.peek(), ["SPXAB00001"])
         again = FourLaneQueue.from_dict(queue.to_dict())
         self.assertEqual(again.paused_codes, [])
-        self.assertEqual(again.currents[1], "00002")
+        self.assertEqual(again.currents[0], "00001")
         self.assertEqual(len(again.lane_clicks), 4)
         self.assertEqual(again.lane_clicks[0]["x"], 10)
 
     def test_per_browser_saved_list_and_resume_one_lane(self) -> None:
-        queue = FourLaneQueue(prefix="SPXAB", start="00001", end="00020", step=1, lane_titles=["Chrome", "", "", ""])
+        queue = FourLaneQueue(prefix="SPXAB", start="00001", end="00020", step=1, lane_titles=["Chrome"])
         self.assertEqual(queue.pause_lane(0, "SPXAB00001"), "SPXAB00001")
-        self.assertEqual(queue.pause_lane(2, "SPXAB00003"), "SPXAB00003")
+        self.assertIsNone(queue.pause_lane(2, "SPXAB00003"))
         self.assertEqual(queue.flagged_lanes[0], ["SPXAB00001"])
-        self.assertEqual(queue.flagged_lanes[2], ["SPXAB00003"])
-        self.assertEqual(queue.peek(), ["SPXAB00002", "SPXAB00004"])
+        self.assertEqual(queue.peek(), [])
         self.assertEqual(queue.resume_lane(0), "SPXAB00001")
         self.assertFalse(queue.waiting_lanes[0])
-        self.assertTrue(queue.waiting_lanes[2])
-        self.assertEqual(queue.peek(), ["SPXAB00001", "SPXAB00002", "SPXAB00004"])
+        self.assertEqual(queue.peek(), ["SPXAB00001"])
         again = FourLaneQueue.from_dict(queue.to_dict())
         self.assertEqual(again.flagged_lanes[0], ["SPXAB00001"])
-        self.assertEqual(again.flagged_lanes[2], ["SPXAB00003"])
         self.assertEqual(again.lane_titles[0], "Chrome")
-        self.assertTrue(again.waiting_lanes[2])
-        self.assertEqual(again.resume_lane(2), "SPXAB00003")
         self.assertFalse(again.waiting)
-        self.assertIn("cửa sổ", overlay_banner(0, recording=True, step=1, phases=2, phase=0))
-        self.assertIn("ô 5 số", overlay_banner(0, recording=True, step=1, phases=2, phase=1))
-        self.assertIn("Lưu", overlay_banner(1, recording=False, awaiting_save=True, step=1, phases=2))
+        self.assertIn("trình duyệt web khách", overlay_banner(0, recording=True, step=0, phases=2, phase=0))
+        self.assertIn("Mã khách hàng", overlay_banner(0, recording=True, step=0, phases=2, phase=1))
+        self.assertIn("Lưu", overlay_banner(1, recording=False, awaiting_save=True, step=0, phases=2))
         clicks = upsert_slot([], 2, 200, 150, 1000, 800, via="point", wx=50, wy=40)
         slots = click_slots(clicks)
         self.assertIsNone(slots[0])
@@ -567,6 +573,28 @@ class FourLaneTests(unittest.TestCase):
         scaled = scale_clicks(clicks, 2000, 1600)
         self.assertEqual(scaled[0]["wx"], 100)
         self.assertEqual(scaled[0]["wy"], 80)
+        self.assertIsNone(customer_target([]))
+        self.assertIsNone(customer_target([{"x": 10, "y": 20}]))
+        bound = upsert_slot(
+            [],
+            0,
+            200,
+            150,
+            1000,
+            800,
+            via="point",
+            wx=50,
+            wy=40,
+            hwnd=4242,
+            wtitle="evoshop.vn - Google Chrome",
+        )
+        self.assertEqual(customer_target(bound)["hwnd"], 4242)
+        self.assertEqual(customer_target(bound)["wtitle"], "evoshop.vn - Google Chrome")
+        self.assertEqual(scale_clicks(bound, 2000, 1600)[0]["hwnd"], 4242)
+        self.assertEqual(scale_clicks(bound, 2000, 1600)[0]["wtitle"], "evoshop.vn - Google Chrome")
+        self.assertFalse(bring_window_at(10, 20))
+        self.assertFalse(focus_handle(0))
+        self.assertEqual(window_handle_at(1, 1), 0)
         typed = four_lane_type_steps(["SPXAB00003"], clicks)
         self.assertGreaterEqual([step["kind"] for step in typed].count("click"), 2)
         self.assertEqual([step for step in typed if step.get("kind") == "click"][0]["x"], 50)
@@ -574,7 +602,7 @@ class FourLaneTests(unittest.TestCase):
     def test_pause_full_code_when_frame_changes_then_continue(self) -> None:
         queue = FourLaneQueue(prefix="SPXAB", start="00001", end="00020", step=1)
         self.assertEqual(queue.peek_one(), "SPXAB00001")
-        self.assertEqual([index for index, _code in queue.peek_active()], [0, 1, 2, 3])
+        self.assertEqual([index for index, _code in queue.peek_active()], [0])
         typed = number_type_steps("SPXAB00002")
         self.assertEqual(typed[0]["value"], "SPXAB00002")
         self.assertEqual(enter_key_steps()[0]["key"], "enter")
@@ -582,14 +610,14 @@ class FourLaneTests(unittest.TestCase):
         self.assertEqual(paused, "SPXAB00002")
         self.assertTrue(queue.waiting)
         self.assertEqual(queue.flagged, ["SPXAB00002"])
-        self.assertEqual(queue.peek(), ["SPXAB00001", "SPXAB00003", "SPXAB00004"])
+        self.assertEqual(queue.peek(), [])
         self.assertEqual(queue.resume(), "SPXAB00002")
         self.assertFalse(queue.waiting)
-        self.assertEqual(queue.peek(), ["SPXAB00001", "SPXAB00002", "SPXAB00003", "SPXAB00004"])
+        self.assertEqual(queue.peek(), ["SPXAB00002"])
         again = FourLaneQueue.from_dict(queue.to_dict())
         self.assertEqual(again.flagged, ["SPXAB00002"])
         self.assertEqual(again.change_threshold, 20)
-        self.assertEqual(again.peek(), ["SPXAB00001", "SPXAB00002", "SPXAB00003", "SPXAB00004"])
+        self.assertEqual(again.peek(), ["SPXAB00002"])
         same = make_grid((10, 10, 10))
         hit, percent = watch_changed(same, make_grid((10, 10, 10), flip=int(0.25 * 48 * 27)), 20)
         self.assertTrue(hit)
@@ -1122,6 +1150,101 @@ class UpdateTests(unittest.TestCase):
             self.assertTrue((root / "CHAY-O-DAY.cmd").is_file())
             info = package_info(files)
             self.assertEqual(info["digest"], applied["digest"])
+
+
+class _FakeWin:
+    def __init__(self) -> None:
+        self.wins = {
+            100: {
+                "root": 100,
+                "next": 200,
+                "visible": True,
+                "alive": True,
+                "rect": (0, 0, 800, 600),
+                "title": "Gõ số rồi Enter - Google Chrome",
+            },
+            200: {
+                "root": 200,
+                "next": 0,
+                "visible": True,
+                "alive": True,
+                "rect": (0, 0, 800, 600),
+                "title": "evoshop.vn - Google Chrome",
+            },
+            9: {
+                "root": 9,
+                "next": 200,
+                "visible": True,
+                "alive": True,
+                "rect": (0, 0, 800, 600),
+                "title": "overlay",
+            },
+        }
+        self.hit = 9
+        self.fg = 100
+        self.minimized: list[int] = []
+        self.focused: list[int] = []
+
+    def WindowFromPoint(self, _pt: object) -> int:
+        return self.hit
+
+    def GetAncestor(self, hwnd: int, _flag: int) -> int:
+        return int(self.wins.get(int(hwnd), {}).get("root") or hwnd)
+
+    def GetWindow(self, hwnd: int, _cmd: int) -> int:
+        return int(self.wins.get(int(hwnd), {}).get("next") or 0)
+
+    def IsWindow(self, hwnd: int) -> bool:
+        return bool(self.wins.get(int(hwnd), {}).get("alive"))
+
+    def IsWindowVisible(self, hwnd: int) -> bool:
+        return bool(self.wins.get(int(hwnd), {}).get("visible"))
+
+    def title_of(self, hwnd: int) -> str:
+        return str(self.wins.get(int(hwnd), {}).get("title") or "")
+
+    def rect_of(self, hwnd: int) -> tuple[int, int, int, int]:
+        box = self.wins.get(int(hwnd), {}).get("rect") or (0, 0, 0, 0)
+        return int(box[0]), int(box[1]), int(box[2]), int(box[3])
+
+    def enum_windows(self) -> list[int]:
+        return list(self.wins)
+
+    def ShowWindow(self, hwnd: int, cmd: int) -> bool:
+        if cmd in {6, 7}:
+            self.minimized.append(int(hwnd))
+        return True
+
+    def SetForegroundWindow(self, hwnd: int) -> bool:
+        self.fg = int(hwnd)
+        self.focused.append(int(hwnd))
+        return True
+
+    def GetForegroundWindow(self) -> int:
+        return self.fg
+
+    def BringWindowToTop(self, hwnd: int) -> bool:
+        self.fg = int(hwnd)
+        return True
+
+
+class WinFocusTests(unittest.TestCase):
+    def test_skips_overlay_and_refuses_hub_title(self) -> None:
+        api = _FakeWin()
+        self.assertTrue(is_hub_title("Gõ số rồi Enter - Google Chrome"))
+        self.assertTrue(is_hub_title("http://103.200.20.245:8088/"))
+        self.assertFalse(is_hub_title("evoshop.vn - Google Chrome"))
+        self.assertEqual(window_handle_at(100, 100, api=api, exclude=[9]), 200)
+        self.assertEqual(window_title(200, api=api), "evoshop.vn - Google Chrome")
+        self.assertEqual(find_window_by_title("evoshop.vn", api=api), 200)
+        self.assertEqual(lower_hub_windows(api=api), 1)
+        self.assertEqual(api.minimized, [100])
+        self.assertTrue(focus_handle(200, api=api))
+        self.assertEqual(api.focused[-1], 200)
+        self.assertTrue(is_window_alive(200, api=api))
+        api.wins[200]["alive"] = False
+        self.assertFalse(is_window_alive(200, api=api))
+        self.assertFalse(focus_handle(200, api=api))
 
 
 class BootTests(unittest.TestCase):

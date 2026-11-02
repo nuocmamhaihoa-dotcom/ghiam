@@ -65,19 +65,22 @@ class MacroHubPageTests(unittest.TestCase):
         self.assertIn('id="laneBox0"', home.text)
         self.assertIn("typeIntoLanes", home.text)
         self.assertIn("Chưa gắn ô", home.text)
-        self.assertIn("Gắn&nbsp;4&nbsp;ô", home.text)
-        self.assertIn("Gắn 1", home.text)
-        self.assertIn("Tiếp 1", home.text)
+        self.assertIn("Gắn trình khách", home.text)
+        self.assertIn("runToggle2", home.text)
+        self.assertIn("Bật&nbsp;chạy", home.text)
         self.assertIn("resumeLane2", home.text)
         self.assertIn("flagged_lanes", home.text)
-        self.assertIn("cửa sổ website", home.text)
+        self.assertIn("cửa sổ", home.text)
         self.assertIn('id="threshold2"', home.text)
         self.assertIn('id="flags2"', home.text)
         self.assertIn('id="prefix2"', home.text)
         self.assertIn('id="dir2"', home.text)
         self.assertIn("Hướng&nbsp;2", home.text)
-        self.assertIn("Enter&nbsp;đồng&nbsp;loạt", home.text)
-        self.assertIn("4&nbsp;mã", home.text)
+        self.assertIn("1&nbsp;tiến&nbsp;trình", home.text)
+        self.assertIn("Evoshop", home.text)
+        self.assertIn("không&nbsp;gõ", home.text)
+        self.assertIn("/v1/pc-macro/run", home.text)
+        self.assertIn("Mã&nbsp;khách&nbsp;hàng", home.text)
         self.assertIn("trình&nbsp;duyệt", home.text)
         self.assertIn("Tiếp&nbsp;tục", home.text)
         self.assertIn("khung&nbsp;5&nbsp;số", home.text)
@@ -195,6 +198,32 @@ class MacroHubPageTests(unittest.TestCase):
             if name.startswith("pc-macro/") and not name.endswith("/")
         }
         self.assertEqual(body["digest"], digest_files(files))
+
+    def test_run_command_roundtrip(self) -> None:
+        empty = self.client.get("/v1/pc-macro/run", headers=self.page)
+        self.assertEqual(empty.status_code, 200)
+        self.assertEqual(empty.json()["play_cmd"], "")
+        posted = self.client.post(
+            "/v1/pc-macro/run",
+            headers=self.page,
+            json={"play_cmd": "run"},
+        )
+        self.assertEqual(posted.status_code, 200)
+        self.assertEqual(posted.json()["play_cmd"], "run")
+        beat = self.client.post(
+            "/v1/pc-macro/run",
+            headers=self.headers,
+            json={"pc_bound": True, "current": "SPXAB00001", "status": "play"},
+        )
+        self.assertEqual(beat.json()["play_cmd"], "run")
+        self.assertTrue(beat.json()["pc_bound"])
+        self.assertEqual(beat.json()["current"], "SPXAB00001")
+        stopped = self.client.post(
+            "/v1/pc-macro/run",
+            headers=self.page,
+            json={"play_cmd": "stop"},
+        )
+        self.assertEqual(stopped.json()["play_cmd"], "stop")
 
     def test_save_list_get_delete(self) -> None:
         empty = self.client.get("/v1/macros", headers=self.headers)

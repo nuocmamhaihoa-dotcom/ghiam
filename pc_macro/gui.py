@@ -9,7 +9,7 @@ from tkinter import ttk
 from typing import Any
 
 from pc_macro.desktop import Desktop, available, install_hint
-from pc_macro.hub import HubError, configured, describe, pull, push
+from pc_macro.hub import HubError, configured, describe, get_run, pull, push, set_run
 from pc_macro.numbers import FourLaneQueue, LANE_COUNT, NumberQueue, make_code, normalize_digits, normalize_prefix
 from pc_macro.overlay import ClickOverlay, FrameOverlay, show_click_overlay, show_frame_overlay
 from pc_macro.painter import PaintPicker, show_paint_picker
@@ -23,6 +23,7 @@ from pc_macro.screen import (
     click_order_cards,
     click_slots,
     current_screen_size,
+    customer_target,
     frames_from_clicks,
     frames_label,
     lane_watch_frame,
@@ -43,6 +44,16 @@ from pc_macro.store import MacroStore
 from pc_macro.updater import consume_just_updated
 from pc_macro.version import PC_MACRO_BUILD
 from pc_macro.vpn import KIND_LABELS, VpnClient, status_label
+from pc_macro.win_focus import (
+    bring_window_at,
+    find_window_by_title,
+    focus_handle,
+    is_hub_title,
+    is_window_alive,
+    lower_hub_windows,
+    window_handle_at,
+    window_title,
+)
 
 
 def main() -> None:
@@ -76,13 +87,14 @@ class App:
         self.delay2 = tk.StringVar(value="2")
         self.step2 = tk.StringVar(value="1")
         self.threshold2 = tk.StringVar(value=str(LANE_PAUSE_THRESHOLD))
-        self.lanes_label = tk.StringVar(value="Hướng 2 — 4 làn: —")
+        self.lanes_label = tk.StringVar(value="Hướng 2 — 1 tiến trình: —")
         self.frame_label = tk.StringVar(value=frames_label(None))
-        self.fields_label = tk.StringVar(value="Chưa gắn — mỗi thẻ: Gắn N = cửa sổ website rồi dòng ô 5 số.")
+        self.fields_label = tk.StringVar(value="Chưa gắn Evoshop — Gắn cửa sổ Evoshop (không gắn trang hub), rồi dòng mã KH / SĐT.")
         self.lane_card_vars = [
-            tk.StringVar(value=f"Trình {index + 1}  —\nChưa gắn\nChưa lưu số khi đổi")
-            for index in range(LANE_COUNT)
+            tk.StringVar(value="Trình duyệt web khách  —\nChưa gắn\nChưa lưu số khi đổi")
+            for _index in range(LANE_COUNT)
         ]
+        self.run2 = tk.BooleanVar(value=False)
         self.vpn = VpnClient()
         self.vpn_kind = tk.StringVar(value=KIND_LABELS["free"])
         self.vpn_name = tk.StringVar(value="")
@@ -137,6 +149,7 @@ class App:
     def run(self) -> None:
         self.desktop.start()
         self.root.after(200, self._vpn_autostart)
+        self.root.after(900, self._poll_run_cmd)
         self.root.mainloop()
 
     def _build(self) -> None:
@@ -249,12 +262,12 @@ class App:
             text="Bắt đầu = gõ Enter + nếu màn đổi ≥80% tự bấm 4 nút. F8 dừng. Bôi màu / Chọn vị trí từng bước.",
         ).pack(anchor="w", padx=12, pady=(0, 8))
 
-        ttk.Label(self.root, text="Hướng 2 — chọn từng trình duyệt rồi ô 5 số", font=("Segoe UI", 11, "bold")).pack(
+        ttk.Label(self.root, text="Hướng 2 — 1 tiến trình trên trình duyệt khách", font=("Segoe UI", 11, "bold")).pack(
             anchor="w", padx=12
         )
         ttk.Label(
             self.root,
-            text="Mỗi thẻ: Gắn = bấm cửa sổ website rồi dòng ô 5 số. Tiếp = chỉ mở lại trình đó khi giao diện đổi.",
+            text="Gắn Evoshop (không gắn trang hub). Bật chạy = PC đưa Evoshop lên trước, gõ mã, Enter. Tắt = dừng.",
             wraplength=390,
         ).pack(anchor="w", padx=12, pady=(2, 4))
         ttk.Label(self.root, text="5 ký tự cố định").pack(anchor="w", padx=12)
@@ -278,7 +291,7 @@ class App:
         cards2.columnconfigure(1, weight=1)
         for index in range(LANE_COUNT):
             box = ttk.Frame(cards2, padding=4)
-            box.grid(row=index // 2, column=index % 2, sticky="nsew", padx=3, pady=3)
+            box.grid(row=0, column=0, sticky="nsew", padx=3, pady=3)
             ttk.Label(
                 box,
                 textvariable=self.lane_card_vars[index],
@@ -287,10 +300,10 @@ class App:
             ).pack(fill="x")
             row = ttk.Frame(box)
             row.pack(fill="x", pady=(4, 0))
-            ttk.Button(row, text=f"Gắn {index + 1}", command=lambda at=index: self.pick_one_lane(at)).pack(
+            ttk.Button(row, text="Gắn trình khách", command=lambda at=index: self.pick_one_lane(at)).pack(
                 side="left", padx=(0, 4)
             )
-            ttk.Button(row, text=f"Tiếp {index + 1}", command=lambda at=index: self.continue_lane(at)).pack(side="left")
+            ttk.Button(row, text="Tiếp tục", command=lambda at=index: self.continue_lane(at)).pack(side="left")
         opts2 = ttk.Frame(self.root)
         opts2.pack(fill="x", **pad)
         ttk.Label(opts2, text="Chờ").pack(side="left")
@@ -302,13 +315,14 @@ class App:
         ttk.Label(self.root, textvariable=self.fields_label, wraplength=390).pack(anchor="w", padx=12, pady=(0, 2))
         buttons2 = ttk.Frame(self.root)
         buttons2.pack(fill="x", **pad)
-        ttk.Button(buttons2, text="Gắn 4 ô", command=self.pick_lane_fields).pack(side="left", padx=2)
-        ttk.Button(buttons2, text="Bắt đầu 2", command=self.start_play2).pack(side="left", padx=2)
-        ttk.Button(buttons2, text="Dừng 2", command=self.stop_play2).pack(side="left", padx=2)
-        ttk.Button(buttons2, text="Tiếp tục", command=self.continue_play2).pack(side="left", padx=2)
+        ttk.Checkbutton(buttons2, text="Bật chạy / Tắt", variable=self.run2, command=self._toggle_run2).pack(
+            side="left", padx=2
+        )
+        ttk.Button(buttons2, text="Gắn trình khách", command=self.pick_lane_fields).pack(side="left", padx=2)
+        ttk.Button(buttons2, text="Tắt", command=self.stop_play2).pack(side="left", padx=2)
         extra2 = ttk.Frame(self.root)
         extra2.pack(fill="x", **pad)
-        ttk.Button(extra2, text="Chọn 4 khung", command=self.pick_watch_frame).pack(side="left", padx=2)
+        ttk.Button(extra2, text="Chọn khung", command=self.pick_watch_frame).pack(side="left", padx=2)
         ttk.Button(extra2, text="Lưu hướng 2", command=self.save_lanes).pack(side="left", padx=2)
         ttk.Button(extra2, text="Lên VPS", command=self.push_hub).pack(side="left", padx=2)
         ttk.Button(extra2, text="Lấy VPS", command=self.pull_hub).pack(side="left", padx=2)
@@ -656,9 +670,7 @@ class App:
             self._deiconify()
             self._refresh_lanes()
             self._persist_lanes(silent=True)
-            title = "Đã gắn từng trình: cửa sổ + ô 5 số." if index is None else (
-                f"Đã gắn trình {index + 1}: cửa sổ website + dòng ô 5 số."
-            )
+            title = "Đã gắn Evoshop + dòng Mã khách hàng / số điện thoại. Bật chạy sẽ gõ vào Evoshop, không vào trang hub."
             self._picking_lane_index = None
             self.status.set(title)
             return
@@ -977,6 +989,14 @@ class App:
             or self._picking_lanes
         )
 
+    def _toggle_run2(self) -> None:
+        if self.run2.get():
+            self.start_play2()
+            if not self._playing2():
+                self.run2.set(False)
+            return
+        self.stop_play2()
+
     def start_play2(self) -> None:
         if self.recorder.on:
             self.status.set("Dừng ghi chỗ nhập rồi hãy bắt đầu hướng 2.")
@@ -999,22 +1019,27 @@ class App:
             delay = float(self.delay2.get().strip() or "0")
         except ValueError:
             self.status.set("Hướng 2: chờ phải là số giây.")
+            self.run2.set(False)
             return
         if delay < 0:
             self.status.set("Hướng 2: chờ không được âm.")
+            self.run2.set(False)
+            return
+        if customer_target(self.lanes.lane_clicks) is None:
+            self.status.set(
+                "Chưa gắn Evoshop. Bấm Gắn trình khách: cửa sổ Evoshop (không phải trang hub), rồi dòng Mã khách hàng / SĐT."
+            )
+            self.run2.set(False)
+            self._post_run({"status": "need_bind", "pc_bound": False})
             return
         self._persist_vpn()
         self.player2 = Player(self.desktop.send, time.sleep)
+        self.run2.set(True)
         bar = self.lanes.change_threshold
-        ready = len(sanitize_clicks(self.lanes.lane_clicks))
-        if ready < RECOVER_CLICKS:
-            self.status.set(
-                f"Hướng 2: chưa gắn đủ 4 ô — chỉ cửa sổ đang focus nhận phím. Khung ≥{bar}% thì chỉ lưu mã của website đổi."
-            )
-        else:
-            self.status.set(
-                f"Hướng 2: gõ 4 mã vào ô đã gắn, Enter đồng loạt. Khung ≥{bar}% thì chỉ lưu mã của website đổi."
-            )
+        self.status.set(
+            f"Hướng 2: đưa Evoshop lên trước, gõ mã vào dòng đã gắn, Enter, tăng số. Khung ≥{bar}% thì lưu mã."
+        )
+        self._post_run({"play_cmd": "run", "status": "play", "pc_bound": True})
         self._play_thread2 = threading.Thread(target=self._run_play2, args=(delay,), daemon=True)
         self._play_thread2.start()
 
@@ -1030,7 +1055,8 @@ class App:
             nxt = self.lanes.resume()
             self._refresh_lanes()
             self._persist_lanes(silent=True)
-            self.status.set(f"Tiếp tục trình duyệt đã dừng: {nxt}. Các mã khác vẫn chạy.")
+            self.status.set(f"Tiếp tục trình duyệt khách đã dừng: {nxt}.")
+            self.run2.set(True)
             return
         if not self.lanes.waiting and not self.lanes.paused:
             self.start_play2()
@@ -1041,19 +1067,31 @@ class App:
             return
         self._refresh_lanes()
         self._persist_lanes(silent=True)
+        if customer_target(self.lanes.lane_clicks) is None:
+            self.status.set("Chưa gắn Evoshop. Bấm Gắn trình khách rồi Tiếp tục.")
+            self.run2.set(False)
+            return
         self._persist_vpn()
         self.player2 = Player(self.desktop.send, time.sleep)
         self.status.set(f"Tiếp tục hướng 2 từ {nxt or self._codes_text(self.lanes.peek())}.")
+        self.run2.set(True)
+        self._post_run({"play_cmd": "run", "status": "play", "pc_bound": True})
         self._play_thread2 = threading.Thread(target=self._run_play2, args=(0,), daemon=True)
         self._play_thread2.start()
 
     def stop_play2(self) -> None:
         if self.player2 is not None:
             self.player2.cancel()
+        self.run2.set(False)
         nxt = self._codes_text(self.lanes.paused_codes, self.lanes.paused)
         if nxt == "—":
             nxt = self._codes_text(self.lanes.peek())
-        self.status.set(f"Đã dừng hướng 2. {'Chờ Tiếp tục tại ' if self.lanes.waiting else 'Tiếp theo: '}{nxt}.")
+        self._post_run({"play_cmd": "", "status": "idle"})
+        try:
+            self.root.deiconify()
+        except tk.TclError:
+            pass
+        self.status.set(f"Đã tắt hướng 2. {'Chờ Tiếp tục tại ' if self.lanes.waiting else 'Tiếp theo: '}{nxt}.")
 
     def save_lanes(self) -> None:
         self._persist_lanes(silent=False)
@@ -1064,7 +1102,7 @@ class App:
         self.lanes.watch_frames = frames
         self.lanes.watch_frame = frames[0] if frames else None
         if index is not None and 0 <= index < LANE_COUNT and not self.lanes.lane_titles[index]:
-            self.lanes.lane_titles[index] = f"Trình {index + 1}"
+            self.lanes.lane_titles[index] = "Evoshop — trình duyệt web khách"
 
     def pick_one_lane(self, index: int) -> None:
         if self._busy():
@@ -1073,7 +1111,7 @@ class App:
             return
         self._picking_lanes = True
         self._picking_lane_index = index
-        self.status.set(f"Trình {index + 1}: bấm cửa sổ website, rồi dòng ô 5 số, rồi Lưu.")
+        self.status.set("Bấm cửa sổ Evoshop (không bấm trang hub), rồi dòng Mã khách hàng / số điện thoại, rồi Lưu.")
         self.root.withdraw()
         try:
             self._overlay = show_click_overlay(
@@ -1084,7 +1122,7 @@ class App:
                 recording=True,
                 step=index,
                 noun="ô",
-                save_text=f"Lưu trình {index + 1}",
+                save_text="Lưu trình khách",
                 phases=2,
             )
         except tk.TclError:
@@ -1107,39 +1145,27 @@ class App:
         self._refresh_lanes()
         self._persist_lanes(silent=True)
         if self._playing2():
-            self.status.set(f"Tiếp tục trình {index + 1}: {nxt or '—'}. Các mã khác vẫn chạy.")
+            self.status.set(f"Tiếp tục trình duyệt khách: {nxt or '—'}.")
+            self.run2.set(True)
             return
         if not nxt and not self.lanes.peek():
-            self.status.set(f"Trình {index + 1}: không còn mã để tiếp tục.")
+            self.status.set("Trình duyệt khách: không còn mã để tiếp tục.")
+            return
+        if customer_target(self.lanes.lane_clicks) is None:
+            self.status.set("Chưa gắn Evoshop. Bấm Gắn trình khách rồi Tiếp tục.")
+            self.run2.set(False)
             return
         self._persist_vpn()
         self.player2 = Player(self.desktop.send, time.sleep)
         shown = nxt or self._codes_text(self.lanes.peek())
-        self.status.set(f"Tiếp tục trình {index + 1} từ {shown}.")
+        self.status.set(f"Tiếp tục Evoshop từ {shown}.")
+        self.run2.set(True)
+        self._post_run({"play_cmd": "run", "status": "play", "pc_bound": True})
         self._play_thread2 = threading.Thread(target=self._run_play2, args=(0,), daemon=True)
         self._play_thread2.start()
 
     def pick_lane_fields(self) -> None:
-        if self._busy():
-            return
-        self._picking_lanes = True
-        self._picking_lane_index = None
-        self.status.set("Bấm lần lượt ô 5 số trên 4 website (1 → 4), rồi Lưu 4 ô.")
-        self.root.withdraw()
-        try:
-            self._overlay = show_click_overlay(
-                self.root,
-                on_done=self._overlay_done,
-                on_cancel=self._overlay_cancel,
-                clicks=self.lanes.lane_clicks,
-                recording=True,
-                noun="ô",
-                save_text="Lưu 4 ô",
-            )
-        except tk.TclError:
-            self._picking_lanes = False
-            self.root.deiconify()
-            self.status.set("Không mở được lớp phủ để gắn 4 ô.")
+        self.pick_one_lane(0)
 
     def pick_watch_frame(self) -> None:
         if self._busy():
@@ -1230,9 +1256,94 @@ class App:
     def _lane_frame(self, index: int) -> dict[str, Any] | None:
         return lane_watch_frame(self.lanes.watch_frames, self._lane_focus_clicks(), index)
 
+    def _raise_customer(self) -> dict[str, Any] | None:
+        target = customer_target(self._lane_focus_clicks()) or customer_target(self.lanes.lane_clicks)
+        if target is None:
+            return None
+        lower_hub_windows()
+        handle = 0
+        try:
+            handle = int(target.get("hwnd") or 0)
+        except (TypeError, ValueError):
+            handle = 0
+        title = str(target.get("wtitle") or "")
+        if handle and not is_window_alive(handle):
+            handle = 0
+        if not handle and title:
+            handle = find_window_by_title(title)
+        if handle and focus_handle(handle):
+            return target
+        wx = int(target["wx"])
+        wy = int(target["wy"])
+        hit = window_handle_at(wx, wy)
+        if hit and is_hub_title(window_title(hit)):
+            return None
+        if hit and focus_handle(hit):
+            return target
+        if bring_window_at(wx, wy):
+            hit = window_handle_at(wx, wy)
+            if hit and is_hub_title(window_title(hit)):
+                return None
+            return target
+        return None
+
+    def _post_run(self, payload: dict[str, Any]) -> None:
+        if not configured():
+            return
+
+        def work() -> None:
+            body = dict(payload)
+            peek = self.lanes.peek()
+            body.setdefault("current", peek[0] if peek else "")
+            body.setdefault("pc_bound", customer_target(self.lanes.lane_clicks) is not None)
+            try:
+                set_run(body)
+            except HubError:
+                return
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _poll_run_cmd(self) -> None:
+        try:
+            self.root.after(1200, self._poll_run_cmd)
+        except tk.TclError:
+            return
+        if self._picking_lanes or self.recorder.on:
+            return
+        threading.Thread(target=self._poll_run_worker, daemon=True).start()
+
+    def _poll_run_worker(self) -> None:
+        if not configured():
+            return
+        try:
+            body = get_run()
+        except HubError:
+            return
+        self.root.after(0, lambda: self._apply_run_cmd(body))
+        peek = self.lanes.peek()
+        try:
+            set_run(
+                {
+                    "pc_seen": int(time.time()),
+                    "pc_bound": customer_target(self.lanes.lane_clicks) is not None,
+                    "current": peek[0] if peek else "",
+                    "status": "play" if self._playing2() else "idle",
+                }
+            )
+        except HubError:
+            return
+
+    def _apply_run_cmd(self, body: dict[str, Any]) -> None:
+        cmd = str((body or {}).get("play_cmd") or "")
+        if cmd == "run" and not self._playing2():
+            self.start_play2()
+            return
+        if cmd == "stop" and self._playing2():
+            self.stop_play2()
+
     def _run_play2(self, delay: float) -> None:
         if not self._ensure_vpn():
-            self._set_status("VPN chưa nối — hướng 2 vẫn gõ số rồi Enter trên cửa sổ đang mở.")
+            self._set_status("VPN chưa nối — hướng 2 vẫn gõ vào Evoshop đã gắn.")
         remaining = delay
         while remaining > 0 and self.player2 is not None and not self.player2.cancelled:
             self._set_status(f"Hướng 2 bắt đầu sau {int(remaining)} giây…")
@@ -1242,11 +1353,23 @@ class App:
             self._set_status("Đã dừng hướng 2.")
             self.player2 = None
             return
+        self.root.after(0, self.root.iconify)
+        if self._raise_customer() is None:
+            self._set_status("Mất gắn Evoshop. Bấm Gắn trình khách rồi bật chạy lại.")
+            self.player2 = None
+            self.root.after(0, lambda: self.run2.set(False))
+            self.root.after(0, self.root.deiconify)
+            self._post_run({"play_cmd": "", "status": "need_bind", "pc_bound": False})
+            return
+        time.sleep(0.28)
 
         def prepare(_loop: int) -> list[dict[str, Any]]:
             leak = self.vpn.check_leak()
             if leak:
                 self._set_status(f"{leak} Vẫn gõ số rồi Enter.")
+            if self._raise_customer() is None:
+                return []
+            time.sleep(0.2)
             active = self.lanes.peek_active()
             if not active:
                 return []
@@ -1257,7 +1380,7 @@ class App:
             paused = self._codes_text(self.lanes.paused_codes)
             extra = f" Đã lưu {paused}." if paused != "—" else ""
             self._set_status(
-                f"Hướng 2 đang gõ {shown} rồi Enter đồng loạt. Chỉ dừng trình duyệt đổi ≥{bar}%.{extra}"
+                f"Hướng 2 đang gõ {shown} vào Evoshop (dòng mã KH / SĐT) rồi Enter. Khung ≥{bar}% thì lưu.{extra}"
             )
             self.root.after(0, self._refresh_lanes)
             _script, batch = compile_script(four_lane_type_steps(codes, self._lane_clicks_for(active)))
@@ -1320,7 +1443,7 @@ class App:
                     f"Đã lưu {shown_paused} vì màn hình trình duyệt đổi. Bấm Tiếp tục khi xong thao tác tay."
                 )
             else:
-                self._set_status(f"Đã Enter {shown_kept}. Không cửa sổ nào đổi — tiếp các trình duyệt còn lại.")
+                self._set_status(f"Đã Enter {shown_kept}. Tăng số rồi gõ mã tiếp theo.")
             if not self.lanes.peek() and self.player2 is not None:
                 self.player2.cancel()
             self.root.after(0, self._refresh_lanes)
@@ -1334,6 +1457,9 @@ class App:
             self._set_status(f"Hướng 2 dừng vì lỗi: {exc}.")
         finally:
             self.player2 = None
+            self.root.after(0, lambda: self.run2.set(False))
+            self.root.after(0, self.root.deiconify)
+            self._post_run({"play_cmd": "", "status": "idle"})
         self.root.after(0, self._refresh_lanes)
         self.root.after(0, lambda: self._persist_lanes(silent=True))
         if self.lanes.waiting and not self.lanes.peek():
@@ -1435,15 +1561,13 @@ class App:
         elif nxt:
             self.lanes_label.set("Hướng 2 sẽ gõ: " + " · ".join(nxt))
         else:
-            self.lanes_label.set("Hướng 2 — 4 làn: —")
+            self.lanes_label.set("Hướng 2 — 1 tiến trình: —")
         self.frame_label.set(frames_label(self.lanes.watch_frames))
         ready = len(sanitize_clicks(self.lanes.lane_clicks))
-        if ready >= RECOVER_CLICKS:
-            self.fields_label.set("Đã gắn 4 trình — mỗi thẻ cửa sổ + ô 5 số, Enter đồng loạt.")
-        elif ready:
-            self.fields_label.set(f"Đã gắn {ready}/4 trình — bấm Gắn N trên thẻ còn thiếu, hoặc Gắn 4 ô.")
+        if ready >= LANE_COUNT:
+            self.fields_label.set("Đã gắn Evoshop + dòng Mã khách hàng / số điện thoại.")
         else:
-            self.fields_label.set("Chưa gắn — mỗi thẻ: Gắn N = cửa sổ website rồi dòng ô 5 số.")
+            self.fields_label.set("Chưa gắn Evoshop — Gắn cửa sổ Evoshop (không gắn trang hub), rồi dòng mã KH / SĐT.")
         slots = click_slots(self.lanes.lane_clicks)
         active = {index: code for index, code in self.lanes.peek_active()}
         for index in range(LANE_COUNT):
@@ -1457,13 +1581,13 @@ class App:
             except (TypeError, ValueError, AttributeError):
                 window_x = -1
             if slot and window_x >= 0:
-                bind = "Đã gắn cửa sổ + ô"
+                bind = "Đã gắn trình khách + dòng mã KH / SĐT"
             elif slot:
-                bind = "Đã gắn ô 5 số"
+                bind = "Đã gắn dòng mã KH / SĐT"
             else:
                 bind = "Chưa gắn"
             mark = " · dừng" if waiting else ""
-            title = self.lanes.lane_titles[index] or f"Trình {index + 1}"
+            title = self.lanes.lane_titles[index] or "Trình duyệt web khách"
             saved = self.lanes.flagged_lanes[index] if index < len(self.lanes.flagged_lanes) else []
             saved_txt = ("Lưu: " + " · ".join(saved[-4:])) if saved else "Chưa lưu số khi đổi"
             self.lane_card_vars[index].set(f"{title}  {code or '—'}\n{bind}{mark}\n{saved_txt}")
@@ -1480,7 +1604,7 @@ class App:
         sample = " ".join(self.lanes.peek() or self.lanes.last_used or ["1"])
         try:
             saved = self.store.save(
-                "Hướng 2 — 4 làn Enter",
+                "Hướng 2 — 1 tiến trình Enter",
                 [],
                 slug=self.slug2,
                 numbers=self.lanes.to_dict(),
@@ -1676,8 +1800,8 @@ def _click_from_steps(steps: list[dict[str, Any]]) -> dict[str, Any] | None:
 def _startup_status() -> str:
     stamp = consume_just_updated()
     if stamp and stamp.get("build"):
-        return f"Đã tự cập nhật lên bản {stamp['build']}. Gắn từng trình rồi Bắt đầu 2."
-    return f"Mỗi thẻ: Gắn cửa sổ + ô 5 số, rồi Bắt đầu 2. Bản {PC_MACRO_BUILD} tự cập nhật từ hub."
+        return f"Đã tự cập nhật lên bản {stamp['build']}. Gắn Evoshop (không gắn trang hub) rồi bật chạy."
+    return f"Gắn Evoshop + dòng mã KH / SĐT, rồi bật chạy. Hub không gõ. Bản {PC_MACRO_BUILD}."
 
 
 def _now_ms() -> int:
