@@ -43,7 +43,7 @@ from pc_macro.script import (
 )
 from pc_macro.session import Player, Recorder, ignore_window
 from pc_macro.store import MacroStore
-from pc_macro.vpn import KIND_LABELS, VpnClient, profile_ready, status_label
+from pc_macro.vpn import KIND_LABELS, VpnClient, status_label
 
 
 def main() -> None:
@@ -88,8 +88,10 @@ class App:
         self.vpn_user = tk.StringVar(value="")
         self.vpn_pass = tk.StringVar(value="")
         self.vpn_disconnect = tk.StringVar(value="")
-        self.vpn_enabled = tk.BooleanVar(value=False)
-        self.vpn_exit = tk.BooleanVar(value=False)
+        self.vpn_enabled = tk.BooleanVar(value=True)
+        self.vpn_exit = tk.BooleanVar(value=True)
+        self.vpn_privacy = tk.BooleanVar(value=True)
+        self.vpn_ipv6 = tk.BooleanVar(value=True)
         self.vpn_label = tk.StringVar(value=status_label(self.vpn.profile))
         self.recorder = Recorder(ignore_point=ignore_window(self._window_box))
         self.player: Player | None = None
@@ -139,7 +141,7 @@ class App:
         ttk.Label(self.root, text="VPN trên máy này", font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=12, pady=(4, 0))
         ttk.Label(
             self.root,
-            text="Tự chọn miễn phí: Cloudflare WARP (nếu đã cài), Proton/Windscribe CLI (đã đăng nhập), VPN Gate công khai, rồi proxy tĩnh trong data/proxies_static.txt. Không tải cài đặt lén. Mật khẩu chỉ lưu trên PC, không gửi lên VPS.",
+            text="Ẩn địa chỉ: chế độ ẩn IP cấm gõ số nếu VPN hỏng hoặc IP không đổi. Chặn IPv6 + WebRTC. Ưu tiên WARP hơn VPN Gate. Nhà cung cấp VPN vẫn thấy bạn — không có cách nào ẩn tuyệt đối.",
             wraplength=390,
         ).pack(anchor="w", padx=12, pady=(2, 4))
         kinds = ttk.Frame(self.root)
@@ -168,6 +170,8 @@ class App:
         flags.pack(fill="x", **pad)
         ttk.Checkbutton(flags, text="Bật VPN khi mở phần mềm", variable=self.vpn_enabled).pack(anchor="w")
         ttk.Checkbutton(flags, text="Ngắt VPN khi đóng cửa sổ", variable=self.vpn_exit).pack(anchor="w")
+        ttk.Checkbutton(flags, text="Ẩn IP: cấm chạy nếu VPN hỏng / IP không đổi", variable=self.vpn_privacy).pack(anchor="w")
+        ttk.Checkbutton(flags, text="Chặn IPv6 + WebRTC (tránh lộ địa chỉ thật)", variable=self.vpn_ipv6).pack(anchor="w")
         vpn_btns = ttk.Frame(self.root)
         vpn_btns.pack(fill="x", **pad)
         ttk.Button(vpn_btns, text="Nối", command=self.connect_vpn).pack(side="left", padx=2)
@@ -498,7 +502,11 @@ class App:
         self._set_status(f"Đã lấy {result['count']} bản từ {describe()}.")
 
     def _run_play(self, delay: float) -> None:
-        self._ensure_vpn()
+        if not self._ensure_vpn():
+            if self.player is not None:
+                self.player.cancel()
+            self.player = None
+            return
         remaining = delay
         while remaining > 0 and self.player is not None and not self.player.cancelled:
             self._set_status(f"Bắt đầu sau {int(remaining)} giây… bấm vào dòng cố định.")
@@ -510,6 +518,12 @@ class App:
             return
 
         def prepare(_loop: int) -> list[dict[str, Any]]:
+            leak = self.vpn.check_leak()
+            if leak:
+                self._set_status(leak)
+                if self.player is not None:
+                    self.player.cancel()
+                return []
             pending = []
             if self._force_recover:
                 pending = self._consume_recover("F9")
@@ -1129,7 +1143,11 @@ class App:
         return lane_watch_frame(self.lanes.watch_frames, self._lane_focus_clicks(), index)
 
     def _run_play2(self, delay: float) -> None:
-        self._ensure_vpn()
+        if not self._ensure_vpn():
+            if self.player2 is not None:
+                self.player2.cancel()
+            self.player2 = None
+            return
         remaining = delay
         while remaining > 0 and self.player2 is not None and not self.player2.cancelled:
             self._set_status(f"Hướng 2 bắt đầu sau {int(remaining)} giây…")
@@ -1141,6 +1159,12 @@ class App:
             return
 
         def prepare(_loop: int) -> list[dict[str, Any]]:
+            leak = self.vpn.check_leak()
+            if leak:
+                self._set_status(leak)
+                if self.player2 is not None:
+                    self.player2.cancel()
+                return []
             active = self.lanes.peek_active()
             if not active:
                 return []
@@ -1418,7 +1442,10 @@ class App:
             "disconnect_cmd": self.vpn_disconnect.get(),
             "connected": bool(self.vpn.profile.get("connected")),
             "last_ip": self.vpn.profile.get("last_ip") or "",
+            "baseline_ip": self.vpn.profile.get("baseline_ip") or "",
             "last_source": self.vpn.profile.get("last_source") or "",
+            "privacy_lock": bool(self.vpn_privacy.get()),
+            "block_ipv6": bool(self.vpn_ipv6.get()),
         }
 
     def _fill_vpn(self) -> None:
@@ -1437,8 +1464,10 @@ class App:
         self.vpn_user.set(item["username"])
         self.vpn_pass.set(item["password"])
         self.vpn_disconnect.set(item["disconnect_cmd"])
-        self.vpn_enabled.set(bool(item["enabled"]))
-        self.vpn_exit.set(bool(item["disconnect_on_exit"]))
+        self.vpn_enabled.set(True if empty else bool(item["enabled"]))
+        self.vpn_exit.set(True if empty else bool(item["disconnect_on_exit"]))
+        self.vpn_privacy.set(True if empty else bool(item.get("privacy_lock")))
+        self.vpn_ipv6.set(True if empty else bool(item.get("block_ipv6")))
         self.vpn_label.set(status_label(item))
 
     def _persist_vpn(self) -> None:
@@ -1467,6 +1496,7 @@ class App:
         threading.Thread(target=self._vpn_ip_worker, daemon=True).start()
 
     def _vpn_autostart(self) -> None:
+        self._persist_vpn()
         if not self.vpn.profile.get("enabled"):
             return
         self.vpn_label.set("Đang nối VPN khi mở phần mềm…")
@@ -1504,21 +1534,17 @@ class App:
             return
         self.vpn_label.set(result.get("error") or f"Không {action} được VPN.")
 
-    def _ensure_vpn(self) -> None:
-        if not self.vpn.profile.get("enabled") or self.vpn.profile.get("connected"):
-            return
-        if not profile_ready(self.vpn.profile):
-            return
-        self._set_status("Đang nối VPN trước khi chạy…")
-        result = self.vpn.connect()
+    def _ensure_vpn(self) -> bool:
+        self._persist_vpn()
+        result = self.vpn.guard()
         self.root.after(0, self._fill_vpn)
         if result.get("ok"):
-            ip = result.get("ip") or ""
-            self._set_status("VPN đã nối" + (f" · IP {ip}" if ip else "") + ".")
-            return
-        self._set_status(
-            "VPN chưa nối: " + (result.get("error") or "lỗi") + " — vẫn chạy trên mạng hiện tại."
-        )
+            ip = result.get("ip") or self.vpn.profile.get("last_ip") or ""
+            if ip:
+                self._set_status(f"VPN đã nối · IP {ip}.")
+            return True
+        self._set_status(result.get("error") or "Chế độ ẩn IP: chưa nối được — dừng, không chạy trên địa chỉ thật.")
+        return False
 
 
 def _click_from_steps(steps: list[dict[str, Any]]) -> dict[str, Any] | None:

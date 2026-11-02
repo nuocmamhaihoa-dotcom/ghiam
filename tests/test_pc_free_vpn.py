@@ -27,6 +27,16 @@ from pc_macro.free_vpn import (
 from pc_macro.vpn import VpnClient, sanitize_profile, status_label
 
 
+def _shift_ip(before: str = "203.0.113.1", after: str = "198.51.100.8"):
+    state = {"n": 0}
+
+    def fetch() -> str:
+        state["n"] += 1
+        return before if state["n"] == 1 else after
+
+    return fetch
+
+
 class _Done:
     returncode = 0
     stderr = ""
@@ -161,7 +171,8 @@ class FreeVpnClientTests(unittest.TestCase):
             client = VpnClient(
                 Path(tmp) / "vpn.json",
                 runner=runner,
-                ip_fetch=lambda: "198.51.100.8",
+                ip_fetch=_shift_ip(),
+                ip6_fetch=lambda: "",
                 tools={"warp": "warp-cli"},
                 servers=[],
                 proxies=[],
@@ -190,7 +201,8 @@ class FreeVpnClientTests(unittest.TestCase):
             client = VpnClient(
                 Path(tmp) / "vpn.json",
                 runner=runner,
-                ip_fetch=lambda: "203.0.113.50",
+                ip_fetch=_shift_ip("203.0.113.1", "203.0.113.50"),
+                ip6_fetch=lambda: "",
                 tools={"warp": "warp-cli"},
                 servers=[],
                 proxies=[{"server": "10.0.0.9:8080", "host": "10.0.0.9", "port": "8080", "username": "", "password": ""}],
@@ -214,7 +226,8 @@ class FreeVpnClientTests(unittest.TestCase):
             client = VpnClient(
                 Path(tmp) / "vpn.json",
                 runner=runner,
-                ip_fetch=lambda: "",
+                ip_fetch=_shift_ip(),
+                ip6_fetch=lambda: "",
                 tools={"rasdial": "rasdial", "powershell": "powershell"},
                 servers=servers,
                 proxies=[],
@@ -229,7 +242,8 @@ class FreeVpnClientTests(unittest.TestCase):
             child = VpnClient(
                 Path(tmp) / "vpn.json",
                 runner=runner,
-                ip_fetch=lambda: "",
+                ip_fetch=_shift_ip(),
+                ip6_fetch=lambda: "",
                 tools={"openvpn": "openvpn"},
                 servers=servers,
                 proxies=[],

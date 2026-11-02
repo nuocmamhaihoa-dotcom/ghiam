@@ -8,12 +8,13 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any, Callable
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-from pc_macro import free_vpn
+from pc_macro import free_vpn, privacy
 
 FREE_KINDS = ("free", "warp", "vpngate", "proxy")
 VPN_KINDS = ("windows", "wireguard", "openvpn", "command") + FREE_KINDS
@@ -91,7 +92,10 @@ def sanitize_profile(raw: Any) -> dict[str, Any]:
         "connect_cmd": connect_cmd,
         "disconnect_cmd": disconnect_cmd,
         "last_ip": str(data.get("last_ip") or "").strip()[:64],
+        "baseline_ip": privacy.normalize_ip(data.get("baseline_ip")),
         "last_source": free_vpn.persist_source(data.get("last_source")),
+        "privacy_lock": _flag(data, "privacy_lock", kind in FREE_KINDS),
+        "block_ipv6": _flag(data, "block_ipv6", kind in FREE_KINDS),
         "connected": bool(data.get("connected")),
     }
 
@@ -216,14 +220,21 @@ def status_label(profile: Any, ip: str = "") -> str:
     source = free_vpn.source_label(item.get("last_source"))
     if source and item["kind"] in FREE_KINDS:
         kind = source
+    before = item.get("baseline_ip") or ""
+    if item["connected"] and shown and before and shown != before:
+        return f"VPN đã nối ({kind}) · ẩn {before} → {shown}"
     if item["connected"] and shown:
         return f"VPN đã nối ({kind}) · IP {shown}"
     if item["connected"]:
         return f"VPN đã nối ({kind})."
+    if item["privacy_lock"] and item["enabled"] and profile_ready(item):
+        return f"Ẩn IP bật ({kind}) — chưa nối thì không chạy gõ số."
     if item["enabled"] and profile_ready(item):
         return f"VPN sẵn sàng ({kind}) — sẽ nối khi mở phần mềm."
     if item["enabled"]:
         return "VPN đang bật nhưng chưa đủ tên / file cấu hình."
+    if item["privacy_lock"]:
+        return "Ẩn IP bật — phải bật VPN rồi nối, không chạy trên địa chỉ thật."
     return "VPN tắt — đánh dấu Bật VPN khi mở phần mềm để nối tự động."
 
 
@@ -240,16 +251,21 @@ class VpnClient:
         tools: dict[str, str] | None = None,
         servers: list[dict[str, Any]] | None = None,
         proxies: list[dict[str, str]] | None = None,
+        ip6_fetch: Callable[[], str] | None = None,
     ) -> None:
         self.path = Path(path) if path is not None else vpn_path()
         self.runner = runner or _run
         self.ip_fetch = ip_fetch or fetch_public_ip
+        self.ip6_fetch = ip6_fetch or privacy.fetch_ipv6
         self.fetcher = fetcher
         self.tools = tools
         self.servers = servers
         self.proxies = proxies
         self.profile = sanitize_profile(None)
         self._child: Any = None
+        self._privacy_applied = False
+        self._leak_at = 0.0
+        self._leak_text = ""
         self.load()
 
     def load(self) -> dict[str, Any]:
@@ -265,29 +281,36 @@ class VpnClient:
         if raw is not None:
             keep_password = self.profile.get("password") or ""
             keep_source = self.profile.get("last_source") or ""
+            keep_baseline = self.profile.get("baseline_ip") or ""
             incoming = sanitize_profile(raw)
             if not incoming["password"] and keep_password:
                 incoming["password"] = keep_password
             if not incoming["last_source"] and keep_source:
                 incoming["last_source"] = keep_source
+            if not incoming["baseline_ip"] and keep_baseline:
+                incoming["baseline_ip"] = keep_baseline
             self.profile = incoming
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(self.profile, ensure_ascii=False, indent=2), encoding="utf-8")
         return self.profile
 
     def connect(self) -> dict[str, Any]:
+        self._begin_privacy()
         if self.profile["kind"] in FREE_KINDS:
             return self._connect_free()
         if not profile_ready(self.profile):
+            self._restore_privacy()
             return {"ok": False, "error": "Chưa đủ tên VPN hoặc file cấu hình.", "ip": ""}
         cmd = connect_command(self.profile)
         if not cmd:
+            self._restore_privacy()
             return {"ok": False, "error": "Không tìm thấy chương trình VPN trên máy.", "ip": ""}
         if self.profile["kind"] == "openvpn":
             result = self._start_child(cmd)
         else:
             result = self._run_cmd(cmd)
         if not result["ok"]:
+            self._restore_privacy()
             return result
         return self._mark_connected()
 
@@ -304,11 +327,64 @@ class VpnClient:
                 if not result["ok"]:
                     error = result["error"]
         self._stop_child()
+        self._restore_privacy()
         self.profile["connected"] = False
         self.save()
         if error:
             return {"ok": False, "error": error, "ip": self.profile.get("last_ip") or ""}
         return {"ok": True, "error": "", "ip": self.profile.get("last_ip") or ""}
+
+    def guard(self) -> dict[str, Any]:
+        item = self.profile
+        if not item.get("privacy_lock"):
+            if item.get("enabled") and not item.get("connected") and profile_ready(item):
+                result = self.connect()
+                result["blocked"] = False
+                return result
+            return {"ok": True, "error": "", "ip": item.get("last_ip") or "", "blocked": False}
+        if not item.get("enabled"):
+            return {
+                "ok": False,
+                "error": "Chế độ ẩn IP: bật VPN rồi nối trước khi chạy — không dùng địa chỉ thật.",
+                "ip": "",
+                "blocked": True,
+            }
+        if not item.get("connected"):
+            result = self.connect()
+            result["blocked"] = not result["ok"]
+            return result
+        leak = self.check_leak(force=True)
+        if leak:
+            return {"ok": False, "error": leak, "ip": item.get("last_ip") or "", "blocked": True}
+        return {"ok": True, "error": "", "ip": item.get("last_ip") or "", "blocked": False}
+
+    def check_leak(self, force: bool = False) -> str:
+        if not self.profile.get("privacy_lock"):
+            self._leak_text = ""
+            return ""
+        now = time.monotonic()
+        if not force and self._leak_at and now - self._leak_at < 20:
+            return self._leak_text
+        current = self._snapshot_ip()
+        ipv6 = ""
+        if self.profile.get("block_ipv6"):
+            ipv6 = self._snapshot_ip6()
+        text = privacy.leak_message(
+            str(self.profile.get("baseline_ip") or ""),
+            current,
+            ipv6,
+            block_ipv6=bool(self.profile.get("block_ipv6")),
+        )
+        self._leak_at = now
+        self._leak_text = text
+        if text:
+            self.profile["connected"] = False
+            self.save()
+            return text
+        if current:
+            self.profile["last_ip"] = current
+            self.save()
+        return ""
 
     def autostart(self) -> dict[str, Any] | None:
         if not self.profile["enabled"]:
@@ -352,6 +428,7 @@ class VpnClient:
             proxies=proxies or [],
         )
         if not attempts:
+            self._restore_privacy()
             return {
                 "ok": False,
                 "error": "Không tìm thấy nguồn VPN miễn phí (WARP, Proton, Windscribe, VPN Gate, proxy tĩnh).",
@@ -364,6 +441,7 @@ class VpnClient:
                 self.profile["last_source"] = free_vpn.persist_source(step.get("source"))
                 return self._mark_connected()
             errors.append(f"{step.get('source')}: {result['error']}")
+        self._restore_privacy()
         return {"ok": False, "error": " / ".join(errors)[:200], "ip": ""}
 
     def _disconnect_free(self) -> dict[str, Any]:
@@ -418,16 +496,70 @@ class VpnClient:
         return {"ok": True, "error": "", "ip": ""}
 
     def _mark_connected(self) -> dict[str, Any]:
+        ip = self._snapshot_ip()
+        ipv6 = self._snapshot_ip6() if self.profile.get("block_ipv6") else ""
+        check = privacy.assess(
+            str(self.profile.get("baseline_ip") or ""),
+            ip,
+            ipv6,
+            privacy_lock=bool(self.profile.get("privacy_lock")),
+            block_ipv6=bool(self.profile.get("block_ipv6")),
+        )
+        if not check["ok"]:
+            self._rollback()
+            return {"ok": False, "error": check["error"], "ip": ip}
         self.profile["connected"] = True
-        ip = ""
-        try:
-            ip = self.ip_fetch() or ""
-        except Exception:
-            ip = ""
         if ip:
             self.profile["last_ip"] = ip
         self.save()
         return {"ok": True, "error": "", "ip": ip}
+
+    def _begin_privacy(self) -> None:
+        if not self.profile.get("privacy_lock") and not self.profile.get("block_ipv6"):
+            return
+        baseline = self._snapshot_ip()
+        if baseline:
+            self.profile["baseline_ip"] = baseline
+        if self.profile.get("block_ipv6"):
+            self._apply_privacy()
+
+    def _snapshot_ip(self) -> str:
+        try:
+            return privacy.normalize_ip(self.ip_fetch() or "")
+        except Exception:
+            return ""
+
+    def _snapshot_ip6(self) -> str:
+        try:
+            return privacy.normalize_ip(self.ip6_fetch() or "")
+        except Exception:
+            return ""
+
+    def _apply_privacy(self) -> None:
+        if self._privacy_applied or sys.platform != "win32":
+            return
+        for cmd in privacy.harden_commands():
+            self._run_cmd(cmd)
+        self._privacy_applied = True
+
+    def _restore_privacy(self) -> None:
+        if not self._privacy_applied:
+            return
+        for cmd in privacy.restore_commands():
+            self._run_cmd(cmd)
+        self._privacy_applied = False
+
+    def _rollback(self) -> None:
+        if self.profile["kind"] in FREE_KINDS:
+            self._disconnect_free()
+        else:
+            cmd = disconnect_command(self.profile)
+            if cmd:
+                self._run_cmd(cmd)
+        self._stop_child()
+        self._restore_privacy()
+        self.profile["connected"] = False
+        self.save()
 
     def _discover_tools(self) -> dict[str, str]:
         if self.tools is not None:
@@ -534,6 +666,12 @@ def _find_exe(names: tuple[str, ...], extra: tuple[str, ...]) -> str:
         if Path(path).is_file():
             return path
     return ""
+
+
+def _flag(data: dict[str, Any], key: str, default: bool) -> bool:
+    if key in data:
+        return bool(data.get(key))
+    return default
 
 
 def _unknown(kind: str) -> None:

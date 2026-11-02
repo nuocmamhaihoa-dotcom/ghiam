@@ -73,6 +73,8 @@ class MacroHubPageTests(unittest.TestCase):
         self.assertIn("không&nbsp;lưu&nbsp;mật&nbsp;khẩu", home.text)
         self.assertIn("VPN&nbsp;Gate", home.text)
         self.assertIn("miễn&nbsp;phí", home.text)
+        self.assertIn("Ẩn&nbsp;IP", home.text)
+        self.assertIn("IPv6", home.text)
         self.assertIn("day-so-enter-2", home.text)
         self.assertIn('id="btnFlag"', home.text)
         self.assertIn('id="prefix"', home.text)
@@ -123,6 +125,7 @@ class MacroHubPageTests(unittest.TestCase):
         self.assertIn("pc-macro/pc_macro/hub.py", names)
         self.assertIn("pc-macro/pc_macro/vpn.py", names)
         self.assertIn("pc-macro/pc_macro/free_vpn.py", names)
+        self.assertIn("pc-macro/pc_macro/privacy.py", names)
         self.assertIn("pc-macro/Cai-dat.ps1", names)
         self.assertIn("pc-macro/README.txt", names)
         readme = archive.read("pc-macro/README.txt").decode("utf-8")
@@ -133,6 +136,8 @@ class MacroHubPageTests(unittest.TestCase):
         self.assertIn("không đưa lên VPS", readme)
         self.assertIn("VPN Gate", readme)
         self.assertIn("miễn phí", readme)
+        self.assertIn("Ẩn IP", readme)
+        self.assertIn("IPv6", readme)
 
     def test_save_list_get_delete(self) -> None:
         empty = self.client.get("/v1/macros", headers=self.headers)
