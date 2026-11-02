@@ -139,6 +139,7 @@ VPS chỉ giữ kịch bản. Ghi phím/chuột và bấm Làm lại phải làm
    Máy tìm tâm vùng tô rồi bấm trái đúng chỗ đó. Nhớ tỷ lệ màn hình. Chưa nhận thì bấm lại.
    Bắt đầu gồm cả hai kịch bản: gõ mã rồi Enter; màn đổi ≥ 80% thì tự bấm 4 nút trái, lưu số, rồi tăng số tiếp.
    Hướng 2 (độc lập): mỗi dãy số một trình duyệt. Chọn 4 ô nhập và 4 khung. Bắt đầu 2 gõ 4 mã rồi Enter đồng loạt. Chỉ lưu mã của trình duyệt có khung đổi ≥ 20%; các mã khác vẫn chạy. Tiếp tục chỉ mở lại cửa sổ đã dừng.
+   VPN trên PC: chọn loại (Windows / WireGuard / OpenVPN / lệnh riêng), đánh dấu Bật VPN khi mở phần mềm. Mật khẩu chỉ lưu trên máy, không đưa lên VPS. Nối / Ngắt / Xem IP trong cửa sổ.
 
 Đồng bộ với VPS (sau khi đặt địa chỉ):
   python -m pc_macro pull
