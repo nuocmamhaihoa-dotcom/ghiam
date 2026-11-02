@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import os
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -446,6 +447,42 @@ class FourLaneTests(unittest.TestCase):
         self.assertEqual(again.currents[1], "00002")
         self.assertEqual(len(again.lane_clicks), 4)
         self.assertEqual(again.lane_clicks[0]["x"], 10)
+
+    def test_per_browser_saved_list_and_resume_one_lane(self) -> None:
+        queue = FourLaneQueue(prefix="SPXAB", start="00001", end="00020", step=1, lane_titles=["Chrome", "", "", ""])
+        self.assertEqual(queue.pause_lane(0, "SPXAB00001"), "SPXAB00001")
+        self.assertEqual(queue.pause_lane(2, "SPXAB00003"), "SPXAB00003")
+        self.assertEqual(queue.flagged_lanes[0], ["SPXAB00001"])
+        self.assertEqual(queue.flagged_lanes[2], ["SPXAB00003"])
+        self.assertEqual(queue.peek(), ["SPXAB00002", "SPXAB00004"])
+        self.assertEqual(queue.resume_lane(0), "SPXAB00001")
+        self.assertFalse(queue.waiting_lanes[0])
+        self.assertTrue(queue.waiting_lanes[2])
+        self.assertEqual(queue.peek(), ["SPXAB00001", "SPXAB00002", "SPXAB00004"])
+        again = FourLaneQueue.from_dict(queue.to_dict())
+        self.assertEqual(again.flagged_lanes[0], ["SPXAB00001"])
+        self.assertEqual(again.flagged_lanes[2], ["SPXAB00003"])
+        self.assertEqual(again.lane_titles[0], "Chrome")
+        self.assertTrue(again.waiting_lanes[2])
+        self.assertEqual(again.resume_lane(2), "SPXAB00003")
+        self.assertFalse(again.waiting)
+        self.assertIn("cửa sổ", overlay_banner(0, recording=True, step=1, phases=2, phase=0))
+        self.assertIn("ô 5 số", overlay_banner(0, recording=True, step=1, phases=2, phase=1))
+        self.assertIn("Lưu", overlay_banner(1, recording=False, awaiting_save=True, step=1, phases=2))
+        clicks = upsert_slot([], 2, 200, 150, 1000, 800, via="point", wx=50, wy=40)
+        slots = click_slots(clicks)
+        self.assertIsNone(slots[0])
+        self.assertEqual(slots[2]["wx"], 50)
+        self.assertEqual(slots[2]["wy"], 40)
+        frames = frames_from_clicks(clicks)
+        self.assertIsNone(frames[0])
+        self.assertIsNotNone(frames[2])
+        scaled = scale_clicks(clicks, 2000, 1600)
+        self.assertEqual(scaled[0]["wx"], 100)
+        self.assertEqual(scaled[0]["wy"], 80)
+        typed = four_lane_type_steps(["SPXAB00003"], clicks)
+        self.assertGreaterEqual([step["kind"] for step in typed].count("click"), 2)
+        self.assertEqual([step for step in typed if step.get("kind") == "click"][0]["x"], 50)
 
     def test_pause_full_code_when_frame_changes_then_continue(self) -> None:
         queue = FourLaneQueue(prefix="SPXAB", start="00001", end="00020", step=1)
@@ -977,10 +1014,12 @@ class UpdateTests(unittest.TestCase):
             (staging_src / "pc_macro" / "gui.py").write_text("NEW = 2\n", encoding="utf-8")
             (staging_src / "pc_macro" / "version.py").write_text("PC_MACRO_BUILD = 9\n", encoding="utf-8")
             (staging_src / "Chay.cmd").write_text("echo run\n", encoding="utf-8")
+            (staging_src / "CHAY-O-DAY.cmd").write_text("echo run\n", encoding="utf-8")
             files = {
                 "pc_macro/gui.py": (staging_src / "pc_macro" / "gui.py").read_bytes(),
                 "pc_macro/version.py": (staging_src / "pc_macro" / "version.py").read_bytes(),
                 "Chay.cmd": (staging_src / "Chay.cmd").read_bytes(),
+                "CHAY-O-DAY.cmd": (staging_src / "CHAY-O-DAY.cmd").read_bytes(),
             }
             buf = io.BytesIO()
             with zipfile.ZipFile(buf, "w") as archive:
@@ -993,8 +1032,43 @@ class UpdateTests(unittest.TestCase):
             self.assertTrue(keep.is_file())
             self.assertEqual(keep.read_text(encoding="utf-8"), '{"ok": true}')
             self.assertTrue((root / "Chay.cmd").is_file())
+            self.assertTrue((root / "CHAY-O-DAY.cmd").is_file())
             info = package_info(files)
             self.assertEqual(info["digest"], applied["digest"])
+
+
+class BootTests(unittest.TestCase):
+    def test_doctor_sees_package_and_cli_runs(self) -> None:
+        from pc_macro.boot import checks, print_report, ready
+        from pc_macro.cli import main
+
+        rows = {name: ok for name, ok, _detail in checks()}
+        self.assertTrue(rows["thu muc phan mem"])
+        self.assertTrue(rows["python"])
+        code = print_report()
+        self.assertEqual(code, 0 if ready() else 1)
+        self.assertEqual(main(["doctor"]), code)
+
+    def test_extract_zip_then_doctor_from_that_folder(self) -> None:
+        from control_plane.macro_api import _pc_macro_files, _pc_macro_zip
+        from pc_macro.cli import main
+
+        payload = _pc_macro_zip(_pc_macro_files())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "pc-macro"
+            with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+                archive.extractall(tmp)
+            self.assertTrue((root / "CHAY-O-DAY.cmd").is_file())
+            self.assertTrue((root / "pc_macro" / "__main__.py").is_file())
+            self.assertTrue((root / "pc_macro" / "boot.py").is_file())
+            launcher = (root / "CHAY-O-DAY.cmd").read_text(encoding="utf-8")
+            self.assertIn("pc_macro\\__main__.py", launcher)
+            old = sys.path[:]
+            try:
+                sys.path.insert(0, str(root))
+                self.assertIn(main(["doctor"]), (0, 1))
+            finally:
+                sys.path[:] = old
 
 
 if __name__ == "__main__":

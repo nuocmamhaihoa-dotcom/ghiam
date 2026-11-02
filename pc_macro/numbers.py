@@ -326,6 +326,8 @@ class FourLaneQueue:
         watch_frame: Any = None,
         watch_frames: Any = None,
         lane_clicks: Any = None,
+        flagged_lanes: Any = None,
+        lane_titles: Any = None,
         change_threshold: int = LANE_PAUSE_THRESHOLD,
     ) -> None:
         self.prefix = normalize_prefix(prefix)
@@ -345,6 +347,8 @@ class FourLaneQueue:
         self.current = self.currents[0]
         self.last_used = _clean_codes(last_used if isinstance(last_used, (list, tuple)) else [last_used] if last_used else [])
         self.flagged = _clean_codes(flagged)
+        self.flagged_lanes = self._init_flagged_lanes(flagged_lanes)
+        self.lane_titles = _pad_titles(lane_titles)
         self.paused_lanes = self._init_paused_lanes(paused_lanes, paused_codes, paused)
         self.waiting_lanes = self._init_waiting_lanes(waiting_lanes, waiting)
         self.paused_codes = [code for code in self.paused_lanes if code]
@@ -404,6 +408,19 @@ class FourLaneQueue:
                 if code:
                     self.paused_lanes[index] = code
         return flags
+
+    def _init_flagged_lanes(self, flagged_lanes: Any) -> list[list[str]]:
+        slots: list[list[str]] = [[] for _ in range(LANE_COUNT)]
+        raw = flagged_lanes if isinstance(flagged_lanes, (list, tuple)) else []
+        for index in range(LANE_COUNT):
+            if index < len(raw):
+                slots[index] = _clean_codes(raw[index] if isinstance(raw[index], (list, tuple)) else [raw[index]])
+        if not any(slots) and self.flagged:
+            for code in self.flagged:
+                found = self._lane_for_code(code)
+                if found is not None and code not in slots[found]:
+                    slots[found].append(code)
+        return slots
 
     def _init_watch_frames(self, watch_frames: Any, watch_frame: Any) -> list[dict[str, Any] | None]:
         if isinstance(watch_frames, (list, tuple)):
@@ -470,6 +487,8 @@ class FourLaneQueue:
             watch_frame=data.get("watch_frame") or data.get("frame"),
             watch_frames=data.get("watch_frames") or [],
             lane_clicks=data.get("lane_clicks") or data.get("field_clicks") or [],
+            flagged_lanes=data.get("flagged_lanes") or [],
+            lane_titles=data.get("lane_titles") or [],
             change_threshold=data.get("change_threshold") if data.get("change_threshold") is not None else LANE_PAUSE_THRESHOLD,
         )
 
@@ -486,6 +505,8 @@ class FourLaneQueue:
             "exhausted": self.exhausted,
             "last_used": list(self.last_used),
             "flagged": list(self.flagged),
+            "flagged_lanes": [list(items) for items in self.flagged_lanes],
+            "lane_titles": list(self.lane_titles),
             "paused": self.paused,
             "paused_codes": list(self.paused_codes),
             "paused_lanes": list(self.paused_lanes),
@@ -565,6 +586,11 @@ class FourLaneQueue:
             self.flagged.append(chosen)
             if len(self.flagged) > _MAX_ITEMS:
                 self.flagged = self.flagged[-_MAX_ITEMS:]
+        index = self._lane_for_code(chosen)
+        if index is not None and chosen not in self.flagged_lanes[index]:
+            self.flagged_lanes[index].append(chosen)
+            if len(self.flagged_lanes[index]) > _MAX_ITEMS:
+                self.flagged_lanes[index] = self.flagged_lanes[index][-_MAX_ITEMS:]
         return chosen
 
     def pause_lane(self, index: int, value: str | None = None) -> str | None:
@@ -600,18 +626,24 @@ class FourLaneQueue:
                 saved.append(got)
         return saved
 
-    def resume(self) -> str:
-        """Unlock paused browsers so they join the next Enter burst."""
-        unlocked = [code for code in self.paused_lanes if code]
-        for index in range(LANE_COUNT):
-            if self.waiting_lanes[index] and self.paused_lanes[index]:
-                self.currents[index] = normalize_digits(
-                    self.paused_lanes[index][-DIGIT_LEN:] if len(self.paused_lanes[index]) >= DIGIT_LEN else self.paused_lanes[index]
-                )
-            self.waiting_lanes[index] = False
-            self.paused_lanes[index] = ""
+    def resume_lane(self, index: int) -> str:
+        """Unlock one paused browser so only that website joins the next Enter."""
+        if not (0 <= index < LANE_COUNT) or not self.waiting_lanes[index]:
+            return ""
+        code = self.paused_lanes[index]
+        if code:
+            self.currents[index] = normalize_digits(code[-DIGIT_LEN:] if len(code) >= DIGIT_LEN else code)
+        self.waiting_lanes[index] = False
+        self.paused_lanes[index] = ""
         self._sync_legacy()
         self.exhausted = False
+        return code
+
+    def resume(self) -> str:
+        """Unlock every paused browser so they join the next Enter burst."""
+        unlocked = [code for code in self.paused_lanes if code]
+        for index in range(LANE_COUNT):
+            self.resume_lane(index)
         return " · ".join(unlocked) if unlocked else (self.peek_one() or "")
 
 
@@ -638,6 +670,11 @@ def _pad_codes(raw: Any, count: int = LANE_COUNT) -> list[str]:
 def _pad_bools(raw: Any, count: int = LANE_COUNT) -> list[bool]:
     items = list(raw or [])
     return [bool(items[index]) if index < len(items) else False for index in range(count)]
+
+
+def _pad_titles(raw: Any, count: int = LANE_COUNT) -> list[str]:
+    items = list(raw or [])
+    return [str(items[index] or "").strip()[:40] if index < len(items) else "" for index in range(count)]
 
 
 def _digit_event(event: dict[str, Any]) -> bool:

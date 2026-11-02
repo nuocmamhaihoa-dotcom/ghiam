@@ -21,6 +21,7 @@ from pc_macro.screen import (
     capture_grid,
     capture_watch,
     click_order_cards,
+    click_slots,
     current_screen_size,
     frames_from_clicks,
     frames_label,
@@ -52,6 +53,7 @@ from pc_macro.vpn import KIND_LABELS, VpnClient, status_label
 def main() -> None:
     if not available():
         print(install_hint())
+        print("Giải nén zip, rồi bấm đúp CHAY-O-DAY.cmd")
         raise SystemExit(1)
     App().run()
 
@@ -61,8 +63,8 @@ class App:
         self.store = MacroStore()
         self.root = tk.Tk()
         self.root.title("Gõ số rồi Enter")
-        self.root.geometry("430x720")
-        self.root.minsize(400, 600)
+        self.root.geometry("430x780")
+        self.root.minsize(400, 640)
         self.root.attributes("-topmost", True)
         self.status = tk.StringVar(value=_startup_status())
         self.current_label = tk.StringVar(value="Sẽ gõ: —")
@@ -81,9 +83,10 @@ class App:
         self.threshold2 = tk.StringVar(value=str(LANE_PAUSE_THRESHOLD))
         self.lanes_label = tk.StringVar(value="Hướng 2 — 4 làn: —")
         self.frame_label = tk.StringVar(value=frames_label(None))
-        self.fields_label = tk.StringVar(value="Chưa gắn ô — bấm Gắn 4 ô, rồi ấn ô 5 số từng website.")
+        self.fields_label = tk.StringVar(value="Chưa gắn — mỗi thẻ: Gắn N = cửa sổ website rồi dòng ô 5 số.")
         self.lane_card_vars = [
-            tk.StringVar(value=f"{index + 1}  —\nChưa gắn ô") for index in range(LANE_COUNT)
+            tk.StringVar(value=f"Trình {index + 1}  —\nChưa gắn\nChưa lưu số khi đổi")
+            for index in range(LANE_COUNT)
         ]
         self.vpn = VpnClient()
         self.vpn_kind = tk.StringVar(value=KIND_LABELS["free"])
@@ -121,6 +124,7 @@ class App:
         self._painter: PaintPicker | None = None
         self._pending2: list[tuple[int, str]] = []
         self._picking_lanes = False
+        self._picking_lane_index: int | None = None
         self._picking_frame_index: int | None = None
         self._build()
         self._fill_vpn()
@@ -250,12 +254,12 @@ class App:
             text="Bắt đầu = gõ Enter + nếu màn đổi ≥80% tự bấm 4 nút. F8 dừng. Bôi màu / Chọn vị trí từng bước.",
         ).pack(anchor="w", padx=12, pady=(0, 8))
 
-        ttk.Label(self.root, text="Hướng 2 — gắn 4 ô rồi Enter đồng loạt", font=("Segoe UI", 11, "bold")).pack(
+        ttk.Label(self.root, text="Hướng 2 — chọn từng trình duyệt rồi ô 5 số", font=("Segoe UI", 11, "bold")).pack(
             anchor="w", padx=12
         )
         ttk.Label(
             self.root,
-            text="Gắn 4 ô = bấm ô 5 số từng website. Máy gõ tăng dần rồi Enter; khung theo dõi tự lấy quanh ô.",
+            text="Mỗi thẻ: Gắn = bấm cửa sổ website rồi dòng ô 5 số. Tiếp = chỉ mở lại trình đó khi giao diện đổi.",
             wraplength=390,
         ).pack(anchor="w", padx=12, pady=(2, 4))
         ttk.Label(self.root, text="5 ký tự cố định").pack(anchor="w", padx=12)
@@ -278,14 +282,20 @@ class App:
         cards2.columnconfigure(0, weight=1)
         cards2.columnconfigure(1, weight=1)
         for index in range(LANE_COUNT):
+            box = ttk.Frame(cards2, padding=4)
+            box.grid(row=index // 2, column=index % 2, sticky="nsew", padx=3, pady=3)
             ttk.Label(
-                cards2,
+                box,
                 textvariable=self.lane_card_vars[index],
-                relief="groove",
-                padding=6,
                 justify="left",
                 anchor="w",
-            ).grid(row=index // 2, column=index % 2, sticky="nsew", padx=3, pady=3)
+            ).pack(fill="x")
+            row = ttk.Frame(box)
+            row.pack(fill="x", pady=(4, 0))
+            ttk.Button(row, text=f"Gắn {index + 1}", command=lambda at=index: self.pick_one_lane(at)).pack(
+                side="left", padx=(0, 4)
+            )
+            ttk.Button(row, text=f"Tiếp {index + 1}", command=lambda at=index: self.continue_lane(at)).pack(side="left")
         opts2 = ttk.Frame(self.root)
         opts2.pack(fill="x", **pad)
         ttk.Label(opts2, text="Chờ").pack(side="left")
@@ -646,11 +656,16 @@ class App:
         self._overlay = None
         if self._picking_lanes:
             self._picking_lanes = False
-            self._apply_lane_clicks(clicks)
+            index = self._picking_lane_index
+            self._apply_lane_clicks(clicks, index=index)
             self._deiconify()
             self._refresh_lanes()
             self._persist_lanes(silent=True)
-            self.status.set("Đã gắn 4 ô 5 số. Mỗi ô một website — máy gõ tăng dần rồi Enter.")
+            title = "Đã gắn từng trình: cửa sổ + ô 5 số." if index is None else (
+                f"Đã gắn trình {index + 1}: cửa sổ website + dòng ô 5 số."
+            )
+            self._picking_lane_index = None
+            self.status.set(title)
             return
         self._recover_draft = sanitize_clicks(clicks)
         self._finish_recover(keep=True)
@@ -660,7 +675,8 @@ class App:
         if self._picking_lanes:
             self._picking_lanes = False
             self._deiconify()
-            self.status.set("Đã hủy gắn 4 ô.")
+            self._picking_lane_index = None
+            self.status.set("Đã hủy gắn trình / ô.")
             return
         self._finish_recover(keep=False)
 
@@ -1047,16 +1063,72 @@ class App:
     def save_lanes(self) -> None:
         self._persist_lanes(silent=False)
 
-    def _apply_lane_clicks(self, clicks: list[dict[str, Any]]) -> None:
+    def _apply_lane_clicks(self, clicks: list[dict[str, Any]], index: int | None = None) -> None:
         self.lanes.lane_clicks = sanitize_clicks(clicks)
         frames = frames_from_clicks(self.lanes.lane_clicks)
         self.lanes.watch_frames = frames
         self.lanes.watch_frame = frames[0] if frames else None
+        if index is not None and 0 <= index < LANE_COUNT and not self.lanes.lane_titles[index]:
+            self.lanes.lane_titles[index] = f"Trình {index + 1}"
+
+    def pick_one_lane(self, index: int) -> None:
+        if self._busy():
+            return
+        if not (0 <= index < LANE_COUNT):
+            return
+        self._picking_lanes = True
+        self._picking_lane_index = index
+        self.status.set(f"Trình {index + 1}: bấm cửa sổ website, rồi dòng ô 5 số, rồi Lưu.")
+        self.root.withdraw()
+        try:
+            self._overlay = show_click_overlay(
+                self.root,
+                on_done=self._overlay_done,
+                on_cancel=self._overlay_cancel,
+                clicks=self.lanes.lane_clicks,
+                recording=True,
+                step=index,
+                noun="ô",
+                save_text=f"Lưu trình {index + 1}",
+                phases=2,
+            )
+        except tk.TclError:
+            self._picking_lanes = False
+            self._picking_lane_index = None
+            self.root.deiconify()
+            self.status.set("Không mở được lớp phủ để gắn trình duyệt.")
+
+    def continue_lane(self, index: int) -> None:
+        if self._playing():
+            self.status.set("Đang chạy hướng 1. Bấm Dừng rồi hãy tiếp tục hướng 2.")
+            return
+        if not (0 <= index < LANE_COUNT):
+            return
+        self._sync_lanes(write_back=True)
+        if not self.lanes.waiting_lanes[index]:
+            self.status.set(f"Trình {index + 1} không đang dừng.")
+            return
+        nxt = self.lanes.resume_lane(index)
+        self._refresh_lanes()
+        self._persist_lanes(silent=True)
+        if self._playing2():
+            self.status.set(f"Tiếp tục trình {index + 1}: {nxt or '—'}. Các mã khác vẫn chạy.")
+            return
+        if not nxt and not self.lanes.peek():
+            self.status.set(f"Trình {index + 1}: không còn mã để tiếp tục.")
+            return
+        self._persist_vpn()
+        self.player2 = Player(self.desktop.send, time.sleep)
+        shown = nxt or self._codes_text(self.lanes.peek())
+        self.status.set(f"Tiếp tục trình {index + 1} từ {shown}.")
+        self._play_thread2 = threading.Thread(target=self._run_play2, args=(0,), daemon=True)
+        self._play_thread2.start()
 
     def pick_lane_fields(self) -> None:
         if self._busy():
             return
         self._picking_lanes = True
+        self._picking_lane_index = None
         self.status.set("Bấm lần lượt ô 5 số trên 4 website (1 → 4), rồi Lưu 4 ô.")
         self.root.withdraw()
         try:
@@ -1145,13 +1217,20 @@ class App:
             return " · ".join(items)
         return fallback or "—"
 
-    def _lane_focus_clicks(self) -> list[dict[str, Any]]:
+    def _lane_focus_clicks(self) -> list[dict[str, Any] | None]:
         sw, sh = self._screen_size()
-        return scale_clicks(self.lanes.lane_clicks, sw, sh)
+        mapped: list[dict[str, Any] | None] = []
+        for slot in click_slots(self.lanes.lane_clicks):
+            if slot is None:
+                mapped.append(None)
+                continue
+            scaled = scale_clicks([slot], sw, sh)
+            mapped.append(scaled[0] if scaled else None)
+        return mapped
 
-    def _lane_clicks_for(self, active: list[tuple[int, str]]) -> list[dict[str, Any]]:
+    def _lane_clicks_for(self, active: list[tuple[int, str]]) -> list[dict[str, Any] | None]:
         clicks = self._lane_focus_clicks()
-        return [clicks[index] for index, _code in active if index < len(clicks)]
+        return [clicks[index] if index < len(clicks) else None for index, _code in active]
 
     def _lane_frame(self, index: int) -> dict[str, Any] | None:
         return lane_watch_frame(self.lanes.watch_frames, self._lane_focus_clicks(), index)
@@ -1327,6 +1406,8 @@ class App:
             exhausted=exhausted,
             last_used=self.lanes.last_used,
             flagged=self.lanes.flagged,
+            flagged_lanes=self.lanes.flagged_lanes,
+            lane_titles=self.lanes.lane_titles,
             paused=paused,
             paused_codes=paused_codes,
             paused_lanes=paused_lanes,
@@ -1367,21 +1448,34 @@ class App:
         self.frame_label.set(frames_label(self.lanes.watch_frames))
         ready = len(sanitize_clicks(self.lanes.lane_clicks))
         if ready >= RECOVER_CLICKS:
-            self.fields_label.set("Đã gắn 4 ô 5 số — mỗi ô một website, Enter đồng loạt.")
+            self.fields_label.set("Đã gắn 4 trình — mỗi thẻ cửa sổ + ô 5 số, Enter đồng loạt.")
         elif ready:
-            self.fields_label.set(f"Đã gắn {ready}/4 ô — bấm Gắn 4 ô, ấn tiếp ô 5 số còn thiếu.")
+            self.fields_label.set(f"Đã gắn {ready}/4 trình — bấm Gắn N trên thẻ còn thiếu, hoặc Gắn 4 ô.")
         else:
-            self.fields_label.set("Chưa gắn ô — bấm Gắn 4 ô, rồi ấn ô 5 số từng website.")
-        clicks = sanitize_clicks(self.lanes.lane_clicks)
+            self.fields_label.set("Chưa gắn — mỗi thẻ: Gắn N = cửa sổ website rồi dòng ô 5 số.")
+        slots = click_slots(self.lanes.lane_clicks)
         active = {index: code for index, code in self.lanes.peek_active()}
         for index in range(LANE_COUNT):
             waiting = index < len(self.lanes.waiting_lanes) and self.lanes.waiting_lanes[index]
             paused = self.lanes.paused_lanes[index] if index < len(self.lanes.paused_lanes) else ""
             last = self.lanes.last_used[index] if index < len(self.lanes.last_used) else ""
             code = paused if waiting else (active.get(index) or last)
-            bind = "Đã gắn ô 5 số" if index < len(clicks) else "Chưa gắn ô"
+            slot = slots[index] if index < len(slots) else None
+            try:
+                window_x = int(slot.get("wx")) if slot else -1
+            except (TypeError, ValueError, AttributeError):
+                window_x = -1
+            if slot and window_x >= 0:
+                bind = "Đã gắn cửa sổ + ô"
+            elif slot:
+                bind = "Đã gắn ô 5 số"
+            else:
+                bind = "Chưa gắn"
             mark = " · dừng" if waiting else ""
-            self.lane_card_vars[index].set(f"{index + 1}  {code or '—'}\n{bind}{mark}")
+            title = self.lanes.lane_titles[index] or f"Trình {index + 1}"
+            saved = self.lanes.flagged_lanes[index] if index < len(self.lanes.flagged_lanes) else []
+            saved_txt = ("Lưu: " + " · ".join(saved[-4:])) if saved else "Chưa lưu số khi đổi"
+            self.lane_card_vars[index].set(f"{title}  {code or '—'}\n{bind}{mark}\n{saved_txt}")
         self.flag_box2.delete(0, tk.END)
         for value in self.lanes.flagged:
             self.flag_box2.insert(tk.END, value)
@@ -1591,8 +1685,8 @@ def _click_from_steps(steps: list[dict[str, Any]]) -> dict[str, Any] | None:
 def _startup_status() -> str:
     stamp = consume_just_updated()
     if stamp and stamp.get("build"):
-        return f"Đã tự cập nhật lên bản {stamp['build']}. Gắn 4 ô rồi Bắt đầu 2."
-    return f"Gắn 4 ô 5 số trên website, rồi Bắt đầu 2. Bản {PC_MACRO_BUILD} tự cập nhật từ hub."
+        return f"Đã tự cập nhật lên bản {stamp['build']}. Gắn từng trình rồi Bắt đầu 2."
+    return f"Mỗi thẻ: Gắn cửa sổ + ô 5 số, rồi Bắt đầu 2. Bản {PC_MACRO_BUILD} tự cập nhật từ hub."
 
 
 def _now_ms() -> int:

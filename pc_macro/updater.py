@@ -182,7 +182,7 @@ def _copy_install(staging: Path, root: Path) -> None:
     package_dst.mkdir(parents=True, exist_ok=True)
     for path in package_src.glob("*.py"):
         shutil.copy2(path, package_dst / path.name)
-    for name in ("Cai-dat.ps1", "Chay.cmd", "README.txt"):
+    for name in ("CHAY-O-DAY.cmd", "Chay.cmd", "Cai-dat.ps1", "README.txt"):
         src = staging / name
         if src.is_file():
             shutil.copy2(src, root / name)

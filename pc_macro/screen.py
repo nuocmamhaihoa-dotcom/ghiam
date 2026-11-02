@@ -128,6 +128,8 @@ def upsert_slot(
     name: Any = "",
     *,
     via: str = "",
+    wx: Any = None,
+    wy: Any = None,
 ) -> list[dict[str, Any]]:
     """Set one of the four steps without dropping the others."""
     try:
@@ -147,7 +149,7 @@ def upsert_slot(
         screen_h = int(round(float(sh or 0)))
     except (TypeError, ValueError):
         screen_w, screen_h = 0, 0
-    slots[index] = _click_record(px, py, screen_w, screen_h, name=name, step=index, via=via)
+    slots[index] = _click_record(px, py, screen_w, screen_h, name=name, step=index, via=via, wx=wx, wy=wy)
     return [item for item in slots if item is not None]
 
 
@@ -188,9 +190,19 @@ def overlay_banner(
     awaiting_save: bool = False,
     step: int | None = None,
     noun: str = "nút",
+    phase: int = 0,
+    phases: int = 1,
 ) -> str:
     """Top bar while the user points at the real screen."""
     item = noun or "nút"
+    if step is not None and phases >= 2:
+        if awaiting_save:
+            return f"Trình {step + 1}: đã chọn cửa sổ + dòng ô. Bấm Lưu."
+        if recording and phase <= 0:
+            return f"Trình {step + 1} · bước 1/2: bấm cửa sổ website. Esc hủy."
+        if recording:
+            return f"Trình {step + 1} · bước 2/2: bấm dòng ô 5 số. Esc hủy."
+        return f"Đã nhớ trình {step + 1}."
     if step is not None:
         if awaiting_save:
             return f"Đã chọn {item} {step + 1}. Bấm Lưu để giữ vị trí."
@@ -240,6 +252,7 @@ def scale_clicks(clicks: Any, sw: int, sh: int) -> list[dict[str, Any]]:
         else:
             x = max(0, min(sw - 1, int(round(ratio[0] * sw))))
             y = max(0, min(sh - 1, int(round(ratio[1] * sh))))
+        window_x, window_y = _scale_window_point(item, sw, sh)
         out.append(
             _click_record(
                 x,
@@ -250,6 +263,8 @@ def scale_clicks(clicks: Any, sw: int, sh: int) -> list[dict[str, Any]]:
                 name=item.get("name"),
                 step=item.get("step"),
                 via=str(item.get("via") or ""),
+                wx=window_x,
+                wy=window_y,
             )
         )
     return out
@@ -261,6 +276,26 @@ def _click_detail(item: dict[str, Any]) -> str:
     if ratio is None:
         return f"trái  {item['x']} , {item['y']}{painted}"
     return f"trái  {item['x']} , {item['y']}  ·  {round(ratio[0] * 100)}% × {round(ratio[1] * 100)}%{painted}"
+
+
+def _scale_window_point(item: dict[str, Any], sw: int, sh: int) -> tuple[int, int] | tuple[None, None]:
+    """Map the browser-window click onto the current screen, if one was stored."""
+    try:
+        wx = int(round(float(item.get("wx"))))
+        wy = int(round(float(item.get("wy"))))
+    except (TypeError, ValueError):
+        return None, None
+    if wx < 0 or wy < 0:
+        return None, None
+    try:
+        orig_sw = int(round(float(item.get("sw") or 0)))
+        orig_sh = int(round(float(item.get("sh") or 0)))
+    except (TypeError, ValueError):
+        orig_sw, orig_sh = 0, 0
+    if orig_sw > 0 and orig_sh > 0:
+        wx = int(round(wx / orig_sw * sw))
+        wy = int(round(wy / orig_sh * sh))
+    return max(0, min(sw - 1, wx)), max(0, min(sh - 1, wy))
 
 
 def _ratio(item: dict[str, Any]) -> tuple[float, float] | None:
@@ -291,6 +326,8 @@ def _click_record(
     name: Any = "",
     step: Any = None,
     via: str = "",
+    wx: Any = None,
+    wy: Any = None,
 ) -> dict[str, Any]:
     record: dict[str, Any] = {"kind": "click", "x": x, "y": y, "button": "left", "wait": wait}
     label = normalize_click_name(name)
@@ -310,6 +347,14 @@ def _click_record(
         record["sh"] = sh
         record["rx"] = max(0.0, min(1.0, x / sw))
         record["ry"] = max(0.0, min(1.0, y / sh))
+    try:
+        window_x = int(round(float(wx))) if wx is not None and str(wx) != "" else -1
+        window_y = int(round(float(wy))) if wy is not None and str(wy) != "" else -1
+    except (TypeError, ValueError):
+        window_x, window_y = -1, -1
+    if 0 <= window_x <= _MAX_COORD and 0 <= window_y <= _MAX_COORD:
+        record["wx"] = window_x
+        record["wy"] = window_y
     return record
 
 
@@ -343,6 +388,8 @@ def _parse_click(item: Any) -> dict[str, Any] | None:
         name=item.get("name"),
         step=item.get("step"),
         via=str(item.get("via") or ""),
+        wx=item.get("wx"),
+        wy=item.get("wy"),
     )
     ratio = _ratio(item)
     if ratio is not None and sw > 0 and sh > 0:
@@ -454,9 +501,9 @@ def frames_label(frames: Any) -> str:
 
 
 def frames_from_clicks(clicks: Any, count: int = RECOVER_CLICKS) -> list[dict[str, Any] | None]:
-    """One watch rectangle around each bound 5-digit field."""
+    """One watch rectangle around each bound 5-digit field, aligned to slot 1–4."""
     total = max(1, int(count or RECOVER_CLICKS))
-    points = sanitize_clicks(clicks)
+    points = click_slots(clicks)
     return [frame_around_click(points[index]) if index < len(points) else None for index in range(total)]
 
 
@@ -500,8 +547,8 @@ def lane_watch_frame(frames: Any, clicks: Any, index: int) -> dict[str, Any] | N
     slots = sanitize_frames(frames)
     if 0 <= index < len(slots) and slots[index] is not None:
         return slots[index]
-    points = sanitize_clicks(clicks)
-    if 0 <= index < len(points):
+    points = click_slots(clicks)
+    if 0 <= index < len(points) and points[index] is not None:
         return frame_around_click(points[index])
     return None
 

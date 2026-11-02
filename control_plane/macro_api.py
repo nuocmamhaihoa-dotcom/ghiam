@@ -114,8 +114,9 @@ def _pc_macro_files() -> dict[str, bytes]:
     return build_package_files(
         package,
         {
-            "Cai-dat.ps1": _INSTALL_PS1,
+            "CHAY-O-DAY.cmd": _RUN_CMD,
             "Chay.cmd": _RUN_CMD,
+            "Cai-dat.ps1": _INSTALL_PS1,
             "README.txt": _INSTALL_README,
         },
     )
@@ -153,37 +154,145 @@ def download_pc_macro() -> Response:
     )
 
 
-_INSTALL_README = """Ghi nhớ thao tác PC
+_INSTALL_README = """BẤM ĐÚP file CHAY-O-DAY.cmd
 
-Phần mềm này chạy trên máy tính của bạn (Windows / Linux có màn hình).
-VPS chỉ giữ kịch bản. Ghi phím/chuột và bấm Làm lại phải làm trên PC.
+Đây không phải phần mềm. File này chỉ là hướng dẫn.
+1. Giải nén CẢ thư mục pc-macro.zip ra Desktop (đừng mở trong zip).
+2. Mở thư mục pc-macro (phải thấy folder pc_macro và file CHAY-O-DAY.cmd).
+3. Bấm đúp CHAY-O-DAY.cmd — cửa sổ "Gõ số rồi Enter" sẽ mở.
 
-Cài một lần:
-1. Cài Python 3.11+ (tick Add python.exe to PATH)
-2. Mở PowerShell trong thư mục này:
-   .\\Cai-dat.ps1
-Sau đó không cần tải zip hay cài lại. Mỗi lần mở (hoặc khi đăng nhập Windows)
-máy tự hỏi hub bản mới, tự tải, tự ghi đè file, rồi tự mở lại.
+Nếu chưa có Python, file đó tự cài. Nếu thiếu pynput, file đó tự cài.
+Cửa sổ lỗi sẽ đứng lại (không tắt ngay) để đọc được chữ.
 
-Hướng 2: Gắn 4 ô = bấm ô 5 số từng website. Bắt đầu 2 gõ 4 mã rồi Enter đồng loạt.
-Chỉ lưu mã của trình duyệt có khung đổi ≥ 20%. VPN trên PC: một nút Bật VPN (DNS, IPv6,
-kill switch, WARP, VPN Gate, miễn phí). Mật khẩu chỉ lưu trên máy, không đưa lên VPS.
+Hướng 2: mỗi thẻ Gắn N = bấm cửa sổ website rồi dòng ô 5 số. Gắn 4 ô vẫn gắn lần lượt.
+Bắt đầu 2 gõ rồi Enter đồng loạt. Chỉ lưu mã của trình duyệt có khung đổi ≥ 20%.
+Tiếp N chỉ mở lại trình đó. VPN trên PC: một nút Bật VPN (DNS, IPv6, kill switch,
+WARP, VPN Gate, miễn phí). Mật khẩu chỉ lưu trên máy, không đưa lên VPS.
 
-Lần sau chỉ cần:
-  .\\Chay.cmd
-hoặc icon trên Desktop / Menu Start. Muốn cập nhật im lặng:
-  python -m pc_macro update
-
-Đồng bộ kịch bản:
-  python -m pc_macro pull
-  python -m pc_macro push
+Lần sau chỉ bấm đúp CHAY-O-DAY.cmd (hoặc icon Desktop). Máy tự hỏi hub bản mới.
+Muốn cập nhật im lặng: python -m pc_macro update
+Đồng bộ kịch bản: python -m pc_macro pull   /   python -m pc_macro push
+Kiểm tra máy: python -m pc_macro doctor
 """
 
 _RUN_CMD = r"""@echo off
+setlocal EnableExtensions
+title Go so roi Enter
 cd /d "%~dp0"
 if not defined PC_MACRO_HUB set PC_MACRO_HUB=http://103.200.20.245:8088
-python -m pc_macro
-if errorlevel 1 py -3 -m pc_macro
+
+if not exist "%~dp0pc_macro\__main__.py" (
+  echo.
+  echo  BAN DANG MO FILE TRONG ZIP hoac sai thu muc.
+  echo  Hay giai nen CA thu muc pc-macro.zip ra Desktop,
+  echo  mo thu muc pc-macro, roi bam dup CHAY-O-DAY.cmd.
+  echo.
+  pause
+  exit /b 1
+)
+
+call :find_python
+if not defined PYEXE (
+  echo Dang cai Python 3.12 bang winget...
+  where winget >nul 2>nul
+  if errorlevel 1 (
+    echo Khong co winget. Mo https://www.python.org/downloads/
+    echo Tick Add python.exe to PATH, cai xong bam dup CHAY-O-DAY.cmd lai.
+    start "" "https://www.python.org/downloads/"
+    pause
+    exit /b 1
+  )
+  winget install -e --id Python.Python.3.12 --scope user --accept-package-agreements --accept-source-agreements
+  call :refresh_path
+  call :find_python
+)
+if not defined PYEXE (
+  echo Khong tim thay Python. Cai tu https://www.python.org/downloads/
+  echo Tick Add python.exe to PATH va tcl/tk, roi bam dup CHAY-O-DAY.cmd lai.
+  start "" "https://www.python.org/downloads/"
+  pause
+  exit /b 1
+)
+
+"%PYEXE%" %PYARGS% -c "import tkinter" >nul 2>nul
+if errorlevel 1 (
+  echo Python thieu tkinter. Cai lai Python 3.11+ tu python.org, tick tcl/tk.
+  pause
+  exit /b 1
+)
+
+"%PYEXE%" %PYARGS% -c "import pynput" >nul 2>nul
+if errorlevel 1 (
+  echo Dang cai pynput...
+  "%PYEXE%" %PYARGS% -m pip install --disable-pip-version-check pynput
+)
+"%PYEXE%" %PYARGS% -c "import pynput" >nul 2>nul
+if errorlevel 1 (
+  echo Khong cai duoc pynput.
+  echo Thu: "%PYEXE%" %PYARGS% -m pip install pynput
+  pause
+  exit /b 1
+)
+
+"%PYEXE%" %PYARGS% -m pc_macro doctor
+if errorlevel 1 (
+  echo May chua san sang. Doc dong LOI o tren.
+  pause
+  exit /b 1
+)
+
+"%PYEXE%" %PYARGS% -m pc_macro
+if errorlevel 1 (
+  echo Khong mo duoc cua so. Bam dup CHAY-O-DAY.cmd lai sau khi cai Python.
+  pause
+  exit /b 1
+)
+exit /b 0
+
+:refresh_path
+set "PATH=%LOCALAPPDATA%\Programs\Python\Python312;%LOCALAPPDATA%\Programs\Python\Python312\Scripts;%LOCALAPPDATA%\Programs\Python\Launcher;%PATH%"
+exit /b 0
+
+:find_python
+set "PYEXE="
+set "PYARGS="
+if exist "%LOCALAPPDATA%\Programs\Python\Launcher\py.exe" (
+  "%LOCALAPPDATA%\Programs\Python\Launcher\py.exe" -3 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" >nul 2>nul
+  if not errorlevel 1 (
+    set "PYEXE=%LOCALAPPDATA%\Programs\Python\Launcher\py.exe"
+    set "PYARGS=-3"
+    exit /b 0
+  )
+)
+if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" (
+  set "PYEXE=%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
+  exit /b 0
+)
+where py >nul 2>nul
+if not errorlevel 1 (
+  for /f "delims=" %%I in ('where py') do (
+    echo %%I | find /i "WindowsApps" >nul
+    if errorlevel 1 (
+      "%%I" -3 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" >nul 2>nul
+      if not errorlevel 1 (
+        set "PYEXE=%%I"
+        set "PYARGS=-3"
+        exit /b 0
+      )
+    )
+  )
+)
+where python >nul 2>nul
+if not errorlevel 1 (
+  for /f "delims=" %%I in ('where python') do (
+    echo %%I | find /i "WindowsApps" >nul
+    if errorlevel 1 (
+      set "PYEXE=%%I"
+      exit /b 0
+    )
+  )
+)
+exit /b 1
 """
 
 _INSTALL_PS1 = r"""param(
@@ -193,15 +302,48 @@ _INSTALL_PS1 = r"""param(
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $Root
-$Py = Get-Command python -ErrorAction SilentlyContinue
-if (-not $Py) { $Py = Get-Command py -ErrorAction SilentlyContinue }
-if (-not $Py) {
-  Write-Host "Can Python 3.11+. Cai tu python.org (tick Add to PATH) roi mo lai PowerShell."
+function Find-Python {
+  $pyLauncher = Get-Command py -ErrorAction SilentlyContinue
+  if ($pyLauncher) {
+    try {
+      $resolved = & $pyLauncher.Source -3 -c "import sys; print(sys.executable)" 2>$null
+      if ($LASTEXITCODE -eq 0 -and $resolved -and $resolved -notmatch "WindowsApps") { return $resolved.Trim() }
+    } catch {}
+  }
+  foreach ($name in @("python", "python3")) {
+    $cmd = Get-Command $name -ErrorAction SilentlyContinue
+    if ($cmd -and $cmd.Source -and $cmd.Source -notmatch "WindowsApps") { return $cmd.Source }
+  }
+  return $null
+}
+$Python = Find-Python
+if (-not $Python) {
+  $winget = Get-Command winget -ErrorAction SilentlyContinue
+  if ($winget) {
+    Write-Host "Dang cai Python 3.12 bang winget..."
+    try {
+      & $winget.Source install -e --id Python.Python.3.12 --scope user --accept-package-agreements --accept-source-agreements
+    } catch {}
+    $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+    $Python = Find-Python
+  }
+}
+if (-not $Python) {
+  Write-Host "Can Python 3.11+. Bam dup CHAY-O-DAY.cmd hoac cai tu python.org (tick Add python.exe to PATH va tcl/tk)."
   exit 1
 }
-$Python = $Py.Source
+& $Python -c "import tkinter" 2>$null
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "Python thieu tkinter. Cai lai Python 3.11+ tu python.org, tick tcl/tk."
+  exit 1
+}
 & $Python -m pip install --upgrade pip
 & $Python -m pip install pynput
+& $Python -c "import pynput, tkinter" 2>$null
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "Cai pynput that bai. Mo PowerShell trong thu muc nay roi: $Python -m pip install pynput"
+  exit 1
+}
 [Environment]::SetEnvironmentVariable("PC_MACRO_HUB", $Hub, "User")
 $env:PC_MACRO_HUB = $Hub
 if ($Token) {

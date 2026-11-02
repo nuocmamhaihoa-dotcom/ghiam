@@ -164,15 +164,42 @@ def click_focus_step(click: Any, *, wait: int = 40) -> dict[str, Any] | None:
     return new_step("click", x=x, y=y, button=str(click.get("button") or "left"), wait=wait)
 
 
+def click_focus_steps(click: Any, *, wait: int = 40) -> list[dict[str, Any]]:
+    """Bring the bound browser forward, then click the 5-digit field."""
+    steps: list[dict[str, Any]] = []
+    if not isinstance(click, dict):
+        return steps
+    try:
+        field_x = int(click["x"])
+        field_y = int(click["y"])
+    except (TypeError, ValueError, KeyError):
+        return steps
+    try:
+        window_x = int(click.get("wx"))
+        window_y = int(click.get("wy"))
+    except (TypeError, ValueError):
+        window_x, window_y = -1, -1
+    if window_x >= 0 and window_y >= 0 and (window_x, window_y) != (field_x, field_y):
+        window = click_focus_step(
+            {"x": window_x, "y": window_y, "button": click.get("button")},
+            wait=wait,
+        )
+        if window is not None:
+            steps.append(window)
+        wait = max(int(wait or 0), 40)
+    focus = click_focus_step(click, wait=wait)
+    if focus is not None:
+        steps.append(focus)
+    return steps
+
+
 def four_lane_type_steps(codes: list[str] | tuple[str, ...], clicks: Any = None) -> list[dict[str, Any]]:
     """Type all four codes first. Optional clicks focus each of the four processes."""
     steps: list[dict[str, Any]] = []
     slots = list(clicks or [])
     for index, raw in enumerate(codes or []):
         if index < len(slots):
-            focus = click_focus_step(slots[index], wait=40 if index else 0)
-            if focus is not None:
-                steps.append(focus)
+            steps.extend(click_focus_steps(slots[index], wait=40 if index else 0))
         typed = number_type_steps(str(raw))
         if typed and index and (index >= len(slots) or not isinstance(slots[index], dict)):
             first = dict(typed[0])
@@ -191,9 +218,7 @@ def four_lane_enter_burst_steps(clicks: Any = None, count: int = 4) -> list[dict
     steps: list[dict[str, Any]] = []
     for index in range(total):
         if index < len(slots):
-            focus = click_focus_step(slots[index], wait=20)
-            if focus is not None:
-                steps.append(focus)
+            steps.extend(click_focus_steps(slots[index], wait=20))
         enter = enter_key_steps()
         if enter:
             first = dict(enter[0])
