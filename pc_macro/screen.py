@@ -227,9 +227,14 @@ def overlay_banner(
     noun: str = "nút",
     phase: int = 0,
     phases: int = 1,
+    instant: bool = False,
 ) -> str:
     """Top bar while the user points at the real screen."""
     item = noun or "nút"
+    if instant and step is not None:
+        if awaiting_save:
+            return "Đã gắn trình duyệt. Đóng."
+        return "Bấm 1 lần vào dòng Mã khách hàng / số điện thoại trên Evoshop. Esc hủy."
     if step is not None and phases >= 2:
         if awaiting_save:
             return "Đã chọn trình duyệt web khách + dòng mã KH / SĐT. Bấm Lưu."

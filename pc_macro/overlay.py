@@ -43,6 +43,7 @@ class ClickOverlay:
         noun: str = "nút",
         save_text: str | None = None,
         phases: int = 1,
+        instant: bool = False,
     ) -> None:
         self._on_done = on_done
         self._on_cancel = on_cancel
@@ -50,7 +51,8 @@ class ClickOverlay:
         self._awaiting_save = False
         self._noun = noun or "nút"
         self._step = step if step is not None and 0 <= int(step) < RECOVER_CLICKS else None
-        self._phases = 2 if phases >= 2 and self._step is not None else 1
+        self._instant = bool(instant) and self._step is not None
+        self._phases = 1 if self._instant else (2 if phases >= 2 and self._step is not None else 1)
         self._window_xy: tuple[int, int] | None = None
         self._window_hwnd = 0
         self._window_title = ""
@@ -105,14 +107,15 @@ class ClickOverlay:
             pady=8,
         )
         self.btn_cancel.pack(side="right", padx=8, pady=8)
-        self.btn_redo.pack(side="right", padx=4, pady=8)
-        self.btn_save.pack(side="right", padx=4, pady=8)
+        if not self._instant:
+            self.btn_redo.pack(side="right", padx=4, pady=8)
+            self.btn_save.pack(side="right", padx=4, pady=8)
         self.canvas = tk.Canvas(self.win, bg=_BG, highlightthickness=0, cursor="crosshair")
         self.canvas.pack(fill="both", expand=True)
         self.canvas.bind("<Button-1>", self._on_click)
         self.win.bind("<Escape>", lambda _e: self.cancel())
         self.win.bind("<F8>", lambda _e: self.cancel())
-        self.win.bind("<Return>", lambda _e: self._save())
+        self.win.bind("<Return>", lambda _e: self._save() if not self._instant else self.cancel())
         try:
             self.win.grab_set()
         except tk.TclError:
@@ -139,23 +142,24 @@ class ClickOverlay:
         if x < 0 or y < 0:
             return
         if self._step is not None:
-            if self._phases >= 2 and self._window_xy is None:
+            if self._instant or (self._phases >= 2 and self._window_xy is None):
                 handle, title = self._peek_real_window(x, y)
                 if not handle or is_hub_title(title):
                     self._window_xy = None
                     self._window_hwnd = 0
                     self._window_title = ""
                     self.hint.configure(
-                        text="Đó là trang hub / lớp phủ. Bấm cửa sổ Evoshop (evoshop.vn), không bấm trang phần mềm."
+                        text="Đó là trang hub / lớp phủ. Bấm 1 lần vào ô mã trên Evoshop."
                     )
                     return
                 self._window_xy = (x, y)
                 self._window_hwnd = handle
                 self._window_title = title
-                self._sync_bar()
-                self._redraw()
-                return
-            wx, wy = self._window_xy if self._window_xy is not None else (None, None)
+                if not self._instant:
+                    self._sync_bar()
+                    self._redraw()
+                    return
+            wx, wy = self._window_xy if self._window_xy is not None else (x, y)
             self.clicks = upsert_slot(
                 self.clicks,
                 self._step,
@@ -171,6 +175,9 @@ class ClickOverlay:
             )
             self._recording = False
             self._awaiting_save = True
+            if self._instant:
+                self._save()
+                return
         else:
             self.clicks = append_screen_click(self.clicks, x, y, self.screen_w, self.screen_h)
             if len(self.clicks) >= RECOVER_CLICKS:
@@ -271,6 +278,9 @@ class ClickOverlay:
                 self.hint.configure(text=f"Đã chọn 4 {self._noun}. Bấm Lưu để giữ, hoặc Ghi lại.")
             return
         self.btn_save.configure(state="disabled")
+        if self._instant and self._recording:
+            self.hint.configure(text="Bấm 1 lần vào dòng Mã khách hàng / số điện thoại trên Evoshop. Esc hủy.")
+            return
         if self._recording and self._step is not None and self._phases >= 2:
             if self._window_xy is None:
                 self.hint.configure(text="Bước 1/2: bấm cửa sổ Evoshop (không bấm trang hub)")
@@ -336,6 +346,7 @@ def show_click_overlay(
     noun: str = "nút",
     save_text: str | None = None,
     phases: int = 1,
+    instant: bool = False,
 ) -> ClickOverlay:
     return ClickOverlay(
         root,
@@ -347,6 +358,7 @@ def show_click_overlay(
         noun=noun,
         save_text=save_text,
         phases=phases,
+        instant=instant,
     )
 
 

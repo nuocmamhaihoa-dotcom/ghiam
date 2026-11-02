@@ -68,10 +68,10 @@ class App:
     def __init__(self) -> None:
         self.store = MacroStore()
         self.root = tk.Tk()
-        self.root.title("Điều khiển trình duyệt web")
-        self.root.geometry("500x760")
-        self.root.minsize(460, 680)
-        self.root.configure(bg="#eef1f4")
+        self.root.title("Gõ số rồi Enter")
+        self.root.geometry("380x420")
+        self.root.minsize(360, 400)
+        self.root.configure(bg="#102033")
         self.root.attributes("-topmost", True)
         self.status = tk.StringVar(value=_startup_status())
         self.current_label = tk.StringVar(value="Sẽ gõ: —")
@@ -85,12 +85,12 @@ class App:
         self.prefix2 = tk.StringVar(value="")
         self.start2 = tk.StringVar(value="00001")
         self.end2 = tk.StringVar(value="00010")
-        self.delay2 = tk.StringVar(value="2")
+        self.delay2 = tk.StringVar(value="0")
         self.step2 = tk.StringVar(value="1")
         self.threshold2 = tk.StringVar(value=str(LANE_PAUSE_THRESHOLD))
         self.lanes_label = tk.StringVar(value="Hướng 2 — 1 tiến trình: —")
         self.frame_label = tk.StringVar(value=frames_label(None))
-        self.fields_label = tk.StringVar(value="Chưa gắn trình duyệt — bấm Gắn trình duyệt, chọn cửa sổ website rồi dòng nhập mã.")
+        self.fields_label = tk.StringVar(value="Chưa gắn — bấm GẮN, rồi bấm 1 lần vào ô mã trên website")
         self.now_code = tk.StringVar(value="—")
         self.lane_card_vars = [
             tk.StringVar(value="Trình duyệt web khách  —\nChưa gắn\nChưa lưu số khi đổi")
@@ -181,156 +181,82 @@ class App:
 
     def _build(self) -> None:
         pad = {"padx": 12, "pady": 5}
+        bg = "#102033"
         style = ttk.Style(self.root)
         try:
             style.theme_use("clam")
         except tk.TclError:
             pass
-        style.configure("TLabel", background="#eef1f4")
-        style.configure("TFrame", background="#eef1f4")
-        style.configure("TCheckbutton", background="#eef1f4")
+        style.configure("TLabel", background=bg, foreground="#d6e8ff")
+        style.configure("TFrame", background=bg)
+        style.configure("TCheckbutton", background=bg, foreground="#d6e8ff")
+        style.configure("TEntry", fieldbackground="#ffffff")
 
-        head = tk.Frame(self.root, bg="#0b6bcb")
-        head.pack(fill="x")
         tk.Label(
-            head,
-            text="Điều khiển trình duyệt web",
-            font=("Segoe UI", 16, "bold"),
-            bg="#0b6bcb",
-            fg="#ffffff",
-            anchor="w",
-        ).pack(fill="x", padx=14, pady=(12, 2))
-        tk.Label(
-            head,
-            textvariable=self.status,
-            font=("Segoe UI", 10),
-            bg="#0b6bcb",
-            fg="#d6e8ff",
-            wraplength=460,
-            justify="left",
-            anchor="w",
-        ).pack(fill="x", padx=14, pady=(0, 12))
-
-        bind = self._card(self.root, "1. Gắn trình duyệt website")
-        tk.Label(
-            bind,
-            text="Bấm Gắn trình duyệt → cửa sổ website khách (Evoshop) → dòng Mã khách hàng / SĐT → Lưu. Không bấm trang hub.",
-            font=("Segoe UI", 9),
-            bg="#ffffff",
-            fg="#5c6770",
-            wraplength=450,
-            justify="left",
-            anchor="w",
-        ).pack(fill="x", padx=12)
-        tk.Label(
-            bind,
-            textvariable=self.fields_label,
-            font=("Segoe UI", 10, "bold"),
-            bg="#ffffff",
-            fg="#0b6bcb",
-            wraplength=450,
-            justify="left",
-            anchor="w",
-        ).pack(fill="x", padx=12, pady=(4, 2))
-        cards2 = tk.Frame(bind, bg="#ffffff")
-        cards2.pack(fill="x", padx=12, pady=(0, 4))
-        for index in range(LANE_COUNT):
-            tk.Label(
-                cards2,
-                textvariable=self.lane_card_vars[index],
-                justify="left",
-                anchor="w",
-                bg="#f3f8fd",
-                font=("Segoe UI", 9),
-            ).pack(fill="x", pady=2)
-        bind_row = tk.Frame(bind, bg="#ffffff")
-        bind_row.pack(fill="x", padx=12, pady=(4, 12))
-        self._action_btn(bind_row, "Gắn trình duyệt", self.pick_lane_fields, fill="#0b6bcb").pack(side="left")
-        ttk.Button(bind_row, text="Chọn khung theo dõi", command=self.pick_watch_frame).pack(side="left", padx=8)
-        tk.Label(bind, textvariable=self.frame_label, bg="#ffffff", fg="#5c6770", wraplength=450, anchor="w").pack(
-            fill="x", padx=12, pady=(0, 10)
-        )
-
-        nums = self._card(self.root, "2. Dãy mã gõ vào website")
-        tk.Label(nums, text="5 ký tự cố định", bg="#ffffff", font=("Segoe UI", 9, "bold"), anchor="w").pack(
-            fill="x", padx=12
-        )
-        ttk.Entry(nums, textvariable=self.prefix2, width=10, font=("Segoe UI", 20)).pack(anchor="w", padx=12, pady=4)
-        row2 = tk.Frame(nums, bg="#ffffff")
-        row2.pack(fill="x", padx=12, pady=4)
-        left2 = tk.Frame(row2, bg="#ffffff")
-        left2.pack(side="left", fill="x", expand=True)
-        tk.Label(left2, text="Số bắt đầu", bg="#ffffff", font=("Segoe UI", 9, "bold")).pack(anchor="w")
-        ttk.Entry(left2, textvariable=self.start2, width=8, font=("Segoe UI", 16)).pack(anchor="w", pady=2)
-        right2 = tk.Frame(row2, bg="#ffffff")
-        right2.pack(side="left", fill="x", expand=True, padx=(12, 0))
-        tk.Label(right2, text="Số kết thúc", bg="#ffffff", font=("Segoe UI", 9, "bold")).pack(anchor="w")
-        ttk.Entry(right2, textvariable=self.end2, width=8, font=("Segoe UI", 16)).pack(anchor="w", pady=2)
-        tk.Label(nums, text="Sẽ gõ vào trình duyệt", bg="#ffffff", fg="#5c6770", anchor="w").pack(fill="x", padx=12, pady=(8, 0))
-        tk.Label(
-            nums,
+            self.root,
             textvariable=self.now_code,
-            font=("Segoe UI", 22, "bold"),
-            bg="#ffffff",
-            fg="#0b6bcb",
-            anchor="w",
-        ).pack(fill="x", padx=12, pady=(0, 4))
-        tk.Label(nums, textvariable=self.lanes_label, bg="#ffffff", fg="#5c6770", wraplength=450, anchor="w").pack(
-            fill="x", padx=12, pady=(0, 8)
-        )
-        opts2 = tk.Frame(nums, bg="#ffffff")
-        opts2.pack(fill="x", padx=12, pady=(0, 12))
-        ttk.Label(opts2, text="Chờ (giây)").pack(side="left")
-        ttk.Entry(opts2, textvariable=self.delay2, width=4).pack(side="left", padx=(4, 10))
-        ttk.Label(opts2, text="Cộng").pack(side="left")
-        ttk.Entry(opts2, textvariable=self.step2, width=4).pack(side="left", padx=(4, 10))
-        ttk.Label(opts2, text="Khung đổi ≥ %").pack(side="left")
-        ttk.Entry(opts2, textvariable=self.threshold2, width=4).pack(side="left", padx=4)
+            font=("Segoe UI", 28, "bold"),
+            bg=bg,
+            fg="#7dd3fc",
+            anchor="center",
+        ).pack(fill="x", padx=16, pady=(18, 2))
+        tk.Label(
+            self.root,
+            textvariable=self.fields_label,
+            font=("Segoe UI", 10),
+            bg=bg,
+            fg="#93c5fd",
+            wraplength=340,
+            justify="center",
+        ).pack(fill="x", padx=16)
+        tk.Label(
+            self.root,
+            textvariable=self.status,
+            font=("Segoe UI", 9),
+            bg=bg,
+            fg="#cbd5e1",
+            wraplength=340,
+            justify="center",
+        ).pack(fill="x", padx=16, pady=(2, 8))
 
-        run = self._card(self.root, "3. Chạy trên trình duyệt đã gắn")
-        run_row = tk.Frame(run, bg="#ffffff")
-        run_row.pack(fill="x", padx=12, pady=(4, 8))
-        self._btn_start2 = self._action_btn(run_row, "BẬT CHẠY", self.start_play2, fill="#0b6bcb")
+        fields = tk.Frame(self.root, bg=bg)
+        fields.pack(fill="x", padx=16, pady=4)
+        ttk.Entry(fields, textvariable=self.prefix2, width=7, font=("Segoe UI", 18), justify="center").pack(
+            side="left", expand=True, fill="x", padx=(0, 6)
+        )
+        ttk.Entry(fields, textvariable=self.start2, width=6, font=("Segoe UI", 18), justify="center").pack(
+            side="left", expand=True, fill="x", padx=3
+        )
+        ttk.Entry(fields, textvariable=self.end2, width=6, font=("Segoe UI", 18), justify="center").pack(
+            side="left", expand=True, fill="x", padx=(6, 0)
+        )
+
+        acts = tk.Frame(self.root, bg=bg)
+        acts.pack(fill="x", padx=16, pady=(14, 6))
+        self._btn_bind = self._action_btn(acts, "GẮN", self.pick_lane_fields, fill="#334155")
+        self._btn_bind.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        self._btn_start2 = self._action_btn(acts, "CHẠY", self._on_run_tap, fill="#16a34a")
         self._btn_start2.pack(side="left", fill="x", expand=True)
-        self._btn_stop2 = self._action_btn(run_row, "TẮT", self.stop_play2, fill="#c2410c")
-        self._btn_stop2.pack(side="left", fill="x", expand=True, padx=(8, 0))
-        extra2 = tk.Frame(run, bg="#ffffff")
-        extra2.pack(fill="x", padx=12, pady=(0, 12))
-        ttk.Button(extra2, text="Tiếp tục", command=self.continue_play2).pack(side="left")
-        ttk.Button(extra2, text="Lưu dãy", command=self.save_lanes).pack(side="left", padx=6)
-        ttk.Button(extra2, text="Lấy VPS", command=self.pull_hub).pack(side="left")
-        ttk.Button(extra2, text="Lên VPS", command=self.push_hub).pack(side="left", padx=6)
-        tk.Label(run, text="Mã dừng khi trang website đổi", bg="#ffffff", fg="#5c6770", anchor="w").pack(
-            fill="x", padx=12
-        )
-        self.flag_box2 = tk.Listbox(run, height=3, font=("Segoe UI", 11))
-        self.flag_box2.pack(fill="x", padx=12, pady=(2, 12))
+        self._btn_stop2 = self._btn_start2
 
-        vpn = self._card(self.root, "VPN trên máy này (tuỳ chọn)")
-        flags = tk.Frame(vpn, bg="#ffffff")
-        flags.pack(fill="x", padx=12, pady=(0, 4))
-        ttk.Checkbutton(
-            flags,
-            text="Bật VPN + bảo mật",
-            variable=self.vpn_enabled,
-            command=self._on_vpn_toggle,
-        ).pack(side="left")
-        ttk.Button(flags, text="Xem IP", command=self.refresh_vpn_ip).pack(side="left", padx=8)
-        kinds = tk.Frame(vpn, bg="#ffffff")
-        kinds.pack(fill="x", padx=12, pady=(0, 4))
-        ttk.Label(kinds, text="Loại").pack(side="left")
-        ttk.Combobox(
-            kinds,
-            textvariable=self.vpn_kind,
-            values=list(KIND_LABELS.values()),
-            state="readonly",
-            width=18,
-        ).pack(side="left", padx=6)
-        ttk.Label(kinds, text="Nước").pack(side="left")
-        ttk.Entry(kinds, textvariable=self.vpn_name, width=8).pack(side="left", padx=4)
-        tk.Label(vpn, textvariable=self.vpn_label, bg="#ffffff", fg="#5c6770", wraplength=450, anchor="w").pack(
-            fill="x", padx=12, pady=(0, 10)
+        foot = tk.Frame(self.root, bg=bg)
+        foot.pack(fill="x", padx=16, pady=(8, 4))
+        ttk.Checkbutton(foot, text="VPN", variable=self.vpn_enabled, command=self._on_vpn_toggle).pack(side="left")
+        tk.Label(foot, textvariable=self.vpn_label, bg=bg, fg="#64748b", font=("Segoe UI", 8)).pack(
+            side="left", padx=8
         )
+
+        hidden = tk.Frame(self.root)
+        ttk.Entry(hidden, textvariable=self.delay2)
+        ttk.Entry(hidden, textvariable=self.step2)
+        ttk.Entry(hidden, textvariable=self.threshold2)
+        ttk.Combobox(hidden, textvariable=self.vpn_kind, values=list(KIND_LABELS.values()))
+        ttk.Entry(hidden, textvariable=self.vpn_name)
+        self.flag_box2 = tk.Listbox(hidden, height=1)
+        self.lanes_label.set("")
+        self.frame_label.set("")
+        for index in range(LANE_COUNT):
+            tk.Label(hidden, textvariable=self.lane_card_vars[index])
 
         self._dir1 = ttk.Frame(self.root)
         ttk.Label(self._dir1, text="5 ký tự cố định (đứng trước, đổi được)").pack(anchor="w", padx=12)
@@ -1068,21 +994,35 @@ class App:
         )
 
     def _toggle_run2(self) -> None:
-        if self.run2.get():
-            self.start_play2()
-            if not self._playing2():
-                self.run2.set(False)
+        self._on_run_tap()
+
+    def _on_run_tap(self) -> None:
+        if self._playing2() or self.run2.get():
+            self.stop_play2()
             return
-        self.stop_play2()
+        if self.lanes.waiting:
+            self.continue_play2()
+            return
+        self.start_play2()
 
     def _paint_run_buttons(self) -> None:
         playing = self._playing2() or bool(self.run2.get())
         start = getattr(self, "_btn_start2", None)
-        stop = getattr(self, "_btn_stop2", None)
         if start is not None:
-            start.configure(state="disabled" if playing else "normal")
-        if stop is not None:
-            stop.configure(state="normal" if playing else "disabled")
+            if playing:
+                start.configure(text="TẮT", bg="#dc2626", activebackground="#dc2626")
+            elif self.lanes.waiting:
+                start.configure(text="TIẾP", bg="#0b6bcb", activebackground="#0b6bcb")
+            else:
+                start.configure(text="CHẠY", bg="#16a34a", activebackground="#16a34a")
+        bind = getattr(self, "_btn_bind", None)
+        if bind is not None:
+            ready = customer_target(self.lanes.lane_clicks) is not None
+            bind.configure(
+                text="ĐÃ GẮN" if ready else "GẮN",
+                bg="#0f766e" if ready else "#334155",
+                activebackground="#0f766e" if ready else "#334155",
+            )
 
     def start_play2(self) -> None:
         if self.recorder.on:
@@ -1201,7 +1141,7 @@ class App:
             return
         self._picking_lanes = True
         self._picking_lane_index = index
-        self.status.set("Bấm cửa sổ Evoshop (không bấm trang hub), rồi dòng Mã khách hàng / số điện thoại, rồi Lưu.")
+        self.status.set("Bấm 1 lần vào dòng Mã khách hàng / SĐT trên Evoshop.")
         self.root.withdraw()
         try:
             self._overlay = show_click_overlay(
@@ -1212,8 +1152,7 @@ class App:
                 recording=True,
                 step=index,
                 noun="ô",
-                save_text="Lưu trình khách",
-                phases=2,
+                instant=True,
             )
         except tk.TclError:
             self._picking_lanes = False
@@ -1659,9 +1598,9 @@ class App:
         self.frame_label.set(frames_label(self.lanes.watch_frames))
         ready = customer_target(self.lanes.lane_clicks) is not None
         if ready:
-            self.fields_label.set("Đã gắn trình duyệt + dòng Mã khách hàng / số điện thoại.")
+            self.fields_label.set("Đã gắn website. Bấm CHẠY.")
         else:
-            self.fields_label.set("Chưa gắn trình duyệt — bấm Gắn trình duyệt, chọn cửa sổ website rồi dòng nhập mã.")
+            self.fields_label.set("Bấm GẮN, rồi bấm 1 lần vào ô mã trên website")
         self._paint_run_buttons()
         slots = click_slots(self.lanes.lane_clicks)
         active = {index: code for index, code in self.lanes.peek_active()}
@@ -1896,7 +1835,7 @@ def _startup_status() -> str:
     stamp = consume_just_updated()
     if stamp and stamp.get("build"):
         return f"Đã tự cập nhật lên bản {stamp['build']}. Gắn Evoshop (không gắn trang hub) rồi bật chạy."
-    return f"Gắn trình duyệt website trên PC, nhập dãy mã, Bật chạy. Bản {PC_MACRO_BUILD}."
+    return f"Nhập mã · GẮN 1 lần · CHẠY. Bản {PC_MACRO_BUILD}."
 
 
 def _now_ms() -> int:

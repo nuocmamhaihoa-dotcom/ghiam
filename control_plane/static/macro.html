@@ -7,7 +7,7 @@
   <meta http-equiv="content-language" content="vi" />
   <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate" />
   <title>Gõ số rồi Enter</title>
-    <meta name="ui-build" content="20261102-9" />
+    <meta name="ui-build" content="20261102-10" />
   <style>
     html, body, button, input, textarea {
       font-synthesis: none;
@@ -21,7 +21,21 @@
       font-size: 16px;
       line-height: 1.35;
     }
-    main { max-width: 430px; margin: 0 auto; padding: 10px 10px 20px; }
+    html, body { background: #102033; color: #e2e8f0; }
+    main { max-width: 380px; margin: 0 auto; padding: 18px 14px 24px; }
+    .more { display: none !important; }
+    .shell { background: transparent; border: 0; padding: 0; }
+    .code {
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-align: center;
+      margin: 0 0 8px;
+      color: #7dd3fc;
+    }
+    .acts { display: grid; grid-template-columns: 1fr 1.5fr; gap: 10px; margin-top: 16px; }
+    .acts button { min-height: 64px; font-size: 1.15rem; letter-spacing: 0.04em; }
+    .acts button.go { background: #16a34a; }
     h1 { font-size: 1.2rem; margin: 0 0 8px; }
     p { margin: 0 0 6px; }
     .hint { color: #5c6770; font-size: 0.92rem; }
@@ -291,7 +305,7 @@
   <p id="translateWarn" hidden></p>
   <h1><span class="w">Gõ</span><span class="w">số</span><span class="w">rồi</span><span class="w">Enter</span></h1>
 
-  <section class="card" id="vpn">
+  <section class="card more" id="vpn">
     <div class="vpn-row">
       <div>
         <label>VPN + hệ thống bảo&nbsp;mật</label>
@@ -317,22 +331,36 @@
     </div>
   </section>
 
-  <section class="card" id="dir2">
-    <label>Hướng&nbsp;2&nbsp;—&nbsp;1&nbsp;tiến&nbsp;trình&nbsp;trên&nbsp;trình&nbsp;duyệt&nbsp;khách</label>
-    <p class="hint">Hub&nbsp;<b>không&nbsp;gõ</b>&nbsp;vào&nbsp;trình&nbsp;duyệt&nbsp;này.&nbsp;Trên&nbsp;PC&nbsp;mở&nbsp;<b>CHAY-O-DAY.cmd</b>,&nbsp;<b>Gắn&nbsp;trình&nbsp;khách</b>:&nbsp;cửa&nbsp;sổ&nbsp;<b>Evoshop</b>&nbsp;(ảnh&nbsp;login&nbsp;evoshop.vn,&nbsp;không&nbsp;bấm&nbsp;trang&nbsp;hub),&nbsp;rồi&nbsp;dòng&nbsp;<b>Mã&nbsp;khách&nbsp;hàng&nbsp;/&nbsp;số&nbsp;điện&nbsp;thoại</b>.&nbsp;Bật&nbsp;chạy&nbsp;=&nbsp;PC&nbsp;thu&nbsp;nhỏ&nbsp;hub,&nbsp;đưa&nbsp;Evoshop&nbsp;lên&nbsp;trước,&nbsp;gõ&nbsp;mã,&nbsp;Enter.</p>
-    <label for="prefix2">5 ký tự cố định</label>
-    <input id="prefix2" class="wide" type="text" maxlength="5" autocomplete="off" spellcheck="false" placeholder="SPXAB" />
+  <section class="shell" id="dir2">
+    <p class="code" id="current2">—</p>
+    <p class="status" id="status2">Nhập mã · trên PC bấm GẮN 1 lần vào ô Evoshop · CHẠY. Hub không&nbsp;gõ.</p>
+    <p class="hint" id="frame2Label">Chưa gắn — trên PC bấm GẮN, rồi bấm 1 lần vào ô Mã&nbsp;khách&nbsp;hàng.</p>
+    <p class="hint" id="pcLink2">Mở CHAY-O-DAY.cmd trên máy Windows.</p>
+    <label class="more">Hướng&nbsp;2&nbsp;—&nbsp;1&nbsp;tiến&nbsp;trình&nbsp;trên&nbsp;trình&nbsp;duyệt&nbsp;khách</label>
     <div class="pair">
       <div>
-        <label for="start2">Số bắt đầu</label>
+        <label for="prefix2">Mã</label>
+        <input id="prefix2" class="wide" type="text" maxlength="5" autocomplete="off" spellcheck="false" placeholder="SPXAB" />
+      </div>
+      <div>
+        <label for="start2">Từ</label>
         <input id="start2" class="wide" type="text" inputmode="numeric" maxlength="5" autocomplete="off" value="00001" />
       </div>
       <div>
-        <label for="end2">Số kết thúc</label>
+        <label for="end2">Đến</label>
         <input id="end2" class="wide" type="text" inputmode="numeric" maxlength="5" autocomplete="off" value="00010" />
       </div>
     </div>
-    <p class="now" id="current2">Sẽ gõ: —</p>
+    <div class="acts">
+      <button type="button" id="btnBindMini" data-bind="0">GẮN</button>
+      <button type="button" class="go" id="btnStart2">CHẠY</button>
+    </div>
+    <div class="vpn-row" style="margin-top:14px">
+      <a class="btn" href="/tai/pc-macro.zip">Tải PC</a>
+    </div>
+    <p class="hint">Tải&nbsp;zip,&nbsp;<b>giải&nbsp;nén</b>,&nbsp;bấm&nbsp;<b>CHAY-O-DAY.cmd</b>.&nbsp;Máy&nbsp;<b>tự&nbsp;cập&nbsp;nhật</b>.</p>
+    <div class="more">
+    <p class="hint">Hub&nbsp;<b>không&nbsp;gõ</b>&nbsp;vào&nbsp;trình&nbsp;duyệt&nbsp;này.&nbsp;Trên&nbsp;PC&nbsp;mở&nbsp;<b>CHAY-O-DAY.cmd</b>,&nbsp;<b>Gắn&nbsp;trình&nbsp;khách</b>:&nbsp;cửa&nbsp;sổ&nbsp;<b>Evoshop</b>&nbsp;(ảnh&nbsp;login&nbsp;evoshop.vn,&nbsp;không&nbsp;bấm&nbsp;trang&nbsp;hub),&nbsp;rồi&nbsp;dòng&nbsp;<b>Mã&nbsp;khách&nbsp;hàng&nbsp;/&nbsp;số&nbsp;điện&nbsp;thoại</b>.&nbsp;Bật&nbsp;chạy&nbsp;=&nbsp;PC&nbsp;thu&nbsp;nhỏ&nbsp;hub,&nbsp;đưa&nbsp;Evoshop&nbsp;lên&nbsp;trước,&nbsp;gõ&nbsp;mã,&nbsp;Enter.</p>
     <div class="pair">
       <div>
         <label for="delay2">Chờ (giây)</label>
@@ -347,9 +375,6 @@
         <input id="threshold2" type="number" value="20" min="1" max="100" />
       </div>
     </div>
-    <p class="hint" id="frame2Label">Chưa gắn Evoshop — trên PC bấm Gắn trình khách: cửa sổ Evoshop rồi dòng mã KH / SĐT.</p>
-    <p class="status" id="status2">Mở phần mềm PC, gắn Evoshop (không gắn trang hub), rồi bật chạy. Tắt để dừng.</p>
-    <p class="hint" id="pcLink2">Chưa thấy phần mềm PC. Mở CHAY-O-DAY.cmd trên máy Windows.</p>
     <div class="lanes" id="lanes2">
       <div class="line" id="lane0" data-lane="0"><b>Evoshop — trình duyệt web khách</b><span class="lane-code">—</span><input class="lane-box" id="laneBox0" maxlength="12" readonly tabindex="-1" /><span class="lane-enter" id="laneEnter0">Enter</span><em class="lane-bind">Chưa gắn ô Evoshop</em><small class="lane-flags"></small><div class="lane-acts"><button type="button" class="mini" data-bind="0">Gắn trình khách</button><button type="button" class="mini go" data-resume="0">Tiếp tục</button></div></div>
     </div>
@@ -364,7 +389,6 @@
       </label>
     </div>
     <div class="row">
-      <button type="button" class="go" id="btnStart2">Bật&nbsp;chạy</button>
       <button type="button" id="btnStop2">Tắt</button>
       <button type="button" class="go" id="btnContinue2">Tiếp&nbsp;tục</button>
     </div>
@@ -393,6 +417,7 @@
     </div>
     <p class="hint">Mã dừng khi khung 5 số đổi (đủ 5 ký tự + 5 số)</p>
     <ul class="flags" id="flags2"></ul>
+    </div>
   </section>
 
   <div class="dir1">
@@ -1433,11 +1458,20 @@
   function setRunSwitch2(on) {
     var box = $("runToggle2");
     var sw = $("runSwitch2");
-    if (!box || !sw) return;
-    box.checked = !!on;
-    sw.className = "switch" + (on ? " on" : "");
+    var go = $("btnStart2");
+    if (box) box.checked = !!on;
+    if (sw) sw.className = "switch" + (on ? " on" : "");
+    if (go) {
+      go.textContent = on ? "TẮT" : (waiting2 ? "TIẾP" : "CHẠY");
+      go.className = on ? "warn" : "go";
+    }
   }
-  $("btnStart2").onclick = startPlay2;
+  $("btnStart2").onclick = function () {
+    if (playing2) stopPlay2();
+    else if (waiting2) continuePlay2();
+    else startPlay2();
+  };
+  if ($("btnBindMini")) $("btnBindMini").onclick = function () { bindLaneHint(0); };
   $("btnStop2").onclick = stopPlay2;
   $("btnContinue2").onclick = continuePlay2;
   if ($("runToggle2") && $("runSwitch2")) {

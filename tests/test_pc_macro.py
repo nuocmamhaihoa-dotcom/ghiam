@@ -562,6 +562,7 @@ class FourLaneTests(unittest.TestCase):
         self.assertIn("trình duyệt web khách", overlay_banner(0, recording=True, step=0, phases=2, phase=0))
         self.assertIn("Mã khách hàng", overlay_banner(0, recording=True, step=0, phases=2, phase=1))
         self.assertIn("Lưu", overlay_banner(1, recording=False, awaiting_save=True, step=0, phases=2))
+        self.assertIn("1 lần", overlay_banner(0, recording=True, step=0, instant=True))
         clicks = upsert_slot([], 2, 200, 150, 1000, 800, via="point", wx=50, wy=40)
         slots = click_slots(clicks)
         self.assertIsNone(slots[0])
