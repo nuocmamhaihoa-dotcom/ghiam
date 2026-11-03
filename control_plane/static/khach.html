@@ -58,6 +58,8 @@
     }
     button.primary, .file { background: var(--blue); color: #fff; }
     button.ghost { background: #eef1f4; color: var(--ink); }
+    #lookupBy button.on { background: var(--blue); color: #fff; }
+    #lookupBy button { background: #eef1f4; color: var(--ink); }
     button:disabled { opacity: 0.55; cursor: default; }
     .drop {
       margin-top: 0.7rem; padding: 1.1rem; border: 1.5px dashed #b7c0ca; border-radius: 12px; background: #fbfcfd; text-align: center;
@@ -344,12 +346,17 @@
     <h2>Tra cứu hàng loạt</h2>
     <details class="guide">
       <summary>Cách tra cứu</summary>
-      <p class="note">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. Một ô có hai số (0901… - 0912…) thì đó là một khách. File lấy số điện thoại Việt Nam ở mọi cột, cột SĐT lấy cả số lạ; không lấy UID Facebook. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Mỗi dòng trong ô dán ra đúng một dòng kết quả, kể cả dòng trống ở đầu, ở giữa, ở cuối và dòng không phải số. Mỗi dòng file có số cũng ra một dòng, kể cả khi số đó đã có ở dòng khác. Có địa chỉ hoặc địa chỉ hành chính thì trả địa chỉ. Cả dòng không có địa chỉ thì ô là dấu chấm. Một dòng có hai số mà cả hai đều có địa chỉ thì hai địa chỉ nằm cùng một ô, mỗi địa chỉ một dòng. Một trong hai số không có địa chỉ thì chỉ trả địa chỉ của số còn lại. Copy để số điện thoại bên trái và địa chỉ bên phải. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách. Nhân viên bị trừ hạn mức theo số mới trong ngày; số đã tra hôm nay không tính lại.</p>
+      <p class="note" id="lookupHelp">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. Một ô có hai số (0901… - 0912…) thì đó là một khách. File lấy số điện thoại Việt Nam ở mọi cột, cột SĐT lấy cả số lạ; không lấy UID Facebook. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Mỗi dòng trong ô dán ra đúng một dòng kết quả, kể cả dòng trống ở đầu, ở giữa, ở cuối và dòng không phải số. Mỗi dòng file có số cũng ra một dòng, kể cả khi số đó đã có ở dòng khác. Có địa chỉ hoặc địa chỉ hành chính thì trả địa chỉ. Cả dòng không có địa chỉ thì ô là dấu chấm. Một dòng có hai số mà cả hai đều có địa chỉ thì hai địa chỉ nằm cùng một ô, mỗi địa chỉ một dòng. Một trong hai số không có địa chỉ thì chỉ trả địa chỉ của số còn lại. Copy để số điện thoại bên trái và địa chỉ bên phải. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách. Nhân viên bị trừ hạn mức theo số mới trong ngày; số đã tra hôm nay không tính lại.</p>
     </details>
     <p id="quotaNote" class="note"></p>
+    <label>Dữ liệu tra cứu</label>
+    <p class="row" id="lookupBy" style="margin:0 0 0.7rem">
+      <button type="button" class="on" id="lookupByPhone" data-by="phone">Số điện thoại</button>
+      <button type="button" id="lookupByUid" data-by="facebookUid">UID Facebook</button>
+    </p>
     <div class="work">
       <div>
-        <label for="lookupPaste">Danh sách số điện thoại</label>
+        <label for="lookupPaste" id="lookupPasteLabel">Danh sách số điện thoại</label>
         <textarea id="lookupPaste" placeholder="0901222333"></textarea>
         <p class="row" style="margin-top:0.7rem">
           <button class="file" type="button" id="lookupPick">Chọn file danh sách</button>
@@ -453,6 +460,9 @@
   var lookupFiles = [];
   var lookupKeys = {};
   var lastLookup = null;
+  var lookupBy = "phone";
+  var lookupHelpPhone = "Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. Một ô có hai số (0901… - 0912…) thì đó là một khách. File lấy số điện thoại Việt Nam ở mọi cột, cột SĐT lấy cả số lạ; không lấy UID Facebook. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Mỗi dòng trong ô dán ra đúng một dòng kết quả, kể cả dòng trống ở đầu, ở giữa, ở cuối và dòng không phải số. Mỗi dòng file có số cũng ra một dòng, kể cả khi số đó đã có ở dòng khác. Có địa chỉ hoặc địa chỉ hành chính thì trả địa chỉ. Cả dòng không có địa chỉ thì ô là dấu chấm. Một dòng có hai số mà cả hai đều có địa chỉ thì hai địa chỉ nằm cùng một ô, mỗi địa chỉ một dòng. Một trong hai số không có địa chỉ thì chỉ trả địa chỉ của số còn lại. Copy để số điện thoại bên trái và địa chỉ bên phải. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách. Nhân viên bị trừ hạn mức theo số mới trong ngày; số đã tra hôm nay không tính lại.";
+  var lookupHelpUid = "Dán list UID Facebook rồi bấm Tra cứu — không bắt buộc chọn file. UID dạng số, dạng 1.00e+15 hoặc link facebook.com vẫn khớp. Một dòng có hai UID thì đó là một khách. File lấy UID Facebook ở mọi cột, cột UID lấy cả số ngắn; không lấy số điện thoại. Chọn thêm file là cộng vào. Tra theo lô UID, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Mỗi dòng trong ô dán ra đúng một dòng kết quả, kể cả dòng trống ở đầu, ở giữa, ở cuối và dòng không phải UID. Mỗi dòng file có UID cũng ra một dòng, kể cả khi UID đó đã có ở dòng khác. Có địa chỉ hoặc địa chỉ hành chính thì trả địa chỉ. Cả dòng không có địa chỉ thì ô là dấu chấm. Copy để UID bên trái và địa chỉ bên phải. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách. Nhân viên bị trừ hạn mức theo UID mới trong ngày; UID đã tra hôm nay không tính lại.";
   var storeCursor = 0;
   var storeAfter = 0;
   var storeBack = [];
@@ -1621,13 +1631,33 @@
     return text + " Có thể tắt trang, máy chủ vẫn nạp tiếp.";
   }
 
+  function lookupKind(value) {
+    return value === "facebookUid" ? "facebookUid" : "phone";
+  }
+
+  function lookupUnit(by) {
+    return lookupKind(by) === "facebookUid" ? "UID" : "số";
+  }
+
+  function setLookupBy(by) {
+    lookupBy = lookupKind(by);
+    document.getElementById("lookupByPhone").classList.toggle("on", lookupBy === "phone");
+    document.getElementById("lookupByUid").classList.toggle("on", lookupBy === "facebookUid");
+    var help = document.getElementById("lookupHelp");
+    if (help) help.textContent = lookupBy === "facebookUid" ? lookupHelpUid : lookupHelpPhone;
+    document.getElementById("lookupPasteLabel").textContent = lookupBy === "facebookUid" ? "Danh sách UID Facebook" : "Danh sách số điện thoại";
+    document.getElementById("lookupPaste").placeholder = lookupBy === "facebookUid" ? "100012345678901" : "0901222333";
+    document.getElementById("lookupCopy").textContent = lookupBy === "facebookUid" ? "Copy UID Facebook và địa chỉ" : "Copy số điện thoại và địa chỉ";
+  }
+
   function lookupProgress(job) {
     var progress = job.progress || {};
+    var unit = lookupUnit(progress.by || lookupBy);
     if (progress.phase === "match") {
-      return "Đang đối chiếu " + vnNum(progress.matched || 0) + "/" + vnNum(progress.total || 0) + " số với kho…";
+      return "Đang đối chiếu " + vnNum(progress.matched || 0) + "/" + vnNum(progress.total || 0) + " " + unit + " với kho…";
     }
     if (progress.phase === "read") {
-      return "Đang đọc file danh sách: " + vnNum(progress.rows || 0) + " dòng, " + vnNum(progress.phones || 0) + " số…";
+      return "Đang đọc file danh sách: " + vnNum(progress.rows || 0) + " dòng, " + vnNum(progress.uids || progress.phones || 0) + " " + unit + "…";
     }
     return "Đang tra cứu trong kho…";
   }
@@ -2052,22 +2082,24 @@
     lastLookup = body;
     renderQuotaFromLookup(body);
     var stats = body.stats || {};
+    var by = lookupKind(stats.by || lookupBy);
     document.getElementById("lookupStats").innerHTML =
-      stat(stats.queried || 0, "Số đã tra") +
+      stat(stats.queried || 0, by === "facebookUid" ? "UID đã tra" : "Số đã tra") +
       stat(stats.found || 0, "Có địa chỉ") +
       stat(stats.missing || 0, "Không có") +
-      stat(stats.invalid || 0, "Dòng không có số");
+      stat(stats.invalid || 0, by === "facebookUid" ? "Dòng không có UID" : "Dòng không có số");
     padSpaces(document.getElementById("lookupStats"));
     var items = body.items || [];
     var shown = items.slice(0, 2000);
     if (!shown.length) {
       document.getElementById("lookupPeople").innerHTML = "";
-      setNote("lookupNote", "Không có số nào trong danh sách." + quotaExtra(body), "warn");
+      setNote("lookupNote", (by === "facebookUid" ? "Không có UID nào trong danh sách." : "Không có số nào trong danh sách.") + quotaExtra(body), "warn");
       document.getElementById("lookupActions").hidden = true;
       return;
     }
     var queried = stats.queried || items.length;
-    var html = "<table class='sheet'><colgroup><col class='col-query'><col class='col-flag'><col class='col-name'><col class='col-phone'><col class='col-addr'><col class='col-addr'><col class='col-addr'><col class='col-cod'><col class='col-id'><col class='col-id'></colgroup><thead><tr><th>Số tra cứu</th><th>Có địa chỉ</th><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
+    var queryTitle = by === "facebookUid" ? "UID tra cứu" : "Số tra cứu";
+    var html = "<table class='sheet'><colgroup><col class='col-query'><col class='col-flag'><col class='col-name'><col class='col-phone'><col class='col-addr'><col class='col-addr'><col class='col-addr'><col class='col-cod'><col class='col-id'><col class='col-id'></colgroup><thead><tr><th>" + queryTitle + "</th><th>Có địa chỉ</th><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
     shown.forEach(function (item) {
       var customer = item.customer || {};
       html += "<tr><td>" + escapeHtml(item.query) + "</td><td>" + (item.found ? "Có" : "Không") + "</td><td>" + escapeHtml(customer.name) + "</td><td>" + escapeHtml(customer.phone) + "</td><td class='addr'>" + escapeHtml(customer.address) + "</td><td class='addr'>" + escapeHtml(customer.adminAddress) + "</td><td class='addr'>" + escapeHtml(customer.orderContent) + "</td><td>" + escapeHtml(customer.codAmount) + "</td><td>" + escapeHtml(customer.facebookUid) + "</td><td>" + escapeHtml(customer.tiktokId) + "</td></tr>";
@@ -2076,7 +2108,8 @@
     document.getElementById("lookupPeople").innerHTML = html;
     padSpaces(document.getElementById("lookupPeople"));
     document.getElementById("lookupActions").hidden = false;
-    var note = "Đã đối chiếu " + vnNum(queried) + " số. Mỗi dòng đã dán là một dòng kết quả, kể cả dòng trống ở đầu và cuối. Có địa chỉ thì trả địa chỉ. Dòng không có địa chỉ là dấu chấm. Dòng hai số mà một số không có địa chỉ thì chỉ giữ địa chỉ còn lại. Mỗi dòng file có số cũng ra một dòng.";
+    var unit = lookupUnit(by);
+    var note = "Đã đối chiếu " + vnNum(queried) + " " + unit + ". Mỗi dòng đã dán là một dòng kết quả, kể cả dòng trống ở đầu và cuối. Có địa chỉ thì trả địa chỉ. Dòng không có địa chỉ là dấu chấm. Mỗi dòng file có " + unit + " cũng ra một dòng.";
     var totalRows = Math.max(items.length, shown.length + (stats.hidden || 0));
     if (totalRows > shown.length) {
       note += " Đang hiện " + vnNum(shown.length) + "/" + vnNum(totalRows) + " dòng. Tải Excel để xem hết — không phải gửi lại file.";
@@ -2120,7 +2153,7 @@
   }
 
   function lookupJsonBody() {
-    return JSON.stringify({ text: document.getElementById("lookupPaste").value || "" });
+    return JSON.stringify({ text: document.getElementById("lookupPaste").value || "", by: lookupBy });
   }
 
   async function finishLookup(job) {
@@ -2136,7 +2169,7 @@
     var raw = document.getElementById("lookupPaste").value || "";
     var hasLine = /[\r\n]/.test(raw) || String(raw).trim();
     if (!hasLine && !lookupFiles.length) {
-      setNote("lookupNote", "Dán list số hoặc chọn file danh sách.", "warn");
+      setNote("lookupNote", lookupBy === "facebookUid" ? "Dán list UID Facebook hoặc chọn file danh sách." : "Dán list số hoặc chọn file danh sách.", "warn");
       return;
     }
     document.getElementById("lookupGo").disabled = true;
@@ -2148,7 +2181,7 @@
       var response = await api("/v1/customers/lookup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: raw, uploads: ids, requestId: newRequestId() }),
+        body: JSON.stringify({ text: raw, uploads: ids, requestId: newRequestId(), by: lookupBy }),
         tries: 4,
         waitMs: 120000,
         onRetry: function (index, tries) {
@@ -2238,7 +2271,7 @@
     }
     var button = document.getElementById("lookupCopy");
     button.disabled = true;
-    setNote("lookupNote", "Đang lấy số điện thoại và địa chỉ của khách tra được…");
+    setNote("lookupNote", lookupBy === "facebookUid" ? "Đang lấy UID Facebook và địa chỉ của khách tra được…" : "Đang lấy số điện thoại và địa chỉ của khách tra được…");
     try {
       var text = "";
       if (lastLookup.jobId) {
@@ -2257,11 +2290,11 @@
       var records = countTsvRecords(text);
       var rows = records > 0 ? records - 1 : 0;
       if (!rows) {
-        setNote("lookupNote", "Không có số nào để copy.", "warn");
+        setNote("lookupNote", lookupBy === "facebookUid" ? "Không có UID nào để copy." : "Không có số nào để copy.", "warn");
         return;
       }
       await writeClipboard(text);
-      setNote("lookupNote", "Đã copy " + vnNum(rows) + " dòng. Dán vào Excel: Số điện thoại bên trái, Địa chỉ bên phải. Số không có địa chỉ là dấu chấm.", "ok");
+      setNote("lookupNote", "Đã copy " + vnNum(rows) + " dòng. Dán vào Excel: " + (lookupBy === "facebookUid" ? "UID Facebook" : "Số điện thoại") + " bên trái, Địa chỉ bên phải. Không có địa chỉ là dấu chấm.", "ok");
     } catch (error) {
       setNote("lookupNote", "Không copy được. Hãy thử lại.", "warn");
     } finally {
@@ -2596,6 +2629,8 @@
     event.target.value = "";
     renderLookupFiles();
   });
+  document.getElementById("lookupByPhone").addEventListener("click", function () { setLookupBy("phone"); });
+  document.getElementById("lookupByUid").addEventListener("click", function () { setLookupBy("facebookUid"); });
   document.getElementById("lookupGo").addEventListener("click", runLookup);
   document.getElementById("lookupExport").addEventListener("click", exportLookup);
   document.getElementById("lookupCopy").addEventListener("click", copyLookup);

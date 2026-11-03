@@ -466,15 +466,24 @@ def change_password(db_path: Any, actor: Actor, current: str, new_password: str)
         _drop_sessions(conn, actor.id)
 
 
-def consume_lookup(db_path: Any, actor: Actor, phones: list[str], at: str | None = None) -> dict[str, Any]:
-    """Ghi số mới trong ngày. Số đã tra hôm nay không tính thêm. Quản lý không bị trừ."""
+def consume_lookup(
+    db_path: Any,
+    actor: Actor,
+    phones: list[str],
+    at: str | None = None,
+    kind: str = "phone",
+) -> dict[str, Any]:
+    """Ghi số/UID mới trong ngày. Mục đã tra hôm nay không tính thêm. Quản lý không bị trừ."""
     if actor.daily_lookup_limit is None:
         return {"limit": None, "used": 0, "remaining": None, "charged": 0}
     day = local_day()
     keys: list[str] = []
     seen: set[str] = set()
     for phone in phones:
-        key = db.phone_key(phone) or phone
+        if kind == "facebookUid":
+            key = "fb:" + str(phone or "").strip().casefold()
+        else:
+            key = db.phone_key(phone) or phone
         if not key or key in seen:
             continue
         seen.add(key)
