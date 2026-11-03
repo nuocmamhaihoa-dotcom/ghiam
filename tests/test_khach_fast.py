@@ -214,8 +214,8 @@ class PhoneTextTests(unittest.TestCase):
     def test_extract_phone_prefers_real_number(self) -> None:
         self.assertEqual(extract_phone("0901222333 - 0912345678"), "0901222333")
         self.assertEqual(extract_phone("0901222333 12"), "0901222333")
-        self.assertEqual(extract_phone("12345678"), "12345678")
-        self.assertEqual(extract_phone("+1 202 555 0123"), "+12025550123")
+        self.assertEqual(extract_phone("12345678"), "")
+        self.assertEqual(extract_phone("+1 202 555 0123"), "")
         self.assertEqual(extract_phone("100012345678901"), "")
         self.assertEqual(extract_phone("9.01222333E8"), "0901222333")
 
@@ -223,9 +223,9 @@ class PhoneTextTests(unittest.TestCase):
         phones, stats = phones_from_text(
             "Lan\t0901222333\t12000000\n0912345678 / 0987654321\n84901222333\n12345678\nkhông có số"
         )
-        self.assertEqual(phones, ["0901222333", "0912345678", "0987654321", "0901222333", "12345678"])
+        self.assertEqual(phones, ["0901222333", "0912345678", "0987654321", "0901222333"])
         self.assertEqual(stats["duplicate"], 1)
-        self.assertEqual(stats["invalid"], 1)
+        self.assertEqual(stats["invalid"], 2)
 
 
 class PhoneKeyTests(unittest.TestCase):

@@ -123,6 +123,8 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("Số trên dòng là chuẩn lọc trùng", home.text)
         self.assertIn("Mọi dòng có số trong file mới đều được ghi", home.text)
         self.assertIn("Mỗi dòng có số điện thoại là một khách", home.text)
+        self.assertIn("Cột SĐT chỉ giữ số điện thoại Việt Nam", home.text)
+        self.assertIn("số Việt Nam thường 10 số", home.text)
         self.assertIn("Số 84", home.text)
         self.assertIn("không lấy UID Facebook", home.text)
         self.assertIn("không bắt buộc chọn file", home.text)

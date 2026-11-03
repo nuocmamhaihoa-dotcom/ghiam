@@ -252,7 +252,7 @@ def phones_in_text(value: Any) -> list[str]:
 
 
 def extract_phone(value: Any) -> str:
-    """Lấy số khách từ ô: số chuẩn, số thiếu/thừa chữ số, số lẫn chữ, ô có hai số. Không lấy UID Facebook."""
+    """Lấy số điện thoại Việt Nam từ ô. Không lấy UID Facebook, số nước ngoài hay số ngắn."""
     text = expand_scientific(collapse(value))
     if not text or is_facebook_id_digits(text):
         return ""
@@ -260,11 +260,38 @@ def extract_phone(value: Any) -> str:
     if is_vn_phone(phone):
         return phone
     found = phones_in_text(text)
-    if found:
-        return found[0]
-    if phone and not is_facebook_id_digits(phone):
-        return phone
-    return ""
+    return found[0] if found else ""
+
+
+def keep_vn_phones(value: Any) -> str:
+    """Giữ mỗi số điện thoại Việt Nam trong cột SĐT; bỏ UID, số nước ngoài, số ngắn.
+
+    Số Việt Nam chuẩn 0xx: di động thường 10 số, cố định / đầu 01x cũ 11 số.
+    Một ô nhiều dòng thì mỗi dòng còn lại một hoặc nhiều số Việt Nam.
+    """
+    text = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
+    if not text.strip():
+        return ""
+    kept: list[str] = []
+    seen: set[str] = set()
+
+    def add(phone: str) -> None:
+        if not is_vn_phone(phone) or phone in seen:
+            return
+        seen.add(phone)
+        kept.append(phone)
+
+    for raw in text.split("\n"):
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        found = phones_in_text(stripped)
+        if found:
+            for phone in found:
+                add(phone)
+            continue
+        add(clean_phone(stripped))
+    return "\n".join(kept)
 
 
 _UID_SPLIT = re.compile(r"[\s,;|]+")
@@ -731,11 +758,8 @@ def tiktok_key(value: str) -> str:
 
 
 def clean_phone_field(value: Any) -> str:
-    """Ô SĐT: số chuẩn; ô lẫn chữ hoặc có hai số thì lấy số đầu tiên thay vì bỏ trống."""
-    phone = clean_phone(value)
-    if phone:
-        return phone
-    return extract_phone(value)
+    """Ô SĐT chỉ giữ số điện thoại Việt Nam. UID, số nước ngoài và số ngắn bị bỏ."""
+    return keep_vn_phones(value)
 
 
 _CLEANERS = {
@@ -771,16 +795,13 @@ def has_data(row: dict[str, str]) -> bool:
 
 
 def has_phone(row: dict[str, str]) -> bool:
-    raw = row.get("phone") or ""
-    phone = extract_phone(raw) or clean_phone(raw)
-    return bool(phone) and not is_facebook_id_digits(phone)
+    return bool(keep_vn_phones(row.get("phone") or ""))
 
 
 def identity_keys(row: dict[str, str]) -> list[tuple[str, str]]:
     """Chỉ gộp khi trùng số điện thoại. 0xx / 84xx / thiếu 0 là cùng một khách."""
-    raw = row.get("phone") or ""
-    phone = extract_phone(raw) or clean_phone(raw)
-    if not phone or is_facebook_id_digits(phone):
+    phone = extract_phone(row.get("phone") or "")
+    if not phone:
         return []
     return [("phone", key) for key in (phone_lookup_keys(phone) or [phone])]
 
@@ -2080,6 +2101,128 @@ def clear_admin_or_short_addresses(
     finally:
         conn.close()
     return {"seen": seen, "changed": changed, "cleared": cleared, "trimmed": trimmed}
+
+
+_VN_PHONES_READY = "vn_phones_ready"
+_VN_PHONES_ROWID = "vn_phones_rowid"
+
+
+def clear_non_vn_phones(
+    db_path: Any,
+    batch: int = 20000,
+    start_rowid: int = 0,
+    pause: float = 0.0,
+    progress: Callable[[dict[str, int]], None] | None = None,
+) -> dict[str, int]:
+    """Xóa khỏi cột SĐT mọi số không phải điện thoại Việt Nam.
+
+    Không xóa khách. Số Việt Nam (di động 10 số, cố định / đầu 01x cũ 11 số)
+    được giữ và chuẩn hoá. UID Facebook, số nước ngoài và số ngắn bị bỏ.
+    Một ô còn nhiều số Việt Nam thì các số đó vẫn nằm cùng ô, mỗi số một dòng.
+    """
+    import time
+
+    conn = db.connect(Path(db_path))
+    seen = 0
+    changed = 0
+    cleared = 0
+    trimmed = 0
+    try:
+        conn.execute("PRAGMA busy_timeout=60000;")
+        top = int(conn.execute("SELECT COALESCE(MAX(rowid), 0) FROM customers").fetchone()[0] or 0)
+        start = max(0, int(start_rowid))
+        if start <= 0:
+            row = conn.execute("SELECT value FROM kv_meta WHERE key=?", (_VN_PHONES_ROWID,)).fetchone()
+            if row is not None:
+                try:
+                    start = max(0, int(row["value"]))
+                except (TypeError, ValueError):
+                    start = 0
+        size = max(1000, int(batch))
+        while start < top:
+            rows = conn.execute(
+                "SELECT id, phone, phone_key, address FROM customers "
+                "WHERE rowid > ? AND rowid <= ? AND phone != ''",
+                (start, start + size),
+            ).fetchall()
+            updates: list[tuple[str, str, str]] = []
+            old_rows: dict[str, dict[str, str]] = {}
+            new_rows: dict[str, dict[str, str]] = {}
+            for row in rows:
+                seen += 1
+                current = str(row["phone"] or "")
+                kept = keep_vn_phones(current)
+                key = db.phone_key(kept) if kept else ""
+                old_key = str(row["phone_key"] or "")
+                if kept == current and key == old_key:
+                    continue
+                customer_id = str(row["id"])
+                updates.append((kept, key, customer_id, current))
+                old_rows[customer_id] = {
+                    "id": customer_id,
+                    "phone": current,
+                    "phone_key": old_key or db.phone_key(current),
+                    "address": str(row["address"] or ""),
+                }
+                new_rows[customer_id] = {
+                    "id": customer_id,
+                    "phone": kept,
+                    "phone_key": key,
+                    "address": str(row["address"] or ""),
+                }
+                if kept:
+                    trimmed += 1
+                else:
+                    cleared += 1
+            if updates:
+                before = conn.total_changes
+                conn.executemany(
+                    "UPDATE customers SET phone=?, phone_key=? WHERE id=? AND phone=?",
+                    updates,
+                )
+                changed += conn.total_changes - before
+                db.note_phone_rewrites(conn, old_rows, new_rows)
+            start += size
+            conn.execute(
+                "INSERT INTO kv_meta(key, value) VALUES(?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (_VN_PHONES_ROWID, str(start)),
+            )
+            conn.commit()
+            if progress is not None:
+                progress(
+                    {
+                        "rowid": start,
+                        "top": top,
+                        "seen": seen,
+                        "changed": changed,
+                        "cleared": cleared,
+                        "trimmed": trimmed,
+                    }
+                )
+            if pause > 0:
+                time.sleep(pause)
+        conn.execute(
+            "INSERT INTO kv_meta(key, value) VALUES(?, '1') "
+            "ON CONFLICT(key) DO UPDATE SET value='1'",
+            (_VN_PHONES_READY,),
+        )
+        conn.execute("DELETE FROM kv_meta WHERE key=?", (_VN_PHONES_ROWID,))
+        conn.commit()
+    finally:
+        conn.close()
+    return {"seen": seen, "changed": changed, "cleared": cleared, "trimmed": trimmed}
+
+
+def vn_phones_ready(db_path: Any) -> bool:
+    conn = db.connect(Path(db_path))
+    try:
+        row = conn.execute("SELECT value FROM kv_meta WHERE key=?", (_VN_PHONES_READY,)).fetchone()
+        return bool(row) and str(row["value"]) == "1"
+    except Exception:
+        return False
+    finally:
+        conn.close()
 
 
 def _fold_tokens(value: str) -> list[str]:
