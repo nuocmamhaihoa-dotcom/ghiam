@@ -13,12 +13,14 @@ from control_plane.customers import (
     clean_cod_amount,
     clean_facebook_uid,
     clean_phone,
+    clean_phone_field,
     clean_tiktok_id,
     extract_facebook_uid,
     extract_phone,
     facebook_uids_in_text,
     has_phone,
     is_facebook_id_digits,
+    keep_vn_phones,
     phone_lookup_keys,
     expand_scientific,
     fold_customers,
@@ -35,6 +37,7 @@ from control_plane.customers import (
     repair_stored_customers,
     clean_address,
     clear_province_only_addresses,
+    clear_non_vn_phones,
     dedupe_exact_address,
     dedupe_exact_addresses,
     rewrite_stored_addresses,
@@ -46,6 +49,7 @@ from control_plane.customers import (
     should_restore_address,
     strip_admin_or_short_address,
     strip_province_only_address,
+    vn_phones_ready,
 )
 from control_plane.address_restore import (
     ImportAddressStore,
@@ -89,12 +93,12 @@ class CustomerCleanTests(unittest.TestCase):
         self.assertIn("84901234567", phone_lookup_keys("0901234567"))
         self.assertIn("0901234567", phone_lookup_keys("901234567"))
 
-    def test_extract_phone_keeps_short_and_skips_facebook(self) -> None:
+    def test_extract_phone_keeps_vn_and_skips_facebook(self) -> None:
         self.assertEqual(extract_phone("0901222333"), "0901222333")
         self.assertEqual(extract_phone("901222333"), "0901222333")
         self.assertEqual(extract_phone("901222333.0"), "0901222333")
         self.assertEqual(extract_phone("LH: 0901 222 333 gặp chiều"), "0901222333")
-        self.assertEqual(extract_phone("09012223331"), "09012223331")
+        self.assertEqual(extract_phone("09012223331"), "")
         self.assertEqual(extract_phone("1000123456789"), "")
         self.assertEqual(extract_phone("1.000123456789e+12"), "")
         self.assertFalse(is_facebook_id_digits("0901222333"))
@@ -102,10 +106,70 @@ class CustomerCleanTests(unittest.TestCase):
         self.assertFalse(is_facebook_id_digits("10001"))
         self.assertFalse(is_facebook_id_digits("09012223331"))
         self.assertTrue(is_facebook_id_digits("1000123456789"))
-        self.assertTrue(has_phone({"phone": "09012223331"}))
+        self.assertFalse(has_phone({"phone": "09012223331"}))
         self.assertTrue(has_phone({"phone": "901222333"}))
         self.assertFalse(has_phone({"phone": "1000123456789"}))
         self.assertFalse(has_phone({"phone": "1.000123456789e+12"}))
+
+    def test_keep_vn_phones_drops_foreign_and_uid(self) -> None:
+        self.assertEqual(keep_vn_phones("0901222333"), "0901222333")
+        self.assertEqual(keep_vn_phones("84901222333"), "0901222333")
+        self.assertEqual(keep_vn_phones("02838221234"), "02838221234")
+        self.assertEqual(keep_vn_phones("12345678"), "")
+        self.assertEqual(keep_vn_phones("+1 202 555 0123"), "")
+        self.assertEqual(keep_vn_phones("100012345678901"), "")
+        self.assertEqual(
+            keep_vn_phones("0901222333\n100012345678901\n12345\n0912345678"),
+            "0901222333\n0912345678",
+        )
+        self.assertEqual(keep_vn_phones("0901222333 - 12345678"), "0901222333")
+        self.assertEqual(clean_phone_field("0901 222 333 gặp chiều"), "0901222333")
+        self.assertEqual(clean_phone_field("+12025550123"), "")
+        self.assertEqual(_usable_mapped_phone("12345678"), "")
+        self.assertEqual(_usable_mapped_phone("+1 202 555 0123"), "")
+        self.assertEqual(_usable_mapped_phone("0901222333"), "0901222333")
+
+    def test_clear_non_vn_phones_rewrites_column(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="khach-vn-phone-") as folder:
+            path = Path(folder) / "server.db"
+            db.init_db(path)
+            now = "2026-01-01T00:00:00+00:00"
+            db.replace_customers(
+                path,
+                [
+                    {"id": "vn", "name": "Lan", "phone": "0901222333", "address": "Huế", "createdAt": now, "updatedAt": now},
+                    {
+                        "id": "mix",
+                        "name": "Hoa",
+                        "phone": "0912345678\n100012345678901\n12345",
+                        "address": "Đà Nẵng",
+                        "createdAt": now,
+                        "updatedAt": now,
+                    },
+                    {"id": "uid", "name": "UID", "phone": "100012345678901", "address": "Hà Nội", "createdAt": now, "updatedAt": now},
+                    {"id": "us", "name": "Mỹ", "phone": "+12025550123", "address": "Huế", "createdAt": now, "updatedAt": now},
+                ],
+                [],
+            )
+            stats = clear_non_vn_phones(path, batch=10)
+            self.assertEqual(stats["cleared"], 2)
+            self.assertEqual(stats["trimmed"], 1)
+            self.assertTrue(vn_phones_ready(path))
+            again = clear_non_vn_phones(path, batch=10)
+            self.assertEqual(again["changed"], 0)
+            with db.session(path) as conn:
+                rows = {
+                    row["id"]: (row["phone"], row["phone_key"], row["name"], row["address"])
+                    for row in conn.execute("SELECT id, phone, phone_key, name, address FROM customers")
+                }
+            self.assertEqual(rows["vn"][0], "0901222333")
+            self.assertEqual(rows["mix"][0], "0912345678")
+            self.assertEqual(rows["mix"][1], db.phone_key("0912345678"))
+            self.assertEqual(rows["uid"][0], "")
+            self.assertEqual(rows["uid"][1], "")
+            self.assertEqual(rows["us"][0], "")
+            self.assertEqual(rows["uid"][2], "UID")
+            self.assertEqual(rows["uid"][3], "Hà Nội")
 
     def test_facebook_uid_from_url_and_scientific(self) -> None:
         self.assertEqual(clean_facebook_uid("https://www.facebook.com/profile.php?id=1000123456789"), "1000123456789")
@@ -968,14 +1032,14 @@ class IngestSqlTests(unittest.TestCase):
 
     def test_ingest_keeps_every_unique_phone(self) -> None:
         now = "2026-01-01T00:00:00+00:00"
-        incoming = ({"name": f"K{index}", "phone": f"0904{index:07d}"} for index in range(4000))
+        incoming = ({"name": f"K{index}", "phone": f"0904{index:06d}"} for index in range(4000))
         stats, _preview = ingest_customers(self.db_path, incoming, now, flush_every=80)
         self.assertEqual(stats["incoming"], 4000)
         self.assertEqual(stats["created"], 4000)
         self.assertEqual(stats["skipped"], 0)
         self.assertEqual(stats["total"], 4000)
         later = (
-            {"name": "", "phone": f"0904{index:07d}", "address": f"Huế {index}"}
+            {"name": "", "phone": f"0904{index:06d}", "address": f"Huế {index}"}
             for index in range(4000)
         )
         filled, _preview = ingest_customers(self.db_path, later, "2026-01-02T00:00:00+00:00", flush_every=80)
@@ -984,7 +1048,7 @@ class IngestSqlTests(unittest.TestCase):
         self.assertEqual(filled["total"], 4000)
         conn = db.connect(self.db_path)
         try:
-            sample = db.customers_by_phone(conn, "09040000012")
+            sample = db.customers_by_phone(conn, "0904000012")
         finally:
             conn.close()
         self.assertEqual(len(sample), 1)
@@ -1039,19 +1103,19 @@ class IngestSqlTests(unittest.TestCase):
 
     def test_ingest_one_roundtrip_for_thousands_of_phones(self) -> None:
         now = "2026-01-01T00:00:00+00:00"
-        incoming = ({"name": f"K{index}", "phone": f"0906{index:07d}"} for index in range(2200))
+        incoming = ({"name": f"K{index}", "phone": f"0906{index:06d}"} for index in range(2200))
         stats, _preview = ingest_customers(self.db_path, incoming, now, flush_every=2200)
         self.assertEqual(stats["created"], 2200)
         self.assertEqual(stats["total"], 2200)
         found = db.customers_for_phones(
             self.db_path,
-            ["09060000003", "849060000004", "09069999999"],
+            ["0906000003", "84906000004", "0906999999"],
         )
-        self.assertEqual(len(found["09060000003"]), 1)
-        self.assertEqual(found["09060000003"][0]["name"], "K3")
-        self.assertEqual(len(found["849060000004"]), 1)
-        self.assertEqual(found["849060000004"][0]["name"], "K4")
-        self.assertEqual(found["09069999999"], [])
+        self.assertEqual(len(found["0906000003"]), 1)
+        self.assertEqual(found["0906000003"][0]["name"], "K3")
+        self.assertEqual(len(found["84906000004"]), 1)
+        self.assertEqual(found["84906000004"][0]["name"], "K4")
+        self.assertEqual(found["0906999999"], [])
 
     def test_ingest_merges_same_phone_and_skips_no_phone(self) -> None:
         now = "2026-01-01T00:00:00+00:00"

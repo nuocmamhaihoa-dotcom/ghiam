@@ -1092,14 +1092,7 @@ def _usable_mapped_phone(value: str) -> str:
     if is_vn_phone(value):
         return value
     extracted = phone_from_cell(value)
-    if extracted:
-        return extracted
-    phone = clean_phone(value)
-    if not phone or is_facebook_id_digits(phone) or is_facebook_id_digits(value):
-        return ""
-    if looks_like_facebook_uid(value):
-        return ""
-    return phone
+    return extracted if extracted and is_vn_phone(extracted) else ""
 
 
 def phone_from_row_cells(row: Iterable[str], skip_indexes: set[int] | None = None) -> str:
@@ -1742,18 +1735,16 @@ def _phone_columns(sample: list[list[str]]) -> set[int]:
 
 
 def phones_in_row(row: list[str], phone_columns: set[int]) -> list[str]:
-    """Mọi SĐT trên dòng: cột SĐT lấy cả số lạ; cột khác chỉ lấy số Việt Nam; một ô nhiều số thì lấy hết."""
+    """Mọi SĐT Việt Nam trên dòng. Cột SĐT và cột khác đều không lấy số lạ hay UID."""
     found: list[str] = []
     for index, cell in enumerate(row):
         if not cell:
             continue
-        if index in phone_columns:
+        if index in phone_columns or _DIGIT_RUN8.search(cell):
             phones = phones_in_text(cell)
             if not phones:
                 single = extract_phone(cell)
-                phones = [single] if single else []
-        elif _DIGIT_RUN8.search(cell):
-            phones = phones_in_text(cell)
+                phones = [single] if single and is_vn_phone(single) else []
         else:
             continue
         for phone in phones:

@@ -108,6 +108,18 @@ def utcnow() -> str:
 _ACTION_KINDS = {"note", "cli", "proxy_check", "proxy_upload", "package_upload", "input_replay"}
 
 
+def _clean_non_vn_phones() -> None:
+    """Quét kho một lần: bỏ số không phải SĐT Việt Nam khỏi cột điện thoại."""
+    try:
+        from control_plane.customers import clear_non_vn_phones, vn_phones_ready
+
+        if vn_phones_ready(settings.db_path):
+            return
+        clear_non_vn_phones(settings.db_path, pause=0.02)
+    except Exception:
+        return
+
+
 def _remember_hub(kind: str, summary: str, detail: str | None = None, actor: str = "me") -> None:
     """Persist an operator action. A journal failure must not break the action itself."""
     try:
@@ -143,6 +155,8 @@ async def _startup() -> None:
     start_background_checker()
     if os.environ.get("KHACH_AUTO_RESUME", "1") != "0":
         threading.Thread(target=continue_paused_imports, name="khach-auto-resume", daemon=True).start()
+    if os.environ.get("KHACH_CLEAN_VN_PHONES", "1") != "0":
+        threading.Thread(target=_clean_non_vn_phones, name="khach-vn-phones", daemon=True).start()
 
 
 def _auth(authorization: str | None) -> None:

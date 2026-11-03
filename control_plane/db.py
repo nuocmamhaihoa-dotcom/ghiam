@@ -1768,6 +1768,17 @@ def note_address_rewrites(conn: sqlite3.Connection, updates: Iterable[tuple[str,
     _bump_stats_generation(conn)
 
 
+def note_phone_rewrites(
+    conn: sqlite3.Connection,
+    old_rows: dict[str, dict[str, str]],
+    new_rows: dict[str, dict[str, str]],
+) -> None:
+    """Cập nhật chỉ số kho sau khi sửa cột SĐT, không đổi số khách."""
+    if not old_rows and not new_rows:
+        return
+    _sync_warehouse_stats_after_write(conn, old_rows, new_rows, 0)
+
+
 def _warehouse_stats_lock_path(db_path: Path) -> Path:
     return Path(db_path).parent / "warehouse_stats.lock"
 
