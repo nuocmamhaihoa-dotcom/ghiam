@@ -21,8 +21,12 @@ from control_plane.customers import (
     expand_scientific,
     fold_customers,
     ingest_customers,
+    extract_facebook_uid,
+    facebook_uids_from_text,
     lookup_by_phone_map,
     lookup_by_phones,
+    lookup_by_uid_map,
+    lookup_by_uids,
     matches_query,
     phones_from_text,
     repair_customer_row,
@@ -360,6 +364,40 @@ class CustomerMergeTests(unittest.TestCase):
                 "0901999888": [],
             },
             phones,
+        )
+        self.assertEqual(mapped_stats["found"], 2)
+        self.assertEqual(mapped_items[0]["customer"]["name"], "Lan")
+
+    def test_facebook_uid_list_lookup_keeps_order_and_misses(self) -> None:
+        uids, parsed = facebook_uids_from_text(
+            "1000123456789\nhttps://www.facebook.com/profile.php?id=1000123456789\n"
+            "1.0001999888777e+13\n0901222333\n1000999888777"
+        )
+        self.assertEqual(uids, ["1000123456789", "10001999888777", "1000999888777"])
+        self.assertEqual(parsed["invalid"], 1)
+        self.assertEqual(parsed["duplicate"], 1)
+        self.assertEqual(extract_facebook_uid("84901222333"), "")
+        stored, _stats, _removed = fold_customers(
+            [],
+            [
+                {"name": "Lan", "phone": "0901222333", "facebookUid": "1000123456789"},
+                {"name": "Minh", "phone": "0901444555", "facebookUid": "10001999888777"},
+            ],
+            "2026-01-01T00:00:00+00:00",
+        )
+        items, stats = lookup_by_uids(stored, uids)
+        self.assertEqual(stats["found"], 2)
+        self.assertEqual(stats["missing"], 1)
+        self.assertEqual(items[0]["customer"]["name"], "Lan")
+        self.assertEqual(items[1]["customer"]["name"], "Minh")
+        self.assertFalse(items[2]["found"])
+        mapped_items, mapped_stats = lookup_by_uid_map(
+            {
+                "1000123456789": [stored[0]],
+                "10001999888777": [stored[1]],
+                "1000999888777": [],
+            },
+            uids,
         )
         self.assertEqual(mapped_stats["found"], 2)
         self.assertEqual(mapped_items[0]["customer"]["name"], "Lan")

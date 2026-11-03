@@ -244,6 +244,87 @@ def extract_phone(value: Any) -> str:
     return ""
 
 
+_UID_SPLIT = re.compile(r"[\s,;|]+")
+_UID_DIGIT_RUN = re.compile(r"(?<!\d)[1-9]\d{4,19}(?!\d)")
+_SCI_TOKEN = re.compile(r"(?<![\w.])\d+\.\d+[eE][+\-]?\d+")
+_UID_SKIP = frozenset(
+    {
+        "facebook.com",
+        "www.facebook.com",
+        "m.facebook.com",
+        "web.facebook.com",
+        "fb.com",
+        "www.fb.com",
+        "fb.me",
+        "www.fb.me",
+        "profile.php",
+        "people",
+        "home",
+        "watch",
+        "reel",
+        "reels",
+        "photo",
+        "photos",
+        "login",
+        "share",
+        "sharer",
+        "groups",
+        "pages",
+        "stories",
+    }
+)
+
+
+def _is_vn_phone_value(value: str) -> bool:
+    return bool(value) and is_vn_phone(clean_phone(value))
+
+
+def extract_facebook_uid(value: Any) -> str:
+    """Lấy một UID Facebook từ ô: số, dạng khoa học, hoặc link facebook.com. Không lấy SĐT Việt Nam."""
+    text = collapse(value)
+    if not text:
+        return ""
+    expanded = expand_scientific(text)
+    if _is_vn_phone_value(expanded) and not is_facebook_id_digits(expanded):
+        return ""
+    cleaned = clean_facebook_uid(text)
+    if not cleaned:
+        return ""
+    if cleaned.isdigit():
+        if _is_vn_phone_value(cleaned) and not is_facebook_id_digits(cleaned):
+            return ""
+        if 5 <= len(cleaned) <= 20 and not cleaned.startswith("0"):
+            return cleaned
+        return ""
+    lowered = text.casefold()
+    if "facebook.com" not in lowered and "fb.com" not in lowered and "fb.me" not in lowered:
+        return ""
+    if cleaned.casefold() in _UID_SKIP or cleaned.casefold().endswith((".com", ".me")):
+        return ""
+    return cleaned
+
+
+def facebook_uids_in_text(value: Any) -> list[str]:
+    """Mọi UID Facebook trong chữ, theo thứ tự. Không lấy số điện thoại Việt Nam."""
+    text = collapse(value)
+    if not text:
+        return []
+    found: list[str] = []
+
+    def add(uid: str) -> None:
+        if uid and uid not in found:
+            found.append(uid)
+
+    add(extract_facebook_uid(text))
+    for token in _UID_SPLIT.split(text):
+        add(extract_facebook_uid(token))
+    for match in _SCI_TOKEN.finditer(text):
+        add(extract_facebook_uid(match.group(0)))
+    for match in _UID_DIGIT_RUN.finditer(text):
+        add(extract_facebook_uid(match.group(0)))
+    return found
+
+
 def phone_lookup_keys(value: Any) -> list[str]:
     """Các dạng cùng một số Việt Nam: 0xx, 84xx, thiếu số 0."""
     phone = clean_phone(value)
@@ -965,6 +1046,51 @@ def phones_from_text(text: str, limit: int = MAX_LOOKUP) -> tuple[list[str], dic
     }
 
 
+def facebook_uids_from_text(text: str, limit: int = MAX_LOOKUP) -> tuple[list[str], dict[str, int]]:
+    """Lấy UID Facebook theo thứ tự danh sách, bỏ UID trùng và dòng không có UID."""
+    uids: list[str] = []
+    seen: set[str] = set()
+    raw = 0
+    invalid = 0
+    duplicate = 0
+    truncated = False
+    for line in str(text or "").replace("\ufeff", "").splitlines():
+        stripped = collapse(line)
+        if not stripped or stripped.startswith("#"):
+            continue
+        raw += 1
+        found: list[str] = []
+        whole = extract_facebook_uid(stripped)
+        if whole:
+            found.append(whole)
+        if not stripped.isdigit() and not expand_scientific(stripped).isdigit():
+            for uid in facebook_uids_in_text(stripped):
+                if uid not in found:
+                    found.append(uid)
+        if not found:
+            invalid += 1
+            continue
+        for uid in found:
+            key = facebook_key(uid) or uid
+            if key in seen:
+                duplicate += 1
+                continue
+            if len(uids) >= limit:
+                truncated = True
+                break
+            seen.add(key)
+            uids.append(uid)
+        if truncated:
+            break
+    return uids, {
+        "raw": raw,
+        "unique": len(uids),
+        "invalid": invalid,
+        "duplicate": duplicate,
+        "truncated": int(truncated),
+    }
+
+
 def lookup_by_phones(
     stored: list[dict[str, Any]],
     phones: list[str],
@@ -1011,12 +1137,18 @@ def lookup_by_phones(
 
 def _lookup_batches(
     db_path: Any,
-    phones: list[str],
+    keys: list[str],
     batch: int,
+    by: str = "phone",
 ) -> Iterator[tuple[list[dict[str, Any]], dict[str, int]]]:
     with db.lookup_connection(db_path) as conn:
-        for start in range(0, len(phones), batch):
-            chunk = phones[start : start + batch]
+        for start in range(0, len(keys), batch):
+            chunk = keys[start : start + batch]
+            if by == "facebookUid":
+                found = db.customers_matching_uids(conn, chunk)
+                conn.commit()
+                yield lookup_by_uid_map(found, chunk)
+                continue
             found = db.customers_matching_phones(conn, chunk)
             conn.commit()
             yield lookup_by_phone_map(found, chunk)
@@ -1028,6 +1160,7 @@ def lookup_phones(
     keep: int = 2000,
     batch: int = LOOKUP_BATCH,
     progress: Callable[[dict[str, int]], None] | None = None,
+    by: str = "phone",
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
     """Tra cứu theo lô: không giữ cả triệu dòng kết quả trong RAM, chỉ giữ `keep` dòng đầu để hiện."""
     shown: list[dict[str, Any]] = []
@@ -1035,7 +1168,7 @@ def lookup_phones(
     missing = 0
     done = 0
     rows = 0
-    for items, stats in _lookup_batches(db_path, phones, batch):
+    for items, stats in _lookup_batches(db_path, phones, batch, by=by):
         found += stats["found"]
         missing += stats["missing"]
         done += stats["queried"]
@@ -1047,9 +1180,14 @@ def lookup_phones(
     return shown, {"queried": len(phones), "found": found, "missing": missing, "hits": found, "rows": rows}
 
 
-def iter_lookup_items(db_path: Any, phones: list[str], batch: int = LOOKUP_BATCH) -> Iterator[dict[str, Any]]:
-    """Từng dòng kết quả tra cứu theo đúng thứ tự số, đọc kho theo lô — dùng để ghi Excel."""
-    for items, _stats in _lookup_batches(db_path, phones, batch):
+def iter_lookup_items(
+    db_path: Any,
+    phones: list[str],
+    batch: int = LOOKUP_BATCH,
+    by: str = "phone",
+) -> Iterator[dict[str, Any]]:
+    """Từng dòng kết quả tra cứu theo đúng thứ tự số/UID, đọc kho theo lô — dùng để ghi Excel."""
+    for items, _stats in _lookup_batches(db_path, phones, batch, by=by):
         yield from items
 
 
@@ -1079,6 +1217,79 @@ def lookup_by_phone_map(
             items.append({"query": phone, "found": True, "customer": public})
     return items, {
         "queried": len(phones),
+        "found": found,
+        "missing": missing,
+        "hits": found,
+    }
+
+
+def lookup_by_uids(
+    stored: list[dict[str, Any]],
+    uids: list[str],
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Đối chiếu list UID Facebook với kho. Giữ đúng thứ tự UID người dùng đưa vào."""
+    index: dict[str, list[dict[str, str]]] = {}
+    for row in stored:
+        public = public_customer(row)
+        key = facebook_key(row.get("facebookUid") or "")
+        if not key:
+            continue
+        bucket = index.setdefault(key, [])
+        if any(item.get("id") == public["id"] for item in bucket):
+            continue
+        bucket.append(public)
+    items: list[dict[str, Any]] = []
+    found = 0
+    missing = 0
+    for uid in uids:
+        matches = index.get(facebook_key(uid) or uid) or []
+        if not matches:
+            missing += 1
+            items.append({"query": uid, "found": False, "customer": None})
+            continue
+        found += 1
+        seen_ids: set[str] = set()
+        for customer in matches:
+            customer_id = str(customer.get("id") or "")
+            if customer_id in seen_ids:
+                continue
+            if customer_id:
+                seen_ids.add(customer_id)
+            items.append({"query": uid, "found": True, "customer": customer})
+    return items, {
+        "queried": len(uids),
+        "found": found,
+        "missing": missing,
+        "hits": found,
+    }
+
+
+def lookup_by_uid_map(
+    by_uid: dict[str, list[dict[str, Any]]],
+    uids: list[str],
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Ghép kết quả tra cứu UID đã lấy từ SQLite, không lập chỉ mục lại."""
+    items: list[dict[str, Any]] = []
+    found = 0
+    missing = 0
+    for uid in uids:
+        matches = by_uid.get(uid) or []
+        if not matches:
+            missing += 1
+            items.append({"query": uid, "found": False, "customer": None})
+            continue
+        found += 1
+        seen_ids: set[str] = set()
+        for row in matches:
+            public = public_customer(row)
+            customer_id = str(public.get("id") or "")
+            if customer_id and customer_id in seen_ids:
+                continue
+            if customer_id:
+                seen_ids.add(customer_id)
+            items.append({"query": uid, "found": True, "customer": public})
+    return items, {
+        "queried": len(uids),
         "found": found,
         "missing": missing,
         "hits": found,

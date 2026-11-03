@@ -1105,6 +1105,58 @@ def customers_for_phones(db_path: Path, phones: list[str]) -> dict[str, list[dic
         return customers_matching_phones(conn, phones)
 
 
+def _facebook_key(value: str) -> str:
+    return str(value or "").strip().casefold()
+
+
+def _fetch_by_facebook_uid(conn: sqlite3.Connection, uids: list[str]) -> list[sqlite3.Row]:
+    if not uids:
+        return []
+    if len(uids) >= PHONE_TEMP_KEYS:
+        conn.execute("CREATE TEMP TABLE IF NOT EXISTS _khach_uid_q (k TEXT NOT NULL PRIMARY KEY)")
+        conn.execute("DELETE FROM _khach_uid_q")
+        conn.executemany("INSERT OR IGNORE INTO _khach_uid_q(k) VALUES (?)", ((uid,) for uid in uids))
+        return conn.execute(_CUSTOMER_SELECT + " WHERE facebook_uid IN (SELECT k FROM _khach_uid_q)").fetchall()
+    rows: list[sqlite3.Row] = []
+    for start in range(0, len(uids), PHONE_IN_CHUNK):
+        chunk = uids[start : start + PHONE_IN_CHUNK]
+        marks = ",".join("?" * len(chunk))
+        rows.extend(conn.execute(_CUSTOMER_SELECT + f" WHERE facebook_uid IN ({marks})", chunk).fetchall())
+    return rows
+
+
+def customers_matching_uids(
+    conn: sqlite3.Connection,
+    uids: list[str],
+) -> dict[str, list[dict[str, str]]]:
+    """Một lần đọc SQLite cho cả lô UID Facebook. Trả về map UID hỏi → khách khớp."""
+    wanted: list[str] = []
+    seen: set[str] = set()
+    for uid in uids:
+        if not uid or uid in seen:
+            continue
+        seen.add(uid)
+        wanted.append(uid)
+    if not wanted:
+        return {}
+    query_uids: list[str] = []
+    query_seen: set[str] = set()
+    for uid in wanted:
+        for candidate in (uid, uid.casefold()):
+            if not candidate or candidate in query_seen:
+                continue
+            query_seen.add(candidate)
+            query_uids.append(candidate)
+    by_key: dict[str, list[dict[str, str]]] = {}
+    for row in _fetch_by_facebook_uid(conn, query_uids):
+        item = customer_from_sql_row(row)
+        by_key.setdefault(_facebook_key(item.get("facebookUid") or ""), []).append(item)
+    for bucket in by_key.values():
+        if len(bucket) > 1:
+            bucket.sort(key=lambda item: (item.get("createdAt") or "", item.get("id") or ""))
+    return {uid: list(by_key.get(_facebook_key(uid)) or []) for uid in wanted}
+
+
 @contextmanager
 def lookup_connection(db_path: Path) -> Iterator[sqlite3.Connection]:
     """Kết nối đọc cho tra cứu nhiều lô; commit sau mỗi lô để không giữ ảnh chụp WAL quá lâu."""

@@ -33,6 +33,7 @@ from control_plane.excel_import import (
     mapping_from_form,
     phones_from_files,
     preview_table,
+    uids_from_files,
     rows_from_files,
     write_xlsx,
 )
@@ -574,6 +575,24 @@ class CountAndMappingTests(unittest.TestCase):
             ["0900000001", "0901222333", "0912345678", "0987654321", "0900000001", "0903111222", "0903111333"],
         )
         self.assertEqual(reports[0]["phones"], 7)
+
+    def test_lookup_file_reads_facebook_uid_column(self) -> None:
+        payload = make_xlsx(
+            [
+                sheet(
+                    '<row r="1"><c r="A1" t="inlineStr"><is><t>SĐT</t></is></c>'
+                    '<c r="B1" t="inlineStr"><is><t>UID Facebook</t></is></c></row>'
+                    '<row r="2"><c r="A2"><v>901222333</v></c><c r="B2"><v>1000123456789</v></c></row>'
+                    '<row r="3"><c r="A3"><v>903111222</v></c>'
+                    '<c r="B3" t="inlineStr"><is><t>https://www.facebook.com/profile.php?id=10001999888777</t></is></c></row>'
+                )
+            ]
+        )
+        uids, reports = uids_from_files([("uid.xlsx", payload)])
+        self.assertEqual(uids, ["1000123456789", "10001999888777"])
+        self.assertEqual(reports[0]["uids"], 2)
+        phones, _phone_reports = phones_from_files([("uid.xlsx", payload)])
+        self.assertEqual(phones, ["0901222333", "0903111222"])
 
 
 class IngestFastPathTests(unittest.TestCase):
