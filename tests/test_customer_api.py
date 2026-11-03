@@ -143,6 +143,10 @@ class CustomerApiTests(unittest.TestCase):
         self.assertIn("lookupError", home.text)
         self.assertIn("không cần chọn file", home.text)
         self.assertIn("lookupJsonBody", home.text)
+        self.assertIn('id="lookupByPhone"', home.text)
+        self.assertIn('id="lookupByUid"', home.text)
+        self.assertIn('data-by="facebookUid"', home.text)
+        self.assertIn("Dữ liệu tra cứu", home.text)
         self.assertIn("map-card", home.text)
         self.assertNotIn("data-label", home.text)
         self.assertNotIn("#people thead", home.text)
@@ -645,6 +649,91 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(len(capped_body["items"]), 1)
         self.assertEqual(capped_body["stats"]["shown"], 1)
         self.assertEqual(capped_body["stats"]["hidden"], 2)
+
+    def test_bulk_facebook_uid_lookup_and_export(self) -> None:
+        db.replace_customers(
+            settings.db_path,
+            [
+                {
+                    "id": "c1",
+                    "name": "Lan",
+                    "phone": "0901222333",
+                    "address": "Huế",
+                    "adminAddress": "Thừa Thiên Huế",
+                    "facebookUid": "1000123456789",
+                    "tiktokId": "lan.hue",
+                    "createdAt": "2026-01-01T00:00:00+00:00",
+                    "updatedAt": "2026-01-01T00:00:00+00:00",
+                },
+                {
+                    "id": "c2",
+                    "name": "Minh",
+                    "phone": "0375866792",
+                    "address": "Đà Nẵng",
+                    "adminAddress": "Đà Nẵng",
+                    "facebookUid": "10001999888777",
+                    "tiktokId": "",
+                    "createdAt": "2026-01-01T00:00:00+00:00",
+                    "updatedAt": "2026-01-01T00:00:00+00:00",
+                },
+            ],
+            [],
+        )
+        looked = self.client.post(
+            "/v1/customers/lookup",
+            headers=self.headers,
+            data={"text": "1000123456789\n0901222333\n1000777666555", "by": "facebookUid"},
+        )
+        self.assertEqual(looked.status_code, 200, looked.text)
+        body = looked.json()
+        self.assertEqual(body["stats"]["by"], "facebookUid")
+        self.assertEqual(body["stats"]["found"], 1)
+        self.assertEqual(body["items"][0]["customer"]["name"], "Lan")
+        self.assertEqual(body["items"][1]["query"], "0901222333")
+        self.assertFalse(body["items"][1]["found"])
+        self.assertEqual(body["items"][2]["query"], "1000777666555")
+        self.assertFalse(body["items"][2]["found"])
+        by_url = self.client.post(
+            "/v1/customers/lookup",
+            headers=self.headers,
+            json={"text": "https://www.facebook.com/profile.php?id=10001999888777", "by": "facebookUid"},
+        )
+        self.assertEqual(by_url.status_code, 200, by_url.text)
+        self.assertEqual(by_url.json()["stats"]["found"], 1)
+        self.assertEqual(by_url.json()["items"][0]["customer"]["name"], "Minh")
+        default_phone = self.client.post(
+            "/v1/customers/lookup",
+            headers=self.headers,
+            json={"text": "0901222333"},
+        )
+        self.assertEqual(default_phone.status_code, 200, default_phone.text)
+        self.assertEqual(default_phone.json()["stats"]["by"], "phone")
+        self.assertEqual(default_phone.json()["items"][0]["customer"]["name"], "Lan")
+        name, file_body = self._xlsx(
+            "uid.xlsx",
+            ["SĐT", "UID Facebook"],
+            [["0901222333", "1000123456789"], ["0375866792", "1000777666555"]],
+        )
+        from_file = self.client.post(
+            "/v1/customers/lookup",
+            headers=self.headers,
+            data={"text": "", "by": "facebookUid"},
+            files=[("files", (name, file_body, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))],
+        )
+        self.assertEqual(from_file.status_code, 200, from_file.text)
+        file_json = from_file.json()
+        self.assertEqual(file_json["stats"]["found"], 1)
+        self.assertEqual(file_json["items"][0]["customer"]["name"], "Lan")
+        exported = self.client.post(
+            "/v1/customers/lookup/export",
+            headers=self.headers,
+            json={"text": "1000123456789\n1000777666555", "by": "facebookUid"},
+        )
+        self.assertEqual(exported.status_code, 200)
+        rows = list(iter_xlsx_rows(exported.content))
+        self.assertEqual(rows[0][0], "UID tra cứu")
+        self.assertEqual(rows[1][:2], ["1000123456789", "Có"])
+        self.assertEqual(rows[2][:2], ["1000777666555", "Không"])
 
     def test_preview_and_import_many_files(self) -> None:
         files = [

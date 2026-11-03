@@ -41,6 +41,7 @@ from control_plane.customers import (
     phone_groups_from_text,
     public_customer,
     real_lookup_phones,
+    uid_groups_from_text,
     repair_customer_rows,
 )
 from control_plane.excel_import import (
@@ -55,6 +56,7 @@ from control_plane.excel_import import (
     merge_preview_columns,
     phone_groups_from_files,
     preview_table,
+    uid_groups_from_files,
     write_xlsx_to_path,
 )
 from control_plane.settings import settings
@@ -64,9 +66,9 @@ _heavy_lock = asyncio.Lock()
 _LOG = logging.getLogger(__name__)
 
 
-def _charge(actor: accounts.Actor, phones: list[str]) -> dict[str, Any]:
+def _charge(actor: accounts.Actor, phones: list[str], by: str = "phone") -> dict[str, Any]:
     try:
-        return accounts.consume_lookup(settings.db_path, actor, phones, utcnow())
+        return accounts.consume_lookup(settings.db_path, actor, phones, utcnow(), kind=by)
     except accounts.LookupQuotaError as exc:
         raise HTTPException(status_code=429, detail=exc.detail) from exc
 
@@ -1398,18 +1400,35 @@ def _flatten_phone_groups(groups: list[list[str]]) -> list[str]:
     return [phone for group in groups for phone in real_lookup_phones(group)]
 
 
+def _lookup_by(value: Any) -> str:
+    raw = collapse(value).casefold().replace("_", "").replace("-", "").replace(" ", "")
+    if raw in ("", "phone", "sdt", "sodienthoai"):
+        return "phone"
+    if raw in ("facebookuid", "uid", "uidfacebook", "facebook"):
+        return "facebookUid"
+    raise HTTPException(status_code=400, detail="Chọn số điện thoại hoặc UID Facebook để tra cứu.")
+
+
 def _collect_lookup_groups(
     text: str,
     uploaded: list[tuple[str, Path]],
     problems: list[str],
     progress: Any = None,
+    by: str = "phone",
 ) -> tuple[list[list[str]], dict[str, Any], list[dict[str, Any]]]:
-    """Mỗi dòng dán, và mỗi dòng file có số, là một khách. Số đã gặp ở dòng khác vẫn giữ dòng đó."""
-    pasted, parsed = phone_groups_from_text(text)
+    """Mỗi dòng dán, và mỗi dòng file có số/UID, là một khách. Mục đã gặp ở dòng khác vẫn giữ dòng đó."""
+    if by == "facebookUid":
+        pasted, parsed = uid_groups_from_text(text)
+        file_reader = uid_groups_from_files
+        empty_detail = "Không thấy UID Facebook nào trong danh sách."
+    else:
+        pasted, parsed = phone_groups_from_text(text)
+        file_reader = phone_groups_from_files
+        empty_detail = "Không thấy số điện thoại nào trong danh sách."
     file_groups: list[list[str]] = []
     file_reports: list[dict[str, Any]] = []
     if uploaded:
-        file_groups, file_reports = phone_groups_from_files(uploaded, progress=progress)
+        file_groups, file_reports = file_reader(uploaded, progress=progress)
         problems.extend(str(item.get("error") or "") for item in file_reports if item.get("error"))
     groups = list(pasted)
     kept = sum(len(real_lookup_phones(group)) for group in groups)
@@ -1430,10 +1449,11 @@ def _collect_lookup_groups(
     if not groups:
         raise HTTPException(
             status_code=400,
-            detail="Không thấy số điện thoại nào trong danh sách." + ((" " + " ".join(problems)) if problems else ""),
+            detail=empty_detail + ((" " + " ".join(problems)) if problems else ""),
         )
     if truncated:
         parsed["truncated"] = 1
+    parsed["by"] = by
     return groups, parsed, file_reports
 
 
@@ -1443,12 +1463,14 @@ def _lookup_result(
     file_reports: list[dict[str, Any]],
     problems: list[str],
     progress: Any = None,
+    by: str = "phone",
 ) -> dict[str, Any]:
     shown, stats = lookup_phone_groups(
-        settings.db_path, groups, keep=LOOKUP_RETURN_LIMIT, progress=progress
+        settings.db_path, groups, keep=LOOKUP_RETURN_LIMIT, progress=progress, by=by
     )
     rows = int(stats.pop("rows", len(shown)))
     stats.update(parsed)
+    stats["by"] = by
     if rows > len(shown):
         stats["shown"] = len(shown)
         stats["hidden"] = rows - len(shown)
@@ -1462,10 +1484,11 @@ def _lookup_now(
     uploaded: list[tuple[str, Path]],
     problems: list[str],
     actor: accounts.Actor,
+    by: str = "phone",
 ) -> dict[str, Any]:
-    groups, parsed, reports = _collect_lookup_groups(text, uploaded, problems)
-    result = _lookup_result(groups, parsed, reports, problems)
-    result["quota"] = _charge(actor, _flatten_phone_groups(groups))
+    groups, parsed, reports = _collect_lookup_groups(text, uploaded, problems, by=by)
+    result = _lookup_result(groups, parsed, reports, problems, by=by)
+    result["quota"] = _charge(actor, _flatten_phone_groups(groups), by)
     return result
 
 
@@ -1474,6 +1497,7 @@ def _lookup_job(
     text: str,
     uploaded: list[tuple[str, Path]],
     actor: accounts.Actor,
+    by: str = "phone",
 ) -> dict[str, Any]:
     problems: list[str] = []
     groups, parsed, reports = _collect_lookup_groups(
@@ -1481,33 +1505,42 @@ def _lookup_job(
         uploaded,
         problems,
         progress=lambda progress: context.report({"phase": "read", **progress}),
+        by=by,
     )
     phones = _flatten_phone_groups(groups)
     khach_jobs.job_file(context.id, ".phones").write_text(_encode_phone_groups(groups), encoding="utf-8")
-    context.report({"phase": "match", "matched": 0, "total": len(phones)}, force=True)
+    khach_jobs.job_file(context.id, ".mode").write_text(by, encoding="utf-8")
+    context.report({"phase": "match", "matched": 0, "total": len(phones), "by": by}, force=True)
     result = _lookup_result(
         groups,
         parsed,
         reports,
         problems,
-        progress=lambda progress: context.report({"phase": "match", **progress}),
+        progress=lambda progress: context.report({"phase": "match", **progress, "by": by}),
+        by=by,
     )
     result["lookupId"] = context.id
-    result["quota"] = _charge(actor, phones)
+    result["quota"] = _charge(actor, phones, by)
     return result
 
 
-async def _lookup_request(request: Request) -> tuple[str, list[tuple[str, Path]], list[str], str]:
+async def _lookup_request(request: Request) -> tuple[str, list[tuple[str, Path]], list[str], str, str]:
     """Đọc yêu cầu tra cứu: JSON (dán số / mã file đã gửi), form, hoặc multipart kiểu cũ."""
     content_type = (request.headers.get("content-type") or "").lower()
     if "application/json" in content_type:
         payload = await _json_object(request)
         uploaded = _resolve_uploads(payload.get("uploads"))
-        return str(payload.get("text") or ""), uploaded, [], str(payload.get("requestId") or "")
+        return (
+            str(payload.get("text") or ""),
+            uploaded,
+            [],
+            str(payload.get("requestId") or ""),
+            _lookup_by(payload.get("by")),
+        )
     if "application/x-www-form-urlencoded" in content_type:
         form = await request.form()
         try:
-            return str(form.get("text") or ""), [], [], ""
+            return str(form.get("text") or ""), [], [], "", _lookup_by(form.get("by"))
         finally:
             await form.close()
     raise ValueError("multipart")
@@ -1521,24 +1554,31 @@ async def customers_lookup(
     actor = _actor(request)
     db.init_db(settings.db_path)
     try:
-        text, uploaded, problems, request_id = await _lookup_request(request)
+        text, uploaded, problems, request_id, by = await _lookup_request(request)
     except ValueError:
         spooled, fields, problems = await _read_customer_form(request)
         try:
             async with _heavy_lock:
-                return await run_in_threadpool(_lookup_now, fields.get("text") or "", spooled, problems, actor)
+                return await run_in_threadpool(
+                    _lookup_now,
+                    fields.get("text") or "",
+                    spooled,
+                    problems,
+                    actor,
+                    _lookup_by(fields.get("by")),
+                )
         finally:
             _cleanup_uploads(spooled)
     if request_id:
         job = khach_jobs.start_job(
             "lookup",
             request_id,
-            lambda context: _lookup_job(context, text, uploaded, actor),
-            {"files": [name for name, _path in uploaded], "accountId": actor.id},
+            lambda context: _lookup_job(context, text, uploaded, actor, by),
+            {"files": [name for name, _path in uploaded], "accountId": actor.id, "by": by},
         )
         waited = await run_in_threadpool(khach_jobs.wait_job, job["id"], 2.0)
         return {"job": waited or job}
-    return await run_in_threadpool(_lookup_now, text, uploaded, problems, actor)
+    return await run_in_threadpool(_lookup_now, text, uploaded, problems, actor, by)
 
 
 def _unlink_temp(path: str) -> None:
@@ -1574,15 +1614,16 @@ def _tsv_field(value: Any) -> str:
     return text
 
 
-def _write_lookup_copy(groups: list[list[str]]) -> Path:
+def _write_lookup_copy(groups: list[list[str]], by: str = "phone") -> Path:
     """Mỗi dòng danh sách một dòng kết quả. Số không có địa chỉ thì ô địa chỉ là dấu chấm."""
     handle = tempfile.NamedTemporaryFile(prefix="tra-cuu-copy-", suffix=".txt", delete=False)
     dest = Path(handle.name)
     handle.close()
+    left = "UID Facebook" if by == "facebookUid" else "Số điện thoại"
     try:
         with dest.open("w", encoding="utf-8", newline="\n") as handle:
-            handle.write("Số điện thoại\tĐịa chỉ\n")
-            for item in iter_lookup_groups(settings.db_path, groups):
+            handle.write(f"{left}\tĐịa chỉ\n")
+            for item in iter_lookup_groups(settings.db_path, groups, by=by):
                 phone = str(item.get("query") or "")
                 address = str(item.get("resultAddress") or ".") or "."
                 handle.write(f"{_tsv_field(phone)}\t{_tsv_field(address)}\n")
@@ -1592,12 +1633,13 @@ def _write_lookup_copy(groups: list[list[str]]) -> Path:
     return dest
 
 
-def _write_lookup_xlsx(groups: list[list[str]]) -> Path:
+def _write_lookup_xlsx(groups: list[list[str]], by: str = "phone") -> Path:
     """Ghi kết quả tra cứu ra Excel theo từng dòng danh sách, kể cả số không có địa chỉ."""
-    headers = ["Số tra cứu", "Có địa chỉ", *FIELD_LABELS.values()]
+    query_header = "UID tra cứu" if by == "facebookUid" else "Số tra cứu"
+    headers = [query_header, "Có địa chỉ", *FIELD_LABELS.values()]
 
     def rows() -> Any:
-        for item in iter_lookup_groups(settings.db_path, groups):
+        for item in iter_lookup_groups(settings.db_path, groups, by=by):
             customer = item.get("customer") or {}
             yield [
                 item.get("query") or "",
@@ -1619,10 +1661,11 @@ def _export_phones(
     uploaded: list[tuple[str, Path]],
     problems: list[str],
     actor: accounts.Actor,
+    by: str = "phone",
 ) -> Path:
-    groups, _parsed, _reports = _collect_lookup_groups(text, uploaded, problems)
-    _charge(actor, _flatten_phone_groups(groups))
-    return _write_lookup_xlsx(groups)
+    groups, _parsed, _reports = _collect_lookup_groups(text, uploaded, problems, by=by)
+    _charge(actor, _flatten_phone_groups(groups), by)
+    return _write_lookup_xlsx(groups, by)
 
 
 @router.post("/v1/customers/lookup/export")
@@ -1633,18 +1676,23 @@ async def customers_lookup_export(
     actor = _actor(request)
     db.init_db(settings.db_path)
     try:
-        text, uploaded, problems, _request_id = await _lookup_request(request)
+        text, uploaded, problems, _request_id, by = await _lookup_request(request)
     except ValueError:
         spooled, fields, problems = await _read_customer_form(request)
         try:
             async with _heavy_lock:
                 dest = await run_in_threadpool(
-                    _export_phones, fields.get("text") or "", spooled, problems, actor
+                    _export_phones,
+                    fields.get("text") or "",
+                    spooled,
+                    problems,
+                    actor,
+                    _lookup_by(fields.get("by")),
                 )
         finally:
             _cleanup_uploads(spooled)
         return _xlsx_file_response(dest, "tra-cuu-khach.xlsx")
-    dest = await run_in_threadpool(_export_phones, text, uploaded, problems, actor)
+    dest = await run_in_threadpool(_export_phones, text, uploaded, problems, actor, by)
     return _xlsx_file_response(dest, "tra-cuu-khach.xlsx")
 
 
@@ -1654,15 +1702,24 @@ def customers_lookup_job_export(
     request: Request,
     authorization: str | None = Header(default=None),
 ) -> FileResponse:
-    """Tải Excel đúng danh sách số của lần tra cứu đã chạy, không gửi lại file."""
+    """Tải Excel đúng danh sách số/UID của lần tra cứu đã chạy, không gửi lại file."""
     actor = _actor(request)
     db.init_db(settings.db_path)
-    groups = _lookup_job_groups(actor, job_id)
-    _charge(actor, _flatten_phone_groups(groups))
-    return _xlsx_file_response(_write_lookup_xlsx(groups), "tra-cuu-khach.xlsx")
+    groups, by = _lookup_job_groups(actor, job_id)
+    _charge(actor, _flatten_phone_groups(groups), by)
+    return _xlsx_file_response(_write_lookup_xlsx(groups, by), "tra-cuu-khach.xlsx")
 
 
-def _lookup_job_groups(actor: accounts.Actor, job_id: str) -> list[list[str]]:
+def _job_lookup_by(job_id: str, job: dict[str, Any] | None) -> str:
+    try:
+        mode = khach_jobs.job_file(job_id, ".mode").read_text(encoding="utf-8").strip()
+    except (OSError, khach_jobs.JobError):
+        info = (job or {}).get("info") or {}
+        mode = str(info.get("by") or "phone")
+    return mode if mode in ("phone", "facebookUid") else "phone"
+
+
+def _lookup_job_groups(actor: accounts.Actor, job_id: str) -> tuple[list[list[str]], str]:
     job = _visible_job(actor, khach_jobs.get_job(job_id))
     if job.get("kind") != "lookup":
         raise HTTPException(status_code=404, detail="Không thấy lần tra cứu này, hãy tra cứu lại.")
@@ -1672,7 +1729,7 @@ def _lookup_job_groups(actor: accounts.Actor, job_id: str) -> list[list[str]]:
         text = khach_jobs.job_file(job_id, ".phones").read_text(encoding="utf-8")
     except (OSError, khach_jobs.JobError) as exc:
         raise HTTPException(status_code=404, detail="Kết quả tra cứu đã quá hạn, hãy tra cứu lại.") from exc
-    return _decode_phone_groups(text)
+    return _decode_phone_groups(text), _job_lookup_by(job_id, job)
 
 
 @router.get("/v1/customers/lookup/jobs/{job_id}/copy")
@@ -1681,12 +1738,12 @@ def customers_lookup_job_copy(
     request: Request,
     authorization: str | None = Header(default=None),
 ) -> FileResponse:
-    """Hai cột của khách tra được, số điện thoại bên trái và địa chỉ bên phải, để dán vào Excel."""
+    """Hai cột của khách tra được, số/UID bên trái và địa chỉ bên phải, để dán vào Excel."""
     actor = _actor(request)
     db.init_db(settings.db_path)
-    groups = _lookup_job_groups(actor, job_id)
-    _charge(actor, _flatten_phone_groups(groups))
-    dest = _write_lookup_copy(groups)
+    groups, by = _lookup_job_groups(actor, job_id)
+    _charge(actor, _flatten_phone_groups(groups), by)
+    dest = _write_lookup_copy(groups, by)
     return FileResponse(
         path=dest,
         media_type="text/plain; charset=utf-8",

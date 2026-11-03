@@ -14,7 +14,9 @@ from control_plane.customers import (
     clean_facebook_uid,
     clean_phone,
     clean_tiktok_id,
+    extract_facebook_uid,
     extract_phone,
+    facebook_uids_in_text,
     has_phone,
     is_facebook_id_digits,
     phone_lookup_keys,
@@ -26,6 +28,7 @@ from control_plane.customers import (
     lookup_by_phones,
         phone_groups_from_text,
         real_lookup_phones,
+        uid_groups_from_text,
     matches_query,
     phones_from_text,
     repair_customer_row,
@@ -502,6 +505,20 @@ class CustomerMergeTests(unittest.TestCase):
         flat, flat_parsed = phones_from_text("0901000001 - 0901000002\n0901000003")
         self.assertEqual(flat, ["0901000001", "0901000002", "0901000003"])
         self.assertEqual(flat_parsed["unique"], 3)
+
+    def test_uid_groups_from_text_keep_lines_and_skip_phones(self) -> None:
+        groups, parsed = uid_groups_from_text(
+            "1000123456789\nhttps://www.facebook.com/profile.php?id=1000123456789\n"
+            "1.0001999888777e+13\n0901222333\n1000999888777"
+        )
+        self.assertEqual(
+            [real_lookup_phones(group) for group in groups],
+            [["1000123456789"], ["1000123456789"], ["10001999888777"], [], ["1000999888777"]],
+        )
+        self.assertEqual(parsed["invalid"], 1)
+        self.assertEqual(parsed["duplicate"], 1)
+        self.assertEqual(extract_facebook_uid("84901222333"), "")
+        self.assertEqual(facebook_uids_in_text("1000123456789 0901222333"), ["1000123456789"])
 
         def ready(name: str, phone: str, street: str, admin: str) -> dict:
             return {
