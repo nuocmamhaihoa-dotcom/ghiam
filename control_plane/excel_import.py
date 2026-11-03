@@ -35,7 +35,9 @@ from control_plane.customers import (
     clean_row,
     collapse,
     expand_scientific,
+    extract_facebook_uid,
     extract_phone,
+    facebook_uids_in_text,
     has_data,
     has_phone,
     is_facebook_id_digits,
@@ -1752,6 +1754,82 @@ def phones_from_files(
         phones.extend(found)
         reports.append({"name": filename, "phones": len(found), "rows": rows_seen})
     return phones, reports
+
+
+def _uid_columns(sample: list[list[str]]) -> set[int]:
+    """Cột UID Facebook của file tra cứu: tiêu đề là UID, hoặc ít nhất nửa số ô mẫu là UID."""
+    if not sample:
+        return set()
+    columns: set[int] = set()
+    body = sample
+    if looks_like_label_row(sample[0]):
+        columns.update(index for index, header in enumerate(sample[0]) if header_field(header) == "facebookUid")
+        body = sample[1:]
+    width = max((len(row) for row in body), default=0)
+    filled = [0] * width
+    hits = [0] * width
+    for row in body:
+        for index, cell in enumerate(row[:width]):
+            if not cell:
+                continue
+            filled[index] += 1
+            if extract_facebook_uid(cell) or looks_like_facebook_uid(cell):
+                hits[index] += 1
+    columns.update(index for index in range(width) if filled[index] and hits[index] * 2 >= filled[index])
+    return columns
+
+
+def uids_in_row(row: list[str], uid_columns: set[int]) -> list[str]:
+    """Mọi UID trên dòng: cột UID lấy cả số ngắn; cột khác chỉ lấy UID Facebook; không lấy SĐT."""
+    found: list[str] = []
+    for index, cell in enumerate(row):
+        if not cell:
+            continue
+        if index in uid_columns:
+            uids = facebook_uids_in_text(cell)
+            if not uids:
+                single = extract_facebook_uid(cell)
+                uids = [single] if single else []
+        elif looks_like_facebook_uid(cell) or is_facebook_id_digits(expand_scientific(cell)):
+            uids = facebook_uids_in_text(cell)
+        else:
+            continue
+        for uid in uids:
+            if uid not in found:
+                found.append(uid)
+    return found
+
+
+def uids_from_files(
+    files: Iterable[tuple[str, TableSource]],
+    progress: Callable[[dict[str, Any]], None] | None = None,
+) -> tuple[list[str], list[dict[str, Any]]]:
+    uids: list[str] = []
+    reports: list[dict[str, Any]] = []
+    for filename, data in files:
+        found: list[str] = []
+        rows_seen = 0
+        try:
+            stream = iter_raw_rows(filename, data)
+            try:
+                sample = _head_rows(stream, DETECT_ROWS)
+                columns = _uid_columns(sample)
+                for row in sample:
+                    rows_seen += 1
+                    found.extend(uids_in_row(row, columns))
+                for row in stream:
+                    rows_seen += 1
+                    found.extend(uids_in_row(row, columns))
+                    if progress is not None and rows_seen % 50000 == 0:
+                        progress({"file": filename, "rows": rows_seen, "phones": len(found), "uids": len(found)})
+            finally:
+                stream.close()
+        except ValueError as exc:
+            reports.append({"name": filename, "phones": 0, "uids": 0, "rows": rows_seen, "error": str(exc)})
+            continue
+        uids.extend(found)
+        reports.append({"name": filename, "phones": len(found), "uids": len(found), "rows": rows_seen})
+    return uids, reports
 
 
 def mapping_from_form(raw: dict[str, Any] | None, *, _nested: bool = False) -> dict[str, Any]:
