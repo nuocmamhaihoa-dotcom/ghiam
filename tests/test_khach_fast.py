@@ -367,9 +367,9 @@ class CountAndMappingTests(unittest.TestCase):
 
     def test_headerless_columns_all_selectable_and_split_by_role(self) -> None:
         street = [
-            ["1", "GHN", "Nguyễn Thị Nhàn", "0349757089", "12 Lê Lợi", "Phú Thọ", "ghi chú"],
-            ["2", "GHN", "Nguyễn Đức Toàn", "0865792883", "45 Trần Phú", "Hải Phòng", "ghi chú"],
-            ["3", "GHN", "Lê Thành Danh", "0907321063", "9 Nguyễn Trãi", "Cần Thơ", "ghi chú"],
+            ["1", "GHN", "Nguyễn Thị Nhàn", "0349757089", "12 Lê Lợi, phường Bến Nghé", "Phú Thọ", "ghi chú"],
+            ["2", "GHN", "Nguyễn Đức Toàn", "0865792883", "45 Trần Phú, quận Ngô Quyền", "Hải Phòng", "ghi chú"],
+            ["3", "GHN", "Lê Thành Danh", "0907321063", "9 Nguyễn Trãi, quận Ninh Kiều", "Cần Thơ", "ghi chú"],
         ]
         other = [
             ["Nguyễn Văn An", "0912345678", "shop A", "mã", "22 Hai Bà Trưng", "Huế", "x"],
@@ -404,7 +404,7 @@ class CountAndMappingTests(unittest.TestCase):
                 }
             ),
         )
-        self.assertEqual(incoming[0]["address"], "12 Lê Lợi")
+        self.assertEqual(incoming[0]["address"], "12 Lê Lợi, phường Bến Nghé")
         self.assertNotIn("Phú Thọ", incoming[0]["address"])
 
     def test_split_address_cells_join_from_detail_to_province(self) -> None:
@@ -508,7 +508,7 @@ class CountAndMappingTests(unittest.TestCase):
             + "".join(
                 f'<row r="{index}"><c r="A{index}"><v>{index - 1}</v></c><c r="B{index}"><v>98{index:07d}</v></c>'
                 f'<c r="C{index}" t="inlineStr"><is><t>Chị Mai {index}</t></is></c>'
-                f'<c r="D{index}" t="inlineStr"><is><t>12 Lê Lợi, Đà Nẵng</t></is></c></row>'
+                f'<c r="D{index}" t="inlineStr"><is><t>12 Lê Lợi, Sơn Trà, Đà Nẵng</t></is></c></row>'
                 for index in range(2, 6)
             )
         )
@@ -583,22 +583,27 @@ class IngestFastPathTests(unittest.TestCase):
             now = "2026-01-01T00:00:00+00:00"
             rows = iter(
                 [
-                    {"name": "Lan", "phone": "0901222333", "address": "Huế"},
-                    {"name": "Lan", "phone": "0901222333", "address": "Huế"},
+                    {"name": "Lan", "phone": "0901222333", "address": "Số 12 đường Nguyễn Huệ, phường Phú Hội"},
+                    {"name": "Lan", "phone": "0901222333", "address": "Số 12 đường Nguyễn Huệ, phường Phú Hội"},
                     {"name": "Minh", "phone": "0902000111"},
-                    {"name": "", "phone": "0902000111", "address": "Đà Nẵng"},
+                    {"name": "", "phone": "0902000111", "address": "45 Trần Phú, phường An Hải Tây, Sơn Trà"},
                     {"name": "Minh", "phone": "84902000111"},
                 ]
             )
             stats, _preview = ingest_customers(path, rows, now, flush_every=400)
             self.assertEqual((stats["created"], stats["updated"], stats["unchanged"]), (2, 1, 2))
             self.assertEqual(stats["total"], 2)
-            again = iter([{"name": "Lan", "phone": "0901222333", "address": "Huế"}, {"name": "Minh", "phone": "0902000111", "address": "Đà Nẵng"}])
+            again = iter(
+                [
+                    {"name": "Lan", "phone": "0901222333", "address": "Số 12 đường Nguyễn Huệ, phường Phú Hội"},
+                    {"name": "Minh", "phone": "0902000111", "address": "45 Trần Phú, phường An Hải Tây, Sơn Trà"},
+                ]
+            )
             second, _preview = ingest_customers(path, again, now, flush_every=400)
             found = db.customers_for_phones(path, ["0901222333", "0902000111"])
         self.assertEqual((second["created"], second["updated"], second["unchanged"]), (0, 0, 2))
         self.assertEqual([row["name"] for row in found["0901222333"]], ["Lan"])
-        self.assertEqual(found["0902000111"][0]["address"], "Đà Nẵng")
+        self.assertEqual(found["0902000111"][0]["address"], "45 Trần Phú, phường An Hải Tây, Sơn Trà")
 
     def test_two_phone_cell_and_variants_in_one_batch(self) -> None:
         with tempfile.TemporaryDirectory(prefix="khach-ingest-") as folder:
@@ -606,8 +611,8 @@ class IngestFastPathTests(unittest.TestCase):
             now = "2026-01-01T00:00:00+00:00"
             rows = iter(
                 [
-                    {"name": "Lan", "phone": "0901222333 - 0912345678", "address": "Huế"},
-                    {"name": "", "phone": "84901222333", "address": "Đà Nẵng"},
+                    {"name": "Lan", "phone": "0901222333 - 0912345678", "address": "Số 12 đường Nguyễn Huệ, phường Phú Hội"},
+                    {"name": "", "phone": "84901222333", "address": "45 Trần Phú, phường An Hải Tây, Sơn Trà"},
                     {"name": "Minh", "phone": "901222333"},
                 ]
             )
@@ -618,7 +623,10 @@ class IngestFastPathTests(unittest.TestCase):
             found = db.customers_for_phones(path, ["0901222333"])["0901222333"]
         self.assertEqual(len(found), 1)
         self.assertEqual(found[0]["name"], "Lan\nMinh")
-        self.assertEqual(found[0]["address"], "Huế\nĐà Nẵng")
+        self.assertEqual(
+            found[0]["address"],
+            "Số 12 đường Nguyễn Huệ, phường Phú Hội\n45 Trần Phú, phường An Hải Tây, Sơn Trà",
+        )
 
 
 if __name__ == "__main__":

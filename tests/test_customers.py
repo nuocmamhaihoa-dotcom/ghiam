@@ -21,6 +21,8 @@ from control_plane.customers import (
     has_phone,
     is_facebook_id_digits,
     keep_vn_phones,
+    keep_long_address,
+    is_long_address,
     phone_lookup_keys,
     expand_scientific,
     fold_customers,
@@ -38,6 +40,7 @@ from control_plane.customers import (
     clean_address,
     clear_province_only_addresses,
     clear_non_vn_phones,
+    clear_short_addresses,
     dedupe_exact_address,
     dedupe_exact_addresses,
     rewrite_stored_addresses,
@@ -50,6 +53,7 @@ from control_plane.customers import (
     strip_admin_or_short_address,
     strip_province_only_address,
     vn_phones_ready,
+    short_addresses_ready,
 )
 from control_plane.address_restore import (
     ImportAddressStore,
@@ -77,6 +81,13 @@ from control_plane.excel_import import (
     _usable_mapped_phone,
 )
 from control_plane.settings import settings
+
+LONG_HUE = "Số 12 đường Nguyễn Huệ, phường Phú Hội"
+LONG_DN = "45 Trần Phú, phường An Hải Tây, Sơn Trà"
+LONG_HN = "88 Lý Thường Kiệt, phường Hàng Trống, Hoàn Kiếm"
+LONG_NT = "15 Hùng Vương, phường Lộc Thọ, Nha Trang"
+LONG_QN = "9 Quang Trung, phường Lê Lợi, Quy Nhơn"
+LONG_HCM = "12 Nguyễn Huệ, phường Bến Nghé, Quận 1"
 
 
 class CustomerCleanTests(unittest.TestCase):
@@ -191,6 +202,122 @@ class CustomerCleanTests(unittest.TestCase):
         self.assertEqual(clean_tiktok_id("https://www.tiktok.com/@ban.gach"), "ban.gach")
         self.assertEqual(clean_tiktok_id("@ban.gach"), "ban.gach")
 
+    def test_clean_address_keeps_only_over_20_chars(self) -> None:
+        self.assertEqual(keep_long_address("Huế"), "")
+        self.assertEqual(keep_long_address("12 Lê Lợi"), "")
+        self.assertEqual(keep_long_address("12345678901234567890"), "")
+        self.assertEqual(keep_long_address("123456789012345678901"), "123456789012345678901")
+        self.assertGreater(len(LONG_HCM), 20)
+        self.assertEqual(keep_long_address(LONG_HCM), LONG_HCM)
+        self.assertEqual(clean_address(LONG_HCM), LONG_HCM)
+        self.assertTrue(is_long_address(LONG_HCM))
+        self.assertFalse(is_long_address("12 Lê Lợi"))
+
+    def test_import_drops_short_address_keeps_phone(self) -> None:
+        long_addr = LONG_HCM
+        short_file = write_xlsx(
+            ["Tên khách", "SĐT", "Địa chỉ"],
+            [["Lan", "0901222333", "Huế"]],
+        )
+        long_file = write_xlsx(
+            ["Tên khách", "SĐT", "Địa chỉ"],
+            [["Minh", "0901444555", long_addr]],
+        )
+        mapping = mapping_from_form(
+            {
+                "name": {"index": 0, "header": "Tên khách"},
+                "phone": {"index": 1, "header": "SĐT"},
+                "address": {"index": 2, "header": "Địa chỉ"},
+            }
+        )
+        incoming, _reports = rows_from_files(
+            [("ngan.xlsx", short_file), ("dai.xlsx", long_file)],
+            mapping,
+        )
+        folded, stats, _removed = fold_customers([], incoming, "2026-01-01T00:00:00+00:00")
+        self.assertEqual(stats["created"], 2)
+        by_phone = {row["phone"]: row for row in folded}
+        self.assertEqual(by_phone["0901222333"]["name"], "Lan")
+        self.assertEqual(by_phone["0901222333"]["address"], "")
+        self.assertEqual(by_phone["0901444555"]["address"], long_addr)
+
+    def test_short_incoming_does_not_replace_long_address(self) -> None:
+        long_addr = "12 Nguyễn Huệ, Quận 1, TP.HCM"
+        now = "2026-01-01T00:00:00+00:00"
+        stored = [
+            {
+                "id": "lan",
+                "name": "Lan",
+                "phone": "0901222333",
+                "address": long_addr,
+                "createdAt": now,
+                "updatedAt": now,
+            }
+        ]
+        folded, stats, _removed = fold_customers(
+            stored,
+            [{"name": "Lan", "phone": "0901222333", "address": "Huế"}],
+            now,
+        )
+        self.assertEqual(stats["unchanged"], 1)
+        self.assertEqual(folded[0]["address"], long_addr)
+
+    def test_clear_short_addresses_rewrites_column(self) -> None:
+        long_addr = "12 Nguyễn Huệ, Quận 1, TP.HCM"
+        with tempfile.TemporaryDirectory(prefix="khach-short-addr-") as folder:
+            path = Path(folder) / "server.db"
+            db.init_db(path)
+            now = "2026-01-01T00:00:00+00:00"
+            db.replace_customers(
+                path,
+                [
+                    {
+                        "id": "ngan",
+                        "name": "Lan",
+                        "phone": "0901222333",
+                        "address": "Huế",
+                        "adminAddress": "Thừa Thiên Huế",
+                        "createdAt": now,
+                        "updatedAt": now,
+                    },
+                    {
+                        "id": "hai-muoi",
+                        "name": "Hoa",
+                        "phone": "0901333444",
+                        "address": "12345678901234567890",
+                        "createdAt": now,
+                        "updatedAt": now,
+                    },
+                    {
+                        "id": "dai",
+                        "name": "Minh",
+                        "phone": "0901444555",
+                        "address": long_addr,
+                        "createdAt": now,
+                        "updatedAt": now,
+                    },
+                ],
+                [],
+            )
+            stats = clear_short_addresses(path, batch=10)
+            self.assertEqual(stats["cleared"], 2)
+            self.assertTrue(short_addresses_ready(path))
+            again = clear_short_addresses(path, batch=10)
+            self.assertEqual(again["changed"], 0)
+            with db.session(path) as conn:
+                rows = {
+                    row["id"]: (row["address"], row["admin_address"], row["name"], row["phone"])
+                    for row in conn.execute(
+                        "SELECT id, address, admin_address, name, phone FROM customers"
+                    )
+                }
+            self.assertEqual(rows["ngan"][0], "")
+            self.assertEqual(rows["ngan"][1], "Thừa Thiên Huế")
+            self.assertEqual(rows["ngan"][2], "Lan")
+            self.assertEqual(rows["ngan"][3], "0901222333")
+            self.assertEqual(rows["hai-muoi"][0], "")
+            self.assertEqual(rows["dai"][0], long_addr)
+
 
 class CustomerMergeTests(unittest.TestCase):
     def test_later_file_fills_missing_fields(self) -> None:
@@ -227,35 +354,35 @@ class CustomerMergeTests(unittest.TestCase):
     def test_existing_values_are_kept(self) -> None:
         stored, _stats, _removed = fold_customers(
             [],
-            [{"name": "Nguyễn A", "phone": "0901234567", "address": "Hà Nội"}],
+            [{"name": "Nguyễn A", "phone": "0901234567", "address": LONG_HN}],
             "2026-01-01T00:00:00+00:00",
         )
         again, stats, _removed = fold_customers(
             stored,
-            [{"name": "Tên khác", "phone": "0901234567", "address": "Sài Gòn", "facebookUid": "1"}],
+            [{"name": "Tên khác", "phone": "0901234567", "address": LONG_HCM, "facebookUid": "1"}],
             "2026-01-02T00:00:00+00:00",
         )
         self.assertEqual(stats["updated"], 1)
         self.assertEqual(again[0]["name"], "Nguyễn A\nTên khác")
-        self.assertEqual(again[0]["address"], "Hà Nội\nSài Gòn")
+        self.assertEqual(again[0]["address"], f"{LONG_HN}\n{LONG_HCM}")
         self.assertEqual(again[0]["facebookUid"], "1")
         same, same_stats, _removed = fold_customers(
             again,
-            [{"name": "Nguyễn A", "phone": "0901234567", "address": "Sài Gòn"}],
+            [{"name": "Nguyễn A", "phone": "0901234567", "address": LONG_HCM}],
             "2026-01-03T00:00:00+00:00",
         )
         self.assertEqual(same_stats["unchanged"], 1)
         self.assertEqual(same_stats["updated"], 0)
         self.assertEqual(same[0]["name"], "Nguyễn A\nTên khác")
-        self.assertEqual(same[0]["address"], "Hà Nội\nSài Gòn")
+        self.assertEqual(same[0]["address"], f"{LONG_HN}\n{LONG_HCM}")
         added, added_stats, _removed = fold_customers(
             same,
-            [{"name": "Tên khác", "phone": "0901234567", "address": "Đà Nẵng"}],
+            [{"name": "Tên khác", "phone": "0901234567", "address": LONG_DN}],
             "2026-01-04T00:00:00+00:00",
         )
         self.assertEqual(added_stats["updated"], 1)
         self.assertEqual(added[0]["name"], "Nguyễn A\nTên khác")
-        self.assertEqual(added[0]["address"], "Hà Nội\nSài Gòn\nĐà Nẵng")
+        self.assertEqual(added[0]["address"], f"{LONG_HN}\n{LONG_HCM}\n{LONG_DN}")
 
     def test_later_import_appends_cod_and_fills_blank_fields(self) -> None:
         stored, _stats, _removed = fold_customers(
@@ -272,7 +399,7 @@ class CustomerMergeTests(unittest.TestCase):
                     "codAmount": "120000",
                     "facebookUid": "100",
                     "tiktokId": "@ban.gach",
-                    "address": "Huế",
+                    "address": LONG_HUE,
                 }
             ],
             "2026-01-02T00:00:00+00:00",
@@ -282,7 +409,7 @@ class CustomerMergeTests(unittest.TestCase):
         self.assertEqual(again[0]["codAmount"], "230000\n120000")
         self.assertEqual(again[0]["facebookUid"], "100")
         self.assertEqual(again[0]["tiktokId"], "ban.gach")
-        self.assertEqual(again[0]["address"], "Huế")
+        self.assertEqual(again[0]["address"], LONG_HUE)
         same, same_stats, _removed = fold_customers(
             again,
             [{"phone": "0901555666", "codAmount": "230000", "tiktokId": "ban.gach", "address": ""}],
@@ -291,7 +418,7 @@ class CustomerMergeTests(unittest.TestCase):
         self.assertEqual(same_stats["unchanged"], 1)
         self.assertEqual(same_stats["updated"], 0)
         self.assertEqual(same[0]["codAmount"], "230000\n120000")
-        self.assertEqual(same[0]["address"], "Huế")
+        self.assertEqual(same[0]["address"], LONG_HUE)
         self.assertEqual(same[0]["tiktokId"], "ban.gach")
 
     def test_one_cell_keeps_two_addresses_and_composes_one_address(self) -> None:
@@ -301,7 +428,7 @@ class CustomerMergeTests(unittest.TestCase):
                 {
                     "name": "Lan\nHoa",
                     "phone": "0901222333",
-                    "address": "Hà Nội\nSài Gòn",
+                    "address": f"{LONG_HN}\n{LONG_HCM}",
                     "codAmount": "230k\n120000",
                 }
             ],
@@ -309,7 +436,7 @@ class CustomerMergeTests(unittest.TestCase):
         )
         self.assertEqual(stats["created"], 1)
         self.assertEqual(folded[0]["name"], "Lan\nHoa")
-        self.assertEqual(folded[0]["address"], "Hà Nội\nSài Gòn")
+        self.assertEqual(folded[0]["address"], f"{LONG_HN}\n{LONG_HCM}")
         self.assertEqual(folded[0]["codAmount"], "230000\n120000")
         parts, part_stats, _removed = fold_customers(
             [],
@@ -320,12 +447,12 @@ class CustomerMergeTests(unittest.TestCase):
         self.assertEqual(parts[0]["address"], "12 Lê Lợi, Quận 1, TP.HCM")
         again, again_stats, _removed = fold_customers(
             folded,
-            [{"name": "hoa", "phone": "84901222333", "address": "Sài Gòn\nHà Nội", "codAmount": "120000\n230000"}],
+            [{"name": "hoa", "phone": "84901222333", "address": f"{LONG_HCM}\n{LONG_HN}", "codAmount": "120000\n230000"}],
             "2026-01-02T00:00:00+00:00",
         )
         self.assertEqual(again_stats["unchanged"], 1)
         self.assertEqual(again[0]["name"], "Lan\nHoa")
-        self.assertEqual(again[0]["address"], "Hà Nội\nSài Gòn")
+        self.assertEqual(again[0]["address"], f"{LONG_HN}\n{LONG_HCM}")
         self.assertEqual(again[0]["codAmount"], "230000\n120000")
         added, added_stats, _removed = fold_customers(
             again,
@@ -333,7 +460,7 @@ class CustomerMergeTests(unittest.TestCase):
             "2026-01-03T00:00:00+00:00",
         )
         self.assertEqual(added_stats["updated"], 1)
-        self.assertEqual(added[0]["address"], "Hà Nội\nSài Gòn\n12 Lê Lợi, Quận 1, TP.HCM")
+        self.assertEqual(added[0]["address"], f"{LONG_HN}\n{LONG_HCM}\n12 Lê Lợi, Quận 1, TP.HCM")
 
     def test_blank_address_keeps_stored_and_admin_still_appends(self) -> None:
         stored = [
@@ -403,8 +530,8 @@ class CustomerMergeTests(unittest.TestCase):
         folded, stats, _removed = fold_customers(
             [],
             [
-                {"name": "Lan", "phone": "0901222333", "address": "Huế"},
-                {"name": "Tên khác", "phone": "84901222333", "address": "Đà Nẵng"},
+                {"name": "Lan", "phone": "0901222333", "address": LONG_HUE},
+                {"name": "Tên khác", "phone": "84901222333", "address": LONG_DN},
             ],
             "2026-01-01T00:00:00+00:00",
         )
@@ -413,7 +540,7 @@ class CustomerMergeTests(unittest.TestCase):
         self.assertEqual(len(folded), 1)
         self.assertEqual(folded[0]["name"], "Lan\nTên khác")
         self.assertEqual(folded[0]["phone"], "0901222333")
-        self.assertEqual(folded[0]["address"], "Huế\nĐà Nẵng")
+        self.assertEqual(folded[0]["address"], f"{LONG_HUE}\n{LONG_DN}")
 
     def test_same_name_different_phones_stay_apart(self) -> None:
         folded, stats, _removed = fold_customers(
@@ -432,8 +559,8 @@ class CustomerMergeTests(unittest.TestCase):
         folded, stats, _removed = fold_customers(
             [],
             [
-                {"name": "Sơn", "phone": "0338174222", "address": "Đà Nẵng"},
-                {"name": "sơn(hg)", "phone": "0338174222", "address": "Hà Nội"},
+                {"name": "Sơn", "phone": "0338174222", "address": LONG_DN},
+                {"name": "sơn(hg)", "phone": "0338174222", "address": LONG_HN},
             ],
             "2026-01-01T00:00:00+00:00",
         )
@@ -441,7 +568,7 @@ class CustomerMergeTests(unittest.TestCase):
         self.assertEqual(stats["created"], 1)
         self.assertEqual(folded[0]["phone"], "0338174222")
         self.assertEqual(folded[0]["name"], "Sơn\nsơn(hg)")
-        self.assertEqual(folded[0]["address"], "Đà Nẵng\nHà Nội")
+        self.assertEqual(folded[0]["address"], f"{LONG_DN}\n{LONG_HN}")
 
     def test_rows_without_phone_are_skipped(self) -> None:
         folded, stats, _removed = fold_customers(
@@ -511,8 +638,8 @@ class CustomerMergeTests(unittest.TestCase):
         stored, _stats, _removed = fold_customers(
             [],
             [
-                {"name": "Lan", "phone": "0901222333", "address": "Huế", "adminAddress": "Thừa Thiên Huế"},
-                {"name": "Minh", "phone": "0901444555", "address": "Đà Nẵng"},
+                {"name": "Lan", "phone": "0901222333", "address": LONG_HUE, "adminAddress": "Thừa Thiên Huế"},
+                {"name": "Minh", "phone": "0901444555", "address": LONG_DN},
             ],
             "2026-01-01T00:00:00+00:00",
         )
@@ -520,7 +647,7 @@ class CustomerMergeTests(unittest.TestCase):
         self.assertEqual(stats["found"], 2)
         self.assertEqual(stats["missing"], 1)
         self.assertEqual([item["customer"]["name"] for item in items], ["Lan", "Minh"])
-        self.assertEqual(items[1]["customer"]["address"], "Đà Nẵng")
+        self.assertEqual(items[1]["customer"]["address"], LONG_DN)
         self.assertEqual(items[1]["customer"]["adminAddress"], "")
         items84, stats84 = lookup_by_phones(stored, ["84901222333"])
         self.assertEqual(stats84["found"], 1)
@@ -842,7 +969,7 @@ class ExcelMappingTests(unittest.TestCase):
     def test_complementary_files_map_extra_headers_without_stealing(self) -> None:
         first = write_xlsx(
             ["Tên khách", "Số điện thoại khách", "Địa chỉ khách"],
-            [["Lan", "0901222333", "Huế"]],
+            [["Lan", "0901222333", LONG_HUE]],
         )
         second = write_xlsx(
             ["Tên khách", "Số điện thoại khách", "UID Facebook", "ID TikTok"],
@@ -861,7 +988,7 @@ class ExcelMappingTests(unittest.TestCase):
         folded, stats, _removed = fold_customers([], incoming, "2026-01-01T00:00:00+00:00")
         self.assertEqual(stats["created"], 1)
         self.assertEqual(folded[0]["name"], "Lan")
-        self.assertEqual(folded[0]["address"], "Huế")
+        self.assertEqual(folded[0]["address"], LONG_HUE)
         self.assertEqual(folded[0]["facebookUid"], "10001")
         self.assertEqual(folded[0]["tiktokId"], "lan.hue")
 
@@ -1039,7 +1166,11 @@ class IngestSqlTests(unittest.TestCase):
         self.assertEqual(stats["skipped"], 0)
         self.assertEqual(stats["total"], 4000)
         later = (
-            {"name": "", "phone": f"0904{index:06d}", "address": f"Huế {index}"}
+            {
+                "name": "",
+                "phone": f"0904{index:06d}",
+                "address": f"Dia chi khach {index:04d} duong Nguyen Hue phuong Ben Nghe",
+            }
             for index in range(4000)
         )
         filled, _preview = ingest_customers(self.db_path, later, "2026-01-02T00:00:00+00:00", flush_every=80)
@@ -1053,7 +1184,8 @@ class IngestSqlTests(unittest.TestCase):
             conn.close()
         self.assertEqual(len(sample), 1)
         self.assertEqual(sample[0]["name"], "K12")
-        self.assertEqual(sample[0]["address"], "Huế 12")
+        self.assertGreater(len(sample[0]["address"]), 20)
+        self.assertIn("0012", sample[0]["address"])
 
     def test_rewrite_sorts_fragment_addresses_and_keeps_every_customer(self) -> None:
         created = "2026-01-01T00:00:00+00:00"
@@ -1122,7 +1254,7 @@ class IngestSqlTests(unittest.TestCase):
         incoming = iter(
             [
                 {"name": "Lan", "phone": "0901111111", "address": ""},
-                {"name": "", "phone": "0901111111", "address": "Huế"},
+                {"name": "", "phone": "0901111111", "address": LONG_HUE},
                 {"name": "Không số A", "phone": ""},
                 {"name": "Không số B", "phone": ""},
                 {"name": "Không số A", "phone": ""},
@@ -1143,7 +1275,7 @@ class IngestSqlTests(unittest.TestCase):
             conn.close()
         self.assertEqual(len(lan), 1)
         self.assertEqual(lan[0]["name"], "Lan")
-        self.assertEqual(lan[0]["address"], "Huế")
+        self.assertEqual(lan[0]["address"], LONG_HUE)
         self.assertEqual(int(empty), 0)
 
     def test_delete_customers_without_phone_keeps_numbered_rows(self) -> None:
@@ -1203,7 +1335,7 @@ class IngestSqlTests(unittest.TestCase):
         now = "2026-01-01T00:00:00+00:00"
         first, _preview = ingest_customers(
             self.db_path,
-            iter([{"name": "Lan", "phone": "0901222333", "address": "Huế"}]),
+            iter([{"name": "Lan", "phone": "0901222333", "address": LONG_HUE}]),
             now,
         )
         self.assertEqual(first["created"], 1)
@@ -1211,9 +1343,9 @@ class IngestSqlTests(unittest.TestCase):
             self.db_path,
             iter(
                 [
-                    {"name": "Tên khác", "phone": "84901222333", "address": "Đà Nẵng", "codAmount": "120k"},
-                    {"name": "", "phone": "00352548360", "address": "Nha Trang"},
-                    {"name": "Minh", "phone": "0352548360", "address": "Quy Nhơn"},
+                    {"name": "Tên khác", "phone": "84901222333", "address": LONG_DN, "codAmount": "120k"},
+                    {"name": "", "phone": "00352548360", "address": LONG_NT},
+                    {"name": "Minh", "phone": "0352548360", "address": LONG_QN},
                 ]
             ),
             "2026-01-02T00:00:00+00:00",
@@ -1229,12 +1361,12 @@ class IngestSqlTests(unittest.TestCase):
             conn.close()
         self.assertEqual(len(lan), 1)
         self.assertEqual(lan[0]["name"], "Lan\nTên khác")
-        self.assertEqual(lan[0]["address"], "Huế\nĐà Nẵng")
+        self.assertEqual(lan[0]["address"], f"{LONG_HUE}\n{LONG_DN}")
         self.assertEqual(lan[0]["codAmount"], "120000")
         self.assertEqual(len(minh), 1)
         self.assertEqual(minh[0]["name"], "Minh")
         self.assertEqual(minh[0]["phone"], "0352548360")
-        self.assertEqual(minh[0]["address"], "Nha Trang\nQuy Nhơn")
+        self.assertEqual(minh[0]["address"], f"{LONG_NT}\n{LONG_QN}")
 
     def test_ingest_same_batch_84_and_0_merge(self) -> None:
         now = "2026-01-01T00:00:00+00:00"
@@ -1242,10 +1374,10 @@ class IngestSqlTests(unittest.TestCase):
             self.db_path,
             iter(
                 [
-                    {"name": "Lan", "phone": "0901222333", "address": "Huế"},
-                    {"name": "Tên khác", "phone": "84901222333", "address": "Đà Nẵng"},
-                    {"name": "Minh", "phone": "0352548360", "address": "Nha Trang"},
-                    {"name": "", "phone": "00352548360", "address": "Quy Nhơn"},
+                    {"name": "Lan", "phone": "0901222333", "address": LONG_HUE},
+                    {"name": "Tên khác", "phone": "84901222333", "address": LONG_DN},
+                    {"name": "Minh", "phone": "0352548360", "address": LONG_NT},
+                    {"name": "", "phone": "00352548360", "address": LONG_QN},
                     {"name": "UID", "phone": "1000123456789", "address": "Bỏ"},
                 ]
             ),
@@ -1262,10 +1394,10 @@ class IngestSqlTests(unittest.TestCase):
             conn.close()
         self.assertEqual(len(lan), 1)
         self.assertEqual(lan[0]["name"], "Lan\nTên khác")
-        self.assertEqual(lan[0]["address"], "Huế\nĐà Nẵng")
+        self.assertEqual(lan[0]["address"], f"{LONG_HUE}\n{LONG_DN}")
         self.assertEqual(len(minh), 1)
         self.assertEqual(minh[0]["name"], "Minh")
-        self.assertEqual(minh[0]["address"], "Nha Trang\nQuy Nhơn")
+        self.assertEqual(minh[0]["address"], f"{LONG_NT}\n{LONG_QN}")
 
 
 class PhoneOnRowTests(unittest.TestCase):
@@ -1286,8 +1418,8 @@ class PhoneOnRowTests(unittest.TestCase):
     def test_rows_from_table_takes_phone_on_row_when_mapped_column_is_wrong(self) -> None:
         rows = [
             ["Tên", "Giới tính", "UID Facebook", "Ghi chú", "Địa chỉ"],
-            ["Lan", "Nữ", "100007416894544", "0901111111", "Huế"],
-            ["Minh", "Nam", "100007416894545", "0902222222", "Đà Nẵng"],
+            ["Lan", "Nữ", "100007416894544", "0901111111", LONG_HUE],
+            ["Minh", "Nam", "100007416894545", "0902222222", LONG_DN],
             ["Không số", "Nữ", "100007416894546", "", "Nha Trang"],
         ]
         mapping = {
@@ -1300,7 +1432,7 @@ class PhoneOnRowTests(unittest.TestCase):
         self.assertEqual([row["phone"] for row in extracted], ["0901111111", "0902222222"])
         self.assertEqual(extracted[0]["name"], "Lan")
         self.assertEqual(extracted[0]["facebookUid"], "100007416894544")
-        self.assertEqual(extracted[0]["address"], "Huế")
+        self.assertEqual(extracted[0]["address"], LONG_HUE)
 
     def test_phone_from_cell_reads_text_and_skips_facebook(self) -> None:
         self.assertEqual(phone_from_cell("LH: 0901.222.333 gặp chiều"), "0901222333")

@@ -19,6 +19,8 @@ os.environ["CONTROL_PROXIES_FILE"] = str(Path(_TMP) / "proxies.txt")
 os.environ["CONTROL_PACKAGES_DIR"] = str(Path(_TMP) / "packages")
 os.environ["CONTROL_PROXY_CHECK_SEC"] = "86400"
 os.environ["KHACH_AUTO_RESUME"] = "0"
+os.environ["KHACH_CLEAN_VN_PHONES"] = "0"
+os.environ["KHACH_CLEAN_SHORT_ADDRESSES"] = "0"
 Path(_TMP, "proxies.txt").write_text("", encoding="utf-8")
 
 from fastapi.testclient import TestClient  # noqa: E402

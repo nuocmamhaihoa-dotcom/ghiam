@@ -15,6 +15,7 @@ from urllib.parse import parse_qs, urlparse
 
 from control_plane import db
 from control_plane.vietnam_places import (
+    SHORT_ADDRESS_CHARS,
     address_content_rank,
     address_header_rank,
     address_piece_key,
@@ -575,6 +576,17 @@ def dedupe_exact_address(value: Any) -> str:
     return result
 
 
+def is_long_address(value: Any) -> bool:
+    """Ô địa chỉ chỉ dùng khi còn trên 20 ký tự sau khi gộp khoảng trắng."""
+    return len(collapse(value)) > SHORT_ADDRESS_CHARS
+
+
+def keep_long_address(value: Any) -> str:
+    """Giữ nguyên địa chỉ nếu trên 20 ký tự; ngắn hơn thì để trống, không nạp."""
+    text = str(value or "")
+    return text if is_long_address(text) else ""
+
+
 def clean_address(value: Any) -> str:
     """Một dòng địa chỉ giữ đến 400 ký tự. Nhiều dòng thì tối đa 24 dòng, mỗi dòng 400 ký tự."""
     if not value:
@@ -812,6 +824,8 @@ def _new_id() -> str:
 
 def _as_customer(raw: dict[str, Any], existing: bool) -> dict[str, Any]:
     cleaned = clean_row(raw)
+    if not existing:
+        cleaned["address"] = keep_long_address(cleaned.get("address") or "")
     return {
         "id": str(raw.get("id") or "") or _new_id(),
         "existing": existing,
@@ -867,7 +881,7 @@ def _incoming_address_line(value: str) -> str:
     if not raw_lines:
         return ""
     if len(raw_lines) == 1:
-        return arranged_address(raw_lines[0]) or raw_lines[0]
+        return keep_long_address(arranged_address(raw_lines[0]) or raw_lines[0])
     groups: list[list[str]] = []
     current: list[str] = []
     seen: set[int] = set()
@@ -890,7 +904,7 @@ def _incoming_address_line(value: str) -> str:
             continue
         used.add(key)
         lines.append(arranged)
-    return "\n".join(lines)
+    return keep_long_address("\n".join(lines))
 
 
 def _pick(members: list[dict[str, Any]], field: str) -> str:
@@ -1061,15 +1075,17 @@ def merge_existing_with_incoming(
     Ô trống điền thêm. Thông tin khác thì thêm dòng trong cùng ô. SĐT không đổi.
     """
     cleaned = incoming if incoming_clean else clean_row(incoming)
+    cleaned = dict(cleaned)
+    cleaned["address"] = keep_long_address(cleaned.get("address") or "")
     if len(existing) == 1:
         return _merge_one(existing[0], cleaned, now)
     if not existing:
         created = {"id": _new_id(), "createdAt": now, "updatedAt": now}
         for field in FIELDS:
             created[field] = cleaned.get(field) or ""
-        arranged = _incoming_address_line(created["address"])
-        if arranged:
-            created["address"] = arranged
+        created["address"] = keep_long_address(
+            _incoming_address_line(created["address"]) or created["address"]
+        )
         created["write"] = True
         return created, [], "created"
     incoming_row = _as_customer(cleaned, False)
@@ -2105,6 +2121,8 @@ def clear_admin_or_short_addresses(
 
 _VN_PHONES_READY = "vn_phones_ready"
 _VN_PHONES_ROWID = "vn_phones_rowid"
+_SHORT_ADDRESSES_READY = "short_addresses_ready"
+_SHORT_ADDRESSES_ROWID = "short_addresses_rowid"
 
 
 def clear_non_vn_phones(
@@ -2225,6 +2243,89 @@ def vn_phones_ready(db_path: Any) -> bool:
         conn.close()
 
 
+def clear_short_addresses(
+    db_path: Any,
+    batch: int = 20000,
+    start_rowid: int = 0,
+    pause: float = 0.0,
+    progress: Callable[[dict[str, int]], None] | None = None,
+) -> dict[str, int]:
+    """Xóa nội dung cột địa chỉ khi cả ô còn 20 ký tự trở xuống.
+
+    Không xóa khách. Không đụng tên, số điện thoại, địa chỉ hành chính,
+    hàng mua hay COD. Địa chỉ trên 20 ký tự giữ nguyên.
+    """
+    import time
+
+    conn = db.connect(Path(db_path))
+    seen = 0
+    changed = 0
+    try:
+        conn.execute("PRAGMA busy_timeout=60000;")
+        top = int(conn.execute("SELECT COALESCE(MAX(rowid), 0) FROM customers").fetchone()[0] or 0)
+        start = max(0, int(start_rowid))
+        if start <= 0:
+            row = conn.execute("SELECT value FROM kv_meta WHERE key=?", (_SHORT_ADDRESSES_ROWID,)).fetchone()
+            if row is not None:
+                try:
+                    start = max(0, int(row["value"]))
+                except (TypeError, ValueError):
+                    start = 0
+        size = max(1000, int(batch))
+        while start < top:
+            rows = conn.execute(
+                "SELECT id, address FROM customers WHERE rowid > ? AND rowid <= ? AND address != ''",
+                (start, start + size),
+            ).fetchall()
+            updates: list[tuple[str, str, str]] = []
+            for row in rows:
+                seen += 1
+                current = str(row["address"] or "")
+                if is_long_address(current):
+                    continue
+                updates.append(("", str(row["id"]), current))
+            if updates:
+                before = conn.total_changes
+                conn.executemany(
+                    "UPDATE customers SET address=? WHERE id=? AND address=?",
+                    updates,
+                )
+                changed += conn.total_changes - before
+                db.note_address_rewrites(conn, updates)
+            start += size
+            conn.execute(
+                "INSERT INTO kv_meta(key, value) VALUES(?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (_SHORT_ADDRESSES_ROWID, str(start)),
+            )
+            conn.commit()
+            if progress is not None:
+                progress({"rowid": start, "top": top, "seen": seen, "changed": changed})
+            if pause > 0:
+                time.sleep(pause)
+        conn.execute(
+            "INSERT INTO kv_meta(key, value) VALUES(?, '1') "
+            "ON CONFLICT(key) DO UPDATE SET value='1'",
+            (_SHORT_ADDRESSES_READY,),
+        )
+        conn.execute("DELETE FROM kv_meta WHERE key=?", (_SHORT_ADDRESSES_ROWID,))
+        conn.commit()
+    finally:
+        conn.close()
+    return {"seen": seen, "changed": changed, "cleared": changed}
+
+
+def short_addresses_ready(db_path: Any) -> bool:
+    conn = db.connect(Path(db_path))
+    try:
+        row = conn.execute("SELECT value FROM kv_meta WHERE key=?", (_SHORT_ADDRESSES_READY,)).fetchone()
+        return bool(row) and str(row["value"]) == "1"
+    except Exception:
+        return False
+    finally:
+        conn.close()
+
+
 def _fold_tokens(value: str) -> list[str]:
     folded = fold_vietnamese(" ".join(str(value or "").split()))
     return [token for token in folded.split() if token]
@@ -2264,7 +2365,7 @@ def should_restore_address(current: str, incoming: str) -> bool:
     current_text = str(current or "")
     if not incoming_text.strip() or incoming_text == current_text:
         return False
-    if cell_is_short_admin_only(incoming_text):
+    if not is_long_address(incoming_text) or cell_is_short_admin_only(incoming_text):
         return False
     if not current_text.strip():
         return True
@@ -2272,12 +2373,12 @@ def should_restore_address(current: str, incoming: str) -> bool:
 
 
 def prefer_import_address(old: str, new: str) -> str:
-    """Giữ địa chỉ đầy đủ hơn từ file nạp. Bản ngắn hành chính thì bỏ."""
+    """Giữ địa chỉ đầy đủ hơn từ file nạp. Bản ngắn hành chính hoặc dưới 20 ký tự thì bỏ."""
     if not new or new == old:
         return old
-    if cell_is_short_admin_only(new):
+    if not is_long_address(new) or cell_is_short_admin_only(new):
         return old
-    if not old or cell_is_short_admin_only(old):
+    if not old or not is_long_address(old) or cell_is_short_admin_only(old):
         return new
     if address_is_remainder(old, new):
         return new

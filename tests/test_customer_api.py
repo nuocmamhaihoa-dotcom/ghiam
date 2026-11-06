@@ -19,6 +19,8 @@ os.environ["CONTROL_PROXIES_FILE"] = str(Path(_TMP) / "proxies.txt")
 os.environ["CONTROL_PACKAGES_DIR"] = str(Path(_TMP) / "packages")
 os.environ["CONTROL_PROXY_CHECK_SEC"] = "86400"
 os.environ["KHACH_AUTO_RESUME"] = "0"
+os.environ["KHACH_CLEAN_VN_PHONES"] = "0"
+os.environ["KHACH_CLEAN_SHORT_ADDRESSES"] = "0"
 Path(_TMP, "proxies.txt").write_text("", encoding="utf-8")
 
 from fastapi.testclient import TestClient  # noqa: E402
@@ -28,6 +30,8 @@ from control_plane import db  # noqa: E402
 from control_plane.app import app  # noqa: E402
 from control_plane.excel_import import iter_xlsx_rows, write_xlsx  # noqa: E402
 from control_plane.settings import settings  # noqa: E402
+
+LONG_HUE = "Số 12 đường Nguyễn Huệ, phường Phú Hội"
 
 
 def tearDownModule() -> None:
@@ -163,7 +167,7 @@ class CustomerApiTests(unittest.TestCase):
         name, body = self._xlsx(
             "lan1.xlsx",
             ["Tên khách", "Số điện thoại khách", "Địa chỉ khách"],
-            [["Lan", "0901222333", "Huế"]],
+            [["Lan", "0901222333", LONG_HUE]],
         )
         preview = self.client.post(
             "/v1/customers/preview",
@@ -187,7 +191,7 @@ class CustomerApiTests(unittest.TestCase):
             files=[
                 self._file(
                     "khong-tieu-de.xlsx",
-                    ["Nguyễn Lan", "0901222333", "12 Lê Lợi, Huế"],
+                    ["Nguyễn Lan", "0901222333", "12 Lê Lợi, thành phố Huế, Thừa Thiên Huế"],
                     [],
                 ),
                 self._file(
@@ -204,7 +208,7 @@ class CustomerApiTests(unittest.TestCase):
                         "Tên hàng hóa",
                         "Tiền thu hộ COD",
                     ],
-                    [["1", "VD1", "GHN", "Trần Minh", "0901444555", "12 Lê Lợi", "Hồ Chí Minh", "Quận 1", "Nước mắm", "150000"]],
+                    [["1", "VD1", "GHN", "Trần Minh", "0901444555", "12 Lê Lợi, phường Bến Nghé", "Hồ Chí Minh", "Quận 1", "Nước mắm", "150000"]],
                 ),
             ],
         )
@@ -244,13 +248,13 @@ class CustomerApiTests(unittest.TestCase):
             files=[
                 self._file(
                     "khong-tieu-de.xlsx",
-                    ["ghi chú", "mã", "Nguyễn Lan", "0901222333", "12 Lê Lợi, Huế"],
+                    ["ghi chú", "mã", "Nguyễn Lan", "0901222333", "12 Lê Lợi, thành phố Huế, Thừa Thiên Huế"],
                     [],
                 ),
                 self._file(
                     "delivery_export.xlsx",
                     ["STT", "Mã vận đơn", "Tên người nhận", "SĐT người nhận", "Địa chỉ nhận"],
-                    [["1", "VD1", "Trần Minh", "0901444555", "12 Lê Lợi, Quận 1"]],
+                    [["1", "VD1", "Trần Minh", "0901444555", "12 Lê Lợi, phường Bến Nghé, Quận 1"]],
                 ),
             ],
         )
@@ -466,7 +470,7 @@ class CustomerApiTests(unittest.TestCase):
         name, body = self._xlsx(
             "lan1.xlsx",
             ["Tên khách", "Số điện thoại khách", "Địa chỉ khách"],
-            [["Lan", "0901222333", "Huế"]],
+            [["Lan", "0901222333", LONG_HUE]],
         )
         imported = self.client.post(
             "/v1/customers/import",
@@ -512,7 +516,7 @@ class CustomerApiTests(unittest.TestCase):
         items = listed.json()["items"]
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0]["name"], "Lan")
-        self.assertEqual(items[0]["address"], "Huế")
+        self.assertEqual(items[0]["address"], LONG_HUE)
         self.assertEqual(items[0]["facebookUid"], "10001")
         self.assertEqual(items[0]["tiktokId"], "lan.hue")
 
@@ -831,7 +835,7 @@ class CustomerApiTests(unittest.TestCase):
             "/v1/customers/import",
             headers=self.headers,
             data={"mapping": mapping},
-            files=[self._file("lan.xlsx", ["Tên khách", "SĐT", "Địa chỉ"], [["Lan", "0901222333", "Huế"]])],
+            files=[self._file("lan.xlsx", ["Tên khách", "SĐT", "Địa chỉ"], [["Lan", "0901222333", LONG_HUE]])],
         )
         self.assertEqual(first.status_code, 200, first.text)
         self.assertEqual(first.json()["stats"]["created"], 1)
@@ -839,19 +843,19 @@ class CustomerApiTests(unittest.TestCase):
             "/v1/customers/import",
             headers=self.headers,
             data={"mapping": mapping},
-            files=[self._file("lan.xlsx", ["Tên khách", "SĐT", "Địa chỉ"], [["Lan", "0901222333", "Huế"]])],
+            files=[self._file("lan.xlsx", ["Tên khách", "SĐT", "Địa chỉ"], [["Lan", "0901222333", LONG_HUE]])],
         )
         self.assertEqual(again.status_code, 200, again.text)
         self.assertEqual(again.json()["stats"]["unchanged"], 1)
         self.assertEqual(again.json()["stats"]["created"], 0)
         listed = self.client.get("/v1/customers", headers=self.headers)
         self.assertEqual(listed.json()["total"], 1)
-        self.assertEqual(listed.json()["items"][0]["address"], "Huế")
+        self.assertEqual(listed.json()["items"][0]["address"], LONG_HUE)
         history = self.client.get("/v1/customers/sessions", headers=self.headers)
         self.assertEqual(history.status_code, 200, history.text)
         self.assertEqual(history.json()["total"], 1)
         self.assertEqual(history.json()["uniquePhones"], 1)
-        self.assertEqual(history.json()["completeContacts"], 0)
+        self.assertEqual(history.json()["completeContacts"], 1)
         self.assertTrue(history.json()["statsReady"])
         self.assertEqual(history.json()["rowSum"], 2)
         self.assertEqual(history.json()["repeatRows"], 1)
@@ -1075,7 +1079,7 @@ class CustomerApiTests(unittest.TestCase):
     def test_resume_continues_from_the_unfinished_file(self) -> None:
         denied = self.client.get("/v1/customers/imports/paused")
         self.assertEqual(denied.status_code, 401)
-        lan = write_xlsx(["Tên khách", "SĐT", "Địa chỉ"], [["Lan", "0901222333", "Huế"]])
+        lan = write_xlsx(["Tên khách", "SĐT", "Địa chỉ"], [["Lan", "0901222333", LONG_HUE]])
         minh = write_xlsx(["Tên khách", "SĐT", "Địa chỉ"], [["Minh", "0901888999", "Đà Nẵng"]])
         self._upload("resume-lan.xlsx", lan, modified=501)
         self._upload("resume-minh.xlsx", minh, modified=502)
@@ -1710,7 +1714,7 @@ class CustomerApiTests(unittest.TestCase):
                 self._file(
                     "nhan-thieu.xlsx",
                     ["Tên người nhận", "SĐT người nhận", "Địa chỉ người nhận"],
-                    [["Nguyễn Lan", "0901222333", "Huế"]],
+                    [["Nguyễn Lan", "0901222333", LONG_HUE]],
                 )
             ],
         )
@@ -1718,7 +1722,7 @@ class CustomerApiTests(unittest.TestCase):
         item = self.client.get("/v1/customers", headers=self.headers).json()["items"][0]
         self.assertEqual(item["name"], "Nguyễn Lan")
         self.assertEqual(item["phone"], "0901222333")
-        self.assertEqual(item["address"], "Huế")
+        self.assertEqual(item["address"], LONG_HUE)
 
     def test_import_second_file_with_different_layout_still_keeps_customers(self) -> None:
         imported = self.client.post(
@@ -1737,7 +1741,7 @@ class CustomerApiTests(unittest.TestCase):
                 self._file(
                     "file-a.xlsx",
                     ["Tên khách", "SĐT", "Địa chỉ"],
-                    [["Lan", "0901222333", "Huế"]],
+                    [["Lan", "0901222333", LONG_HUE]],
                 ),
                 self._file(
                     "file-b.xlsx",
@@ -1777,7 +1781,7 @@ class CustomerApiTests(unittest.TestCase):
                 self._file(
                     "nhan.xlsx",
                     ["Tên người nhận", "SĐT người nhận", "Địa chỉ người nhận"],
-                    [["Nguyễn Lan", "0901222333", "Huế"]],
+                    [["Nguyễn Lan", "0901222333", LONG_HUE]],
                 )
             ],
         )
@@ -1785,7 +1789,7 @@ class CustomerApiTests(unittest.TestCase):
         item = self.client.get("/v1/customers", headers=self.headers).json()["items"][0]
         self.assertEqual(item["name"], "Nguyễn Lan")
         self.assertEqual(item["phone"], "0901222333")
-        self.assertEqual(item["address"], "Huế")
+        self.assertEqual(item["address"], LONG_HUE)
 
     def test_later_import_clears_old_empty_file(self) -> None:
         db.record_action(
@@ -1826,7 +1830,7 @@ class CustomerApiTests(unittest.TestCase):
                 self._file(
                     "delivery_export_1.xlsx",
                     ["Tên người nhận", "SĐT người nhận", "Địa chỉ người nhận"],
-                    [["Nguyễn Lan", "0901222333", "Huế"]],
+                    [["Nguyễn Lan", "0901222333", LONG_HUE]],
                 )
             ],
         )
@@ -1896,7 +1900,7 @@ class CustomerApiTests(unittest.TestCase):
         (folder / "delivery_export_1.xlsx").write_bytes(
             write_xlsx(
                 ["Tên khách", "SĐT", "Địa chỉ"],
-                [["Nguyễn Lan", "0901222333", "Huế"]],
+                [["Nguyễn Lan", "0901222333", LONG_HUE]],
             )
         )
         started = self.client.post("/v1/customers/imports/reread", headers=self.headers, json={})
@@ -2096,7 +2100,7 @@ class CustomerApiTests(unittest.TestCase):
                     }
                 )
             },
-            files=[self._file("cu.xlsx", ["Tên", "SĐT", "Địa chỉ"], [["Lan", "0901111111", "Huế"]])],
+            files=[self._file("cu.xlsx", ["Tên", "SĐT", "Địa chỉ"], [["Lan", "0901111111", LONG_HUE]])],
         )
         self.assertEqual(first.status_code, 200, first.text)
         self.assertEqual(first.json()["stats"]["created"], 1)
@@ -2107,9 +2111,9 @@ class CustomerApiTests(unittest.TestCase):
             "address": {"index": 4, "header": "Địa chỉ"},
         }
         rows = [
-            ["Lan", "Nữ", "100007416894544", "0901111111", "Đà Nẵng"],
-            ["Minh", "Nam", "100007416894545", "0902222222", "Nha Trang"],
-            ["Hoa", "Nữ", "100007416894546", "84903333333", "Quy Nhơn"],
+            ["Lan", "Nữ", "100007416894544", "0901111111", "45 Trần Phú, phường An Hải Tây, Sơn Trà"],
+            ["Minh", "Nam", "100007416894545", "0902222222", "15 Hùng Vương, phường Lộc Thọ, Nha Trang"],
+            ["Hoa", "Nữ", "100007416894546", "84903333333", "9 Quang Trung, phường Lê Lợi, Quy Nhơn"],
             ["Không số", "Nam", "100007416894547", "", "Chỉ địa chỉ"],
         ]
         imported = self.client.post(
@@ -2131,7 +2135,10 @@ class CustomerApiTests(unittest.TestCase):
         items = {item["phone"]: item for item in listed.json()["items"]}
         self.assertEqual(set(items), {"0901111111", "0902222222", "0903333333"})
         self.assertEqual(items["0901111111"]["name"], "Lan")
-        self.assertEqual(items["0901111111"]["address"], "Huế\nĐà Nẵng")
+        self.assertEqual(
+            items["0901111111"]["address"],
+            LONG_HUE + "\n45 Trần Phú, phường An Hải Tây, Sơn Trà",
+        )
         self.assertEqual(items["0902222222"]["name"], "Minh")
         self.assertEqual(items["0903333333"]["name"], "Hoa")
         again = self.client.post(
@@ -2161,24 +2168,24 @@ class CustomerApiTests(unittest.TestCase):
                     "Mot",
                     [
                         ["Tên", "SĐT", "Địa chỉ"],
-                        ["Lan", "0901111111", "Huế"],
+                        ["Lan", "0901111111", LONG_HUE],
                         ["", "", ""],
-                        ["Minh", "LH 0902.222.222", "Đà Nẵng"],
+                        ["Minh", "LH 0902.222.222", "45 Trần Phú, phường An Hải Tây, Sơn Trà"],
                     ],
                 ),
                 (
                     "Hai",
                     [
                         ["Họ tên", "Số điện thoại", "Địa chỉ nhận"],
-                        ["Hoa", "84903333333", "Nha Trang"],
-                        ["An", "0901444444", "Quy Nhơn"],
+                        ["Hoa", "84903333333", "15 Hùng Vương, phường Lộc Thọ, Nha Trang"],
+                        ["An", "0901444444", "9 Quang Trung, phường Lê Lợi, Quy Nhơn"],
                     ],
                 ),
                 (
                     "Ba",
                     [
-                        ["Bình", "0901555555", "Hà Nội"],
-                        ["Lan lại", "0901111111", "Huế 2"],
+                        ["Bình", "0901555555", "88 Lý Thường Kiệt, phường Hàng Trống, Hoàn Kiếm"],
+                        ["Lan lại", "0901111111", "Số 15 đường Nguyễn Huệ, phường Phú Hội"],
                     ],
                 ),
             ]
@@ -2210,7 +2217,10 @@ class CustomerApiTests(unittest.TestCase):
             set(items),
             {"0901111111", "0902222222", "0903333333", "0901444444", "0901555555"},
         )
-        self.assertEqual(items["0901111111"]["address"], "Huế\nHuế 2")
+        self.assertEqual(
+            items["0901111111"]["address"],
+            LONG_HUE + "\nSố 15 đường Nguyễn Huệ, phường Phú Hội",
+        )
         self.assertEqual(items["0901111111"]["name"], "Lan\nLan lại")
         again = self.client.post(
             "/v1/customers/import",
