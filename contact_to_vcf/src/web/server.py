@@ -327,27 +327,50 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
         def _iphone_page(self) -> None:
             books = list_books(app.kho, "all")
             key = quote(self._cookie_token(), safe="")
-            links = []
-            for book in books:
-                links.append(
+            pending = [book for book in books if book.downloaded_at is None]
+            downloaded = [book for book in books if book.downloaded_at is not None]
+
+            def link(book: BookInfo) -> str:
+                return (
                     f'<a class="go" href="/iphone/{book.id}.vcf?key={key}">'
                     f"Tải {book.file_name} ({book.contact_count} số)</a>"
                 )
+
+            sections = [
+                "<h1>Tải trên iPhone</h1>",
+                "<p>Bấm một file. Safari hiện mũi tên tải xuống ở phía trên. Bấm mũi tên đó để lưu tệp vào iPhone.</p>",
+            ]
+            if pending:
+                sections.append("<h2>Chưa tải</h2>")
+                sections.append(
+                    "<p>Danh bạ mới ở đây. File đã đủ có 4.000 số. "
+                    "File cuối cùng vẫn đang nhận số cho đến khi đủ 4.000.</p>"
+                )
+                sections.extend(link(book) for book in pending)
+            if downloaded:
+                sections.append("<h2>Đã tải</h2>")
+                sections.append(
+                    "<p>Các file này giữ đúng số lượng lúc tải. "
+                    "File tải lúc chia 2.000 hoặc 1.000 số không được thêm số nữa.</p>"
+                )
+                sections.extend(link(book) for book in downloaded)
+            if not books:
+                sections.append("<p>Chưa có danh bạ.</p>")
+            sections.append('<p><a href="/">Quay lại</a></p>')
             body = (
                 "<!DOCTYPE html><html lang=\"vi\"><head><meta charset=\"utf-8\">"
                 "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
                 "<title>Tải trên iPhone</title><style>"
                 "body{font-family:system-ui,sans-serif;margin:0;background:#f4f1ea;color:#1c1917}"
                 ".wrap{max-width:520px;margin:0 auto;padding:20px}"
+                "h2{font-size:1.1rem;margin:18px 0 8px}"
                 "a.go{display:flex;align-items:center;justify-content:center;min-height:52px;"
                 "margin:0 0 12px;border-radius:14px;background:#0f766e;color:#fff;"
                 "text-decoration:none;font-weight:650}"
                 "p{color:#78716c;line-height:1.45}"
                 "</style></head><body><div class=\"wrap\">"
-                "<h1>Tải trên iPhone</h1>"
-                "<p>Bấm một file. Safari hiện mũi tên tải xuống ở phía trên. Bấm mũi tên đó để lưu tệp vào iPhone.</p>"
-                + ("".join(links) if links else "<p>Chưa có danh bạ.</p>")
-                + "<p><a href=\"/\">Quay lại</a></p></div></body></html>"
+                + "".join(sections)
+                + "</div></body></html>"
             )
             self._bytes(200, body.encode("utf-8"), "text/html; charset=utf-8")
 
