@@ -10,6 +10,7 @@ from typing import Any, Callable, Iterator
 from control_plane import db
 from control_plane.customers import (
     extract_phone,
+    is_long_address,
     prefer_import_address,
     restore_stored_addresses,
 )
@@ -104,7 +105,7 @@ class ImportAddressStore:
     def _put_row(self, table: str, column: str, key: str, address: str, current: str) -> bool:
         if _STORE_COLUMNS.get(table) != column:
             raise ValueError("bảng khôi phục không hợp lệ")
-        if not key or not address or cell_is_short_admin_only(address):
+        if not key or not address or not is_long_address(address) or cell_is_short_admin_only(address):
             return False
         chosen = prefer_import_address(current, address)
         if not chosen or chosen == current:

@@ -45,6 +45,7 @@ from control_plane.customers import (
     _incoming_address_line,
     compose_address,
     join_address_lines,
+    keep_long_address,
     phones_in_text,
 )
 from control_plane.settings import settings
@@ -1177,7 +1178,7 @@ def _mapped_row(
             if len(pieces) <= 1:
                 raw[field] = _incoming_address_line(pieces[0][2] if pieces else "")
             else:
-                raw[field] = compose_address(pieces)
+                raw[field] = keep_long_address(compose_address(pieces))
             continue
         if field in LINE_FIELDS:
             parts = [row[index] for index in lines[field] if index < size and row[index]]

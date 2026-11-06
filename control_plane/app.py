@@ -120,6 +120,18 @@ def _clean_non_vn_phones() -> None:
         return
 
 
+def _clean_short_addresses() -> None:
+    """Quét kho một lần: bỏ địa chỉ 20 ký tự trở xuống khỏi cột địa chỉ."""
+    try:
+        from control_plane.customers import clear_short_addresses, short_addresses_ready
+
+        if short_addresses_ready(settings.db_path):
+            return
+        clear_short_addresses(settings.db_path, pause=0.02)
+    except Exception:
+        return
+
+
 def _remember_hub(kind: str, summary: str, detail: str | None = None, actor: str = "me") -> None:
     """Persist an operator action. A journal failure must not break the action itself."""
     try:
@@ -157,6 +169,8 @@ async def _startup() -> None:
         threading.Thread(target=continue_paused_imports, name="khach-auto-resume", daemon=True).start()
     if os.environ.get("KHACH_CLEAN_VN_PHONES", "1") != "0":
         threading.Thread(target=_clean_non_vn_phones, name="khach-vn-phones", daemon=True).start()
+    if os.environ.get("KHACH_CLEAN_SHORT_ADDRESSES", "1") != "0":
+        threading.Thread(target=_clean_short_addresses, name="khach-short-addr", daemon=True).start()
 
 
 def _auth(authorization: str | None) -> None:
