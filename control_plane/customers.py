@@ -581,6 +581,12 @@ def is_long_address(value: Any) -> bool:
     return len(collapse(value)) > SHORT_ADDRESS_CHARS
 
 
+def address_length_bound(value: Any) -> int:
+    """Chặn trên độ dài sau khi xếp: mỗi khoảng trắng thêm tối đa một dấu phẩy."""
+    collapsed = collapse(value)
+    return len(collapsed) + collapsed.count(" ")
+
+
 def keep_long_address(value: Any) -> str:
     """Giữ nguyên địa chỉ nếu trên 20 ký tự; ngắn hơn thì để trống, không nạp."""
     text = str(value or "")
@@ -876,6 +882,8 @@ def _line_ranks(line: str) -> set[int]:
 def _incoming_address_line(value: str) -> str:
     """Xếp từng địa chỉ. Mảnh của một địa chỉ gộp lại. Hai địa chỉ khác thì giữ hai dòng."""
     text = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
+    if address_length_bound(text) <= SHORT_ADDRESS_CHARS:
+        return ""
     raw_lines = [" ".join(raw.split()) for raw in text.split("\n")]
     raw_lines = [line for line in raw_lines if line]
     if not raw_lines:
@@ -1032,6 +1040,7 @@ def _merge_one(
     current: dict[str, Any],
     incoming: dict[str, str],
     now: str,
+    address_ready: bool = False,
 ) -> tuple[dict[str, Any], list[str], str]:
     """Một khách sẵn có + một dòng đã làm sạch.
 
@@ -1050,7 +1059,7 @@ def _merge_one(
         if field == "phone":
             merged[field] = value or new
             continue
-        if field == "address":
+        if field == "address" and new and not address_ready:
             new = _incoming_address_line(new)
         merged_value = append_distinct_lines(value, new)
         if merged_value != value:
@@ -1077,15 +1086,17 @@ def merge_existing_with_incoming(
     cleaned = incoming if incoming_clean else clean_row(incoming)
     cleaned = dict(cleaned)
     cleaned["address"] = keep_long_address(cleaned.get("address") or "")
+    address_ready = bool(incoming_clean)
     if len(existing) == 1:
-        return _merge_one(existing[0], cleaned, now)
+        return _merge_one(existing[0], cleaned, now, address_ready=address_ready)
     if not existing:
         created = {"id": _new_id(), "createdAt": now, "updatedAt": now}
         for field in FIELDS:
             created[field] = cleaned.get(field) or ""
-        created["address"] = keep_long_address(
-            _incoming_address_line(created["address"]) or created["address"]
-        )
+        if not address_ready:
+            created["address"] = keep_long_address(
+                _incoming_address_line(created["address"]) or created["address"]
+            )
         created["write"] = True
         return created, [], "created"
     incoming_row = _as_customer(cleaned, False)
@@ -2253,56 +2264,47 @@ def clear_short_addresses(
     """Xóa nội dung cột địa chỉ khi cả ô còn 20 ký tự trở xuống.
 
     Không xóa khách. Không đụng tên, số điện thoại, địa chỉ hành chính,
-    hàng mua hay COD. Địa chỉ trên 20 ký tự giữ nguyên.
+    hàng mua hay COD. Địa chỉ trên 20 ký tự giữ nguyên. Ô ngắn không tính
+    vào khách đủ liên hệ, nên không đếm lại cả kho.
     """
-    import time
-
+    del batch, start_rowid, pause
     conn = db.connect(Path(db_path))
     seen = 0
     changed = 0
     try:
         conn.execute("PRAGMA busy_timeout=60000;")
-        top = int(conn.execute("SELECT COALESCE(MAX(rowid), 0) FROM customers").fetchone()[0] or 0)
-        start = max(0, int(start_rowid))
-        if start <= 0:
-            row = conn.execute("SELECT value FROM kv_meta WHERE key=?", (_SHORT_ADDRESSES_ROWID,)).fetchone()
-            if row is not None:
-                try:
-                    start = max(0, int(row["value"]))
-                except (TypeError, ValueError):
-                    start = 0
-        size = max(1000, int(batch))
-        while start < top:
-            rows = conn.execute(
-                "SELECT id, address FROM customers WHERE rowid > ? AND rowid <= ? AND address != ''",
-                (start, start + size),
-            ).fetchall()
-            updates: list[tuple[str, str, str]] = []
-            for row in rows:
-                seen += 1
-                current = str(row["address"] or "")
-                if is_long_address(current):
-                    continue
-                updates.append(("", str(row["id"]), current))
-            if updates:
-                before = conn.total_changes
-                conn.executemany(
-                    "UPDATE customers SET address=? WHERE id=? AND address=?",
-                    updates,
-                )
-                changed += conn.total_changes - before
-                db.note_address_rewrites(conn, updates)
-            start += size
-            conn.execute(
-                "INSERT INTO kv_meta(key, value) VALUES(?, ?) "
-                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                (_SHORT_ADDRESSES_ROWID, str(start)),
+        before = conn.total_changes
+        conn.execute(
+            "UPDATE customers SET address='' WHERE address != '' AND length(address) <= ?",
+            (SHORT_ADDRESS_CHARS,),
+        )
+        changed += conn.total_changes - before
+        conn.commit()
+        rows = conn.execute(
+            """
+            SELECT id, address FROM customers
+            WHERE address != ''
+              AND length(address) > ?
+              AND length(
+                replace(replace(replace(replace(address, char(10), ''), char(13), ''), char(9), ''), ' ', '')
+              ) <= ?
+            """,
+            (SHORT_ADDRESS_CHARS, SHORT_ADDRESS_CHARS),
+        ).fetchall()
+        updates: list[tuple[str, str, str]] = []
+        for row in rows:
+            seen += 1
+            current = str(row["address"] or "")
+            if is_long_address(current):
+                continue
+            updates.append(("", str(row["id"]), current))
+        if updates:
+            before = conn.total_changes
+            conn.executemany(
+                "UPDATE customers SET address=? WHERE id=? AND address=?",
+                updates,
             )
-            conn.commit()
-            if progress is not None:
-                progress({"rowid": start, "top": top, "seen": seen, "changed": changed})
-            if pause > 0:
-                time.sleep(pause)
+            changed += conn.total_changes - before
         conn.execute(
             "INSERT INTO kv_meta(key, value) VALUES(?, '1') "
             "ON CONFLICT(key) DO UPDATE SET value='1'",
@@ -2310,6 +2312,8 @@ def clear_short_addresses(
         )
         conn.execute("DELETE FROM kv_meta WHERE key=?", (_SHORT_ADDRESSES_ROWID,))
         conn.commit()
+        if progress is not None:
+            progress({"seen": seen, "changed": changed})
     finally:
         conn.close()
     return {"seen": seen, "changed": changed, "cleared": changed}

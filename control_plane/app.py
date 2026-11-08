@@ -127,7 +127,7 @@ def _clean_short_addresses() -> None:
 
         if short_addresses_ready(settings.db_path):
             return
-        clear_short_addresses(settings.db_path, pause=0.02)
+        clear_short_addresses(settings.db_path)
     except Exception:
         return
 

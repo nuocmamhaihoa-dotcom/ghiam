@@ -289,6 +289,14 @@ class CustomerCleanTests(unittest.TestCase):
                         "updatedAt": now,
                     },
                     {
+                        "id": "cach",
+                        "name": "Cách",
+                        "phone": "0901666777",
+                        "address": "12345678901234567890   ",
+                        "createdAt": now,
+                        "updatedAt": now,
+                    },
+                    {
                         "id": "dai",
                         "name": "Minh",
                         "phone": "0901444555",
@@ -300,7 +308,7 @@ class CustomerCleanTests(unittest.TestCase):
                 [],
             )
             stats = clear_short_addresses(path, batch=10)
-            self.assertEqual(stats["cleared"], 2)
+            self.assertEqual(stats["cleared"], 3)
             self.assertTrue(short_addresses_ready(path))
             again = clear_short_addresses(path, batch=10)
             self.assertEqual(again["changed"], 0)
@@ -316,6 +324,7 @@ class CustomerCleanTests(unittest.TestCase):
             self.assertEqual(rows["ngan"][2], "Lan")
             self.assertEqual(rows["ngan"][3], "0901222333")
             self.assertEqual(rows["hai-muoi"][0], "")
+            self.assertEqual(rows["cach"][0], "")
             self.assertEqual(rows["dai"][0], long_addr)
 
 
@@ -2283,6 +2292,29 @@ class WarehouseContactStatsTests(unittest.TestCase):
         self.assertTrue(stats["known"])
         self.assertEqual(exact["completeContacts"], 2)
         self.assertEqual(exact["uniquePhones"], 5)
+
+    def test_large_import_keeps_stats_without_rereading_every_row(self) -> None:
+        now = "2026-01-01T00:00:00+00:00"
+        long_addr = "Số 12 đường Nguyễn Huệ, phường Phú Hội"
+        incoming = (
+            {
+                "name": f"K{index}",
+                "phone": f"0907{index:06d}",
+                "address": long_addr if index % 2 == 0 else "Huế",
+            }
+            for index in range(2500)
+        )
+        stats, _preview = ingest_customers(self.db_path, incoming, now, flush_every=500)
+        self.assertEqual(stats["created"], 2500)
+        page = db.page_warehouse_stats(self.db_path)
+        exact = db.warehouse_stats(self.db_path)
+        self.assertEqual(page["total"], 2500)
+        self.assertEqual(page["uniquePhones"], exact["uniquePhones"])
+        self.assertEqual(page["emptyPhone"], exact["emptyPhone"])
+        self.assertEqual(page["completeContacts"], exact["completeContacts"])
+        self.assertEqual(exact["completeContacts"], 1250)
+        self.assertEqual(exact["uniquePhones"], 2500)
+        self.assertTrue(page["known"])
 
     def test_duplicate_phone_counts_complete_contact_once(self) -> None:
         long_addr = "12 Nguyễn Huệ, Quận 1, Thành phố Hồ Chí Minh"

@@ -43,17 +43,22 @@ from control_plane.customers import (
     is_facebook_id_digits,
     is_vn_phone,
     _incoming_address_line,
+    address_length_bound,
     compose_address,
     join_address_lines,
-    keep_long_address,
     phones_in_text,
 )
 from control_plane.settings import settings
-from control_plane.vietnam_places import address_content_rank, address_header_rank, fold_vietnamese
+from control_plane.vietnam_places import (
+    SHORT_ADDRESS_CHARS,
+    address_content_rank,
+    address_header_rank,
+    fold_vietnamese,
+)
 from control_plane.xlsx_fast import LazySharedStrings, count_value_rows, finish_cell, iter_sheet_rows
 
 TableSource = bytes | bytearray | os.PathLike[str] | str
-IMPORT_BATCH = 2000
+IMPORT_BATCH = 4000
 SHARED_SPILL = 150_000
 SAMPLE_ROWS = 8
 DETECT_ROWS = 200
@@ -1178,7 +1183,12 @@ def _mapped_row(
             if len(pieces) <= 1:
                 raw[field] = _incoming_address_line(pieces[0][2] if pieces else "")
             else:
-                raw[field] = keep_long_address(compose_address(pieces))
+                blob = "\n".join(piece[2] for piece in pieces)
+                if address_length_bound(blob) <= SHORT_ADDRESS_CHARS:
+                    raw[field] = ""
+                else:
+                    composed = compose_address(pieces)
+                    raw[field] = _incoming_address_line(composed) if composed else ""
             continue
         if field in LINE_FIELDS:
             parts = [row[index] for index in lines[field] if index < size and row[index]]
