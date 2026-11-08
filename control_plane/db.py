@@ -53,9 +53,9 @@ def connect(db_path: Path) -> sqlite3.Connection:
 
 
 def apply_heavy_pragmas(conn: sqlite3.Connection) -> None:
-    """Nạp hàng loạt trên VPS ~2GB. Cache và mmap lớn làm tiến trình bị giết giữa chừng."""
+    """Nạp hàng loạt trên VPS ~2GB. Không mmap cả file lớn; cache 64MB vừa đủ cho chỉ mục SĐT."""
     conn.execute("PRAGMA temp_store=FILE;")
-    conn.execute("PRAGMA cache_size=-16384;")
+    conn.execute("PRAGMA cache_size=-65536;")
     conn.execute("PRAGMA mmap_size=0;")
     conn.execute("PRAGMA wal_autocheckpoint=1000;")
     conn.execute("PRAGMA busy_timeout=60000;")
@@ -1433,6 +1433,7 @@ _CUSTOMERS_TOTAL_KEY = "customers_total"
 _WAREHOUSE_STATS_KEY = "warehouse_stats_v1"
 _WAREHOUSE_STATS_GEN_KEY = "warehouse_stats_gen"
 _HUGE_DB_BYTES = 500_000_000
+_EXACT_STATS_LIMIT = 2_000
 COMPLETE_ADDRESS_CHARS = 20
 _WAREHOUSE_STATS_STARTED: set[str] = set()
 _WAREHOUSE_STATS_LOCK = threading.Lock()
@@ -1561,6 +1562,19 @@ def _db_bytes(conn: sqlite3.Connection) -> int:
 
 def _warehouse_conn_is_huge(conn: sqlite3.Connection) -> bool:
     return _db_bytes(conn) >= _HUGE_DB_BYTES
+
+
+def _warehouse_uses_exact_stats(conn: sqlite3.Connection) -> bool:
+    """Kho nhỏ đếm lại cho khớp. Kho đã lớn chỉ cộng trừ, không quét cả bảng sau mỗi lô nạp."""
+    if _warehouse_conn_is_huge(conn):
+        return False
+    stats = _read_warehouse_stats(conn)
+    if stats is None:
+        return True
+    total = _read_customer_total(conn)
+    if total is None:
+        total = int(stats.get("total") or 0)
+    return total <= _EXACT_STATS_LIMIT
 
 
 def _stat_row_from_sql(row: sqlite3.Row) -> dict[str, str]:
@@ -1713,7 +1727,7 @@ def _sync_warehouse_stats_after_write(
     delta: int,
 ) -> None:
     cached = _read_customer_total(conn)
-    if not _warehouse_conn_is_huge(conn):
+    if _warehouse_uses_exact_stats(conn):
         exact = _warehouse_stats_on_conn(conn)
         if cached is None or cached == exact["total"]:
             _write_warehouse_stats(conn, exact)
@@ -1982,7 +1996,7 @@ def empty_phone_count(db_path: Path) -> int:
 
 
 def page_warehouse_stats(db_path: Path) -> dict[str, int | bool]:
-    """Số liệu cho trang kho. Kho lớn dùng cache, không quét lại hàng chục triệu dòng."""
+    """Số liệu cho trang kho. Có cache thì trả ngay. Kho nhỏ chưa có cache thì đếm một lần rồi nhớ."""
     ensure_warehouse_stats(db_path)
     with session(db_path) as conn:
         cached = _read_warehouse_stats(conn)
@@ -1990,33 +2004,33 @@ def page_warehouse_stats(db_path: Path) -> dict[str, int | bool]:
             return {**cached, "known": True}
         total = _read_customer_total(conn)
         huge = _warehouse_conn_is_huge(conn)
-    if total is None and not huge:
-        total = customer_count(db_path)
-        set_customer_total(db_path, total)
+        if not huge:
+            exact = _warehouse_stats_on_conn(conn)
+            if total is None or total == exact["total"]:
+                _write_warehouse_stats(conn, exact)
+                if total is None:
+                    _write_customer_total(conn, exact["total"])
+                return {**exact, "known": True}
+            empty = int(exact["emptyPhone"])
+            shown = max(0, int(total))
+            unique = max(0, shown - empty)
+            return {
+                "total": shown,
+                "uniquePhones": unique,
+                "emptyPhone": empty,
+                "completeContacts": int(exact["completeContacts"]),
+                "duplicatePhones": max(0, shown - unique - empty),
+                "known": True,
+            }
     if total is None:
         return {**_empty_stats(), "known": False}
-    if huge:
-        return {
-            "total": total,
-            "uniquePhones": total,
-            "emptyPhone": 0,
-            "completeContacts": 0,
-            "duplicatePhones": 0,
-            "known": False,
-        }
-    empty = empty_phone_count(db_path)
-    unique = max(0, total - empty)
-    complete = 0
-    with session(db_path) as conn:
-        if not _warehouse_conn_is_huge(conn):
-            complete = _warehouse_stats_on_conn(conn)["completeContacts"]
     return {
         "total": total,
-        "uniquePhones": unique,
-        "emptyPhone": empty,
-        "completeContacts": complete,
-        "duplicatePhones": max(0, total - unique - empty),
-        "known": True,
+        "uniquePhones": total,
+        "emptyPhone": 0,
+        "completeContacts": 0,
+        "duplicatePhones": 0,
+        "known": False,
     }
 
 
