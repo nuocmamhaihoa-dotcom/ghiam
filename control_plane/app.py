@@ -120,6 +120,30 @@ def _clean_non_vn_phones() -> None:
         return
 
 
+def _clean_phones_matching_uids() -> None:
+    """Quét kho một lần: bỏ số điện thoại trùng UID Facebook của cùng khách."""
+    try:
+        from control_plane.customers import clear_phones_matching_uids, phone_same_uid_ready
+
+        if phone_same_uid_ready(settings.db_path):
+            return
+        clear_phones_matching_uids(settings.db_path)
+    except Exception:
+        return
+
+
+def _clean_phone_prefix_len() -> None:
+    """Quét kho một lần: bỏ số dài hơn 12 ký tự và số bắt đầu bằng 1 hoặc 6."""
+    try:
+        from control_plane.customers import clear_disallowed_phones, phone_prefix_len_ready
+
+        if phone_prefix_len_ready(settings.db_path):
+            return
+        clear_disallowed_phones(settings.db_path)
+    except Exception:
+        return
+
+
 def _clean_short_addresses() -> None:
     """Quét kho một lần: bỏ địa chỉ dưới 30 ký tự khỏi cột địa chỉ."""
     try:
@@ -169,6 +193,10 @@ async def _startup() -> None:
         threading.Thread(target=continue_paused_imports, name="khach-auto-resume", daemon=True).start()
     if os.environ.get("KHACH_CLEAN_VN_PHONES", "1") != "0":
         threading.Thread(target=_clean_non_vn_phones, name="khach-vn-phones", daemon=True).start()
+    if os.environ.get("KHACH_CLEAN_PHONE_PREFIX", "1") != "0":
+        threading.Thread(target=_clean_phone_prefix_len, name="khach-phone-prefix", daemon=True).start()
+    if os.environ.get("KHACH_CLEAN_PHONE_UID", "1") != "0":
+        threading.Thread(target=_clean_phones_matching_uids, name="khach-phone-uid", daemon=True).start()
     if os.environ.get("KHACH_CLEAN_SHORT_ADDRESSES", "1") != "0":
         threading.Thread(target=_clean_short_addresses, name="khach-short-addr", daemon=True).start()
 

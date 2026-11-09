@@ -37,6 +37,7 @@ from control_plane.customers import (
     fold_customers,
     ingest_customers,
     iter_lookup_groups,
+    iter_uid_copy_rows,
     lookup_phone_groups,
     phone_groups_from_text,
     public_customer,
@@ -1615,18 +1616,24 @@ def _tsv_field(value: Any) -> str:
 
 
 def _write_lookup_copy(groups: list[list[str]], by: str = "phone") -> Path:
-    """Mỗi dòng danh sách một dòng kết quả. Số không có địa chỉ thì ô địa chỉ là dấu chấm."""
+    """Mỗi dòng danh sách một dòng kết quả. Ô không có số hoặc địa chỉ là dấu chấm."""
     handle = tempfile.NamedTemporaryFile(prefix="tra-cuu-copy-", suffix=".txt", delete=False)
     dest = Path(handle.name)
     handle.close()
-    left = "UID Facebook" if by == "facebookUid" else "Số điện thoại"
     try:
         with dest.open("w", encoding="utf-8", newline="\n") as handle:
-            handle.write(f"{left}\tĐịa chỉ\n")
-            for item in iter_lookup_groups(settings.db_path, groups, by=by):
-                phone = str(item.get("query") or "")
-                address = str(item.get("resultAddress") or ".") or "."
-                handle.write(f"{_tsv_field(phone)}\t{_tsv_field(address)}\n")
+            if by == "facebookUid":
+                handle.write("UID Facebook\tSố điện thoại\tĐịa chỉ\n")
+                for uid, phone, address in iter_uid_copy_rows(settings.db_path, groups):
+                    handle.write(
+                        f"{_tsv_field(uid or '.')}\t{_tsv_field(phone or '.')}\t{_tsv_field(address or '.')}\n"
+                    )
+            else:
+                handle.write("Số điện thoại\tĐịa chỉ\n")
+                for item in iter_lookup_groups(settings.db_path, groups, by=by):
+                    phone = str(item.get("query") or "")
+                    address = str(item.get("resultAddress") or ".") or "."
+                    handle.write(f"{_tsv_field(phone)}\t{_tsv_field(address)}\n")
     except Exception:
         dest.unlink(missing_ok=True)
         raise
