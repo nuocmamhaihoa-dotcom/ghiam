@@ -367,7 +367,7 @@ class CountAndMappingTests(unittest.TestCase):
 
     def test_headerless_columns_all_selectable_and_split_by_role(self) -> None:
         street = [
-            ["1", "GHN", "Nguyễn Thị Nhàn", "0349757089", "12 Lê Lợi, phường Bến Nghé", "Phú Thọ", "ghi chú"],
+            ["1", "GHN", "Nguyễn Thị Nhàn", "0349757089", "12 Lê Lợi, phường Bến Nghé, Quận 1", "Phú Thọ", "ghi chú"],
             ["2", "GHN", "Nguyễn Đức Toàn", "0865792883", "45 Trần Phú, quận Ngô Quyền", "Hải Phòng", "ghi chú"],
             ["3", "GHN", "Lê Thành Danh", "0907321063", "9 Nguyễn Trãi, quận Ninh Kiều", "Cần Thơ", "ghi chú"],
         ]
@@ -404,7 +404,7 @@ class CountAndMappingTests(unittest.TestCase):
                 }
             ),
         )
-        self.assertEqual(incoming[0]["address"], "12 Lê Lợi, phường Bến Nghé")
+        self.assertEqual(incoming[0]["address"], "12 Lê Lợi, phường Bến Nghé, Quận 1")
         self.assertNotIn("Phú Thọ", incoming[0]["address"])
 
     def test_split_address_cells_join_from_detail_to_province(self) -> None:
@@ -508,7 +508,7 @@ class CountAndMappingTests(unittest.TestCase):
             + "".join(
                 f'<row r="{index}"><c r="A{index}"><v>{index - 1}</v></c><c r="B{index}"><v>98{index:07d}</v></c>'
                 f'<c r="C{index}" t="inlineStr"><is><t>Chị Mai {index}</t></is></c>'
-                f'<c r="D{index}" t="inlineStr"><is><t>12 Lê Lợi, Sơn Trà, Đà Nẵng</t></is></c></row>'
+                f'<c r="D{index}" t="inlineStr"><is><t>12 Lê Lợi, phường Bến Nghé, Sơn Trà, Đà Nẵng</t></is></c></row>'
                 for index in range(2, 6)
             )
         )

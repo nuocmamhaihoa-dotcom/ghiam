@@ -121,7 +121,7 @@ def _clean_non_vn_phones() -> None:
 
 
 def _clean_short_addresses() -> None:
-    """Quét kho một lần: bỏ địa chỉ 20 ký tự trở xuống khỏi cột địa chỉ."""
+    """Quét kho một lần: bỏ địa chỉ dưới 30 ký tự khỏi cột địa chỉ."""
     try:
         from control_plane.customers import clear_short_addresses, short_addresses_ready
 

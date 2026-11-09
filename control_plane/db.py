@@ -1434,7 +1434,7 @@ _WAREHOUSE_STATS_KEY = "warehouse_stats_v1"
 _WAREHOUSE_STATS_GEN_KEY = "warehouse_stats_gen"
 _HUGE_DB_BYTES = 500_000_000
 _EXACT_STATS_LIMIT = 2_000
-COMPLETE_ADDRESS_CHARS = 20
+COMPLETE_ADDRESS_CHARS = 30
 _WAREHOUSE_STATS_STARTED: set[str] = set()
 _WAREHOUSE_STATS_LOCK = threading.Lock()
 
@@ -1445,11 +1445,29 @@ def collapse_spaces(value: Any) -> str:
     return " ".join(str(value).split())
 
 
+def recount_complete_contacts(conn: sqlite3.Connection) -> int:
+    """Đếm lại khách đủ liên hệ sau khi xóa địa chỉ ngắn. Không đổi tổng khách."""
+    row = conn.execute(
+        """
+        SELECT COUNT(DISTINCT phone_key) FROM customers
+        WHERE phone_key != '' AND length(address) >= ?
+        """,
+        (COMPLETE_ADDRESS_CHARS,),
+    ).fetchone()
+    count = int(row[0] or 0)
+    stats = _read_warehouse_stats(conn)
+    if stats is not None:
+        stats["completeContacts"] = count
+        _write_warehouse_stats(conn, stats)
+        _bump_stats_generation(conn)
+    return count
+
+
 def has_complete_contact(phone_key_value: str, address: Any) -> bool:
-    """Khách đủ SĐT và ô địa chỉ dài hơn 20 ký tự sau khi gộp khoảng trắng."""
+    """Khách đủ SĐT và ô địa chỉ từ 30 ký tự sau khi gộp khoảng trắng."""
     if not str(phone_key_value or "").strip():
         return False
-    return len(collapse_spaces(address)) > COMPLETE_ADDRESS_CHARS
+    return len(collapse_spaces(address)) >= COMPLETE_ADDRESS_CHARS
 
 
 def _read_int_meta(conn: sqlite3.Connection, key: str) -> int | None:

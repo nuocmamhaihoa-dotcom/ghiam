@@ -15,7 +15,6 @@ from urllib.parse import parse_qs, urlparse
 
 from control_plane import db
 from control_plane.vietnam_places import (
-    SHORT_ADDRESS_CHARS,
     address_content_rank,
     address_header_rank,
     address_piece_key,
@@ -576,9 +575,12 @@ def dedupe_exact_address(value: Any) -> str:
     return result
 
 
+MIN_STORED_ADDRESS_CHARS = 30
+
+
 def is_long_address(value: Any) -> bool:
-    """Ô địa chỉ chỉ dùng khi còn trên 20 ký tự sau khi gộp khoảng trắng."""
-    return len(collapse(value)) > SHORT_ADDRESS_CHARS
+    """Ô địa chỉ chỉ dùng khi còn từ 30 ký tự sau khi gộp khoảng trắng."""
+    return len(collapse(value)) >= MIN_STORED_ADDRESS_CHARS
 
 
 def address_length_bound(value: Any) -> int:
@@ -588,7 +590,7 @@ def address_length_bound(value: Any) -> int:
 
 
 def keep_long_address(value: Any) -> str:
-    """Giữ nguyên địa chỉ nếu trên 20 ký tự; ngắn hơn thì để trống, không nạp."""
+    """Giữ nguyên địa chỉ nếu từ 30 ký tự; dưới 30 thì để trống, không nạp."""
     text = str(value or "")
     return text if is_long_address(text) else ""
 
@@ -882,7 +884,7 @@ def _line_ranks(line: str) -> set[int]:
 def _incoming_address_line(value: str) -> str:
     """Xếp từng địa chỉ. Mảnh của một địa chỉ gộp lại. Hai địa chỉ khác thì giữ hai dòng."""
     text = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
-    if address_length_bound(text) <= SHORT_ADDRESS_CHARS:
+    if address_length_bound(text) < MIN_STORED_ADDRESS_CHARS:
         return ""
     raw_lines = [" ".join(raw.split()) for raw in text.split("\n")]
     raw_lines = [line for line in raw_lines if line]
@@ -2132,7 +2134,7 @@ def clear_admin_or_short_addresses(
 
 _VN_PHONES_READY = "vn_phones_ready"
 _VN_PHONES_ROWID = "vn_phones_rowid"
-_SHORT_ADDRESSES_READY = "short_addresses_ready"
+_SHORT_ADDRESSES_READY = "addresses_min_30_ready"
 _SHORT_ADDRESSES_ROWID = "short_addresses_rowid"
 
 
@@ -2261,11 +2263,11 @@ def clear_short_addresses(
     pause: float = 0.0,
     progress: Callable[[dict[str, int]], None] | None = None,
 ) -> dict[str, int]:
-    """Xóa nội dung cột địa chỉ khi cả ô còn 20 ký tự trở xuống.
+    """Xóa nội dung cột địa chỉ khi cả ô dưới 30 ký tự.
 
     Không xóa khách. Không đụng tên, số điện thoại, địa chỉ hành chính,
-    hàng mua hay COD. Địa chỉ trên 20 ký tự giữ nguyên. Ô ngắn không tính
-    vào khách đủ liên hệ, nên không đếm lại cả kho.
+    hàng mua hay COD. Địa chỉ từ 30 ký tự giữ nguyên. Chỉ số khách đủ liên hệ
+    được ghi lại theo địa chỉ còn lại.
     """
     del batch, start_rowid, pause
     conn = db.connect(Path(db_path))
@@ -2275,8 +2277,8 @@ def clear_short_addresses(
         conn.execute("PRAGMA busy_timeout=60000;")
         before = conn.total_changes
         conn.execute(
-            "UPDATE customers SET address='' WHERE address != '' AND length(address) <= ?",
-            (SHORT_ADDRESS_CHARS,),
+            "UPDATE customers SET address='' WHERE address != '' AND length(address) < ?",
+            (MIN_STORED_ADDRESS_CHARS,),
         )
         changed += conn.total_changes - before
         conn.commit()
@@ -2284,12 +2286,12 @@ def clear_short_addresses(
             """
             SELECT id, address FROM customers
             WHERE address != ''
-              AND length(address) > ?
+              AND length(address) >= ?
               AND length(
                 replace(replace(replace(replace(address, char(10), ''), char(13), ''), char(9), ''), ' ', '')
-              ) <= ?
+              ) < ?
             """,
-            (SHORT_ADDRESS_CHARS, SHORT_ADDRESS_CHARS),
+            (MIN_STORED_ADDRESS_CHARS, MIN_STORED_ADDRESS_CHARS),
         ).fetchall()
         updates: list[tuple[str, str, str]] = []
         for row in rows:
@@ -2305,6 +2307,7 @@ def clear_short_addresses(
                 updates,
             )
             changed += conn.total_changes - before
+        db.recount_complete_contacts(conn)
         conn.execute(
             "INSERT INTO kv_meta(key, value) VALUES(?, '1') "
             "ON CONFLICT(key) DO UPDATE SET value='1'",

@@ -146,7 +146,7 @@ class ColumnAssignTests(unittest.TestCase):
 
         payload = write_xlsx(
             ["Tên khách", "SĐT", "Số nhà", "Phường", "Tỉnh"],
-            [["Nguyễn Lan", "0901222333", "12 Lê Lợi", "Quận 1", "TP.HCM"]],
+            [["Nguyễn Lan", "0901222333", "12 Lê Lợi, phường Bến Nghé", "Quận 1", "TP.HCM"]],
         )
         preview = preview_table("nhieu-dia-chi.xlsx", payload)
         self.assertEqual(preview["suggested"]["name"], 0)
@@ -175,7 +175,7 @@ class ColumnAssignTests(unittest.TestCase):
         )
         incoming, _reports = rows_from_files([("nhieu-dia-chi.xlsx", payload)], mapping)
         self.assertEqual(incoming[0]["name"], "Nguyễn Lan")
-        self.assertEqual(incoming[0]["address"], "12 Lê Lợi, Quận 1, TP.HCM")
+        self.assertEqual(incoming[0]["address"], "12 Lê Lợi, phường Bến Nghé, Quận 1, TP.HCM")
 
     def test_multiple_order_content_columns_join_as_lines(self) -> None:
         from control_plane.excel_import import mapping_from_form, rows_from_files

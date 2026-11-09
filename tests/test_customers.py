@@ -206,8 +206,9 @@ class CustomerCleanTests(unittest.TestCase):
         self.assertEqual(keep_long_address("Huế"), "")
         self.assertEqual(keep_long_address("12 Lê Lợi"), "")
         self.assertEqual(keep_long_address("12345678901234567890"), "")
-        self.assertEqual(keep_long_address("123456789012345678901"), "123456789012345678901")
-        self.assertGreater(len(LONG_HCM), 20)
+        self.assertEqual(keep_long_address("1" * 29), "")
+        self.assertEqual(keep_long_address("1" * 30), "1" * 30)
+        self.assertGreaterEqual(len(LONG_HCM), 30)
         self.assertEqual(keep_long_address(LONG_HCM), LONG_HCM)
         self.assertEqual(clean_address(LONG_HCM), LONG_HCM)
         self.assertTrue(is_long_address(LONG_HCM))
@@ -263,7 +264,7 @@ class CustomerCleanTests(unittest.TestCase):
         self.assertEqual(folded[0]["address"], long_addr)
 
     def test_clear_short_addresses_rewrites_column(self) -> None:
-        long_addr = "12 Nguyễn Huệ, Quận 1, TP.HCM"
+        long_addr = "1" * 30
         with tempfile.TemporaryDirectory(prefix="khach-short-addr-") as folder:
             path = Path(folder) / "server.db"
             db.init_db(path)
@@ -304,11 +305,20 @@ class CustomerCleanTests(unittest.TestCase):
                         "createdAt": now,
                         "updatedAt": now,
                     },
+                    {
+                        "id": "hai-chin",
+                        "name": "An",
+                        "phone": "0901777888",
+                        "address": "1" * 29,
+                        "adminAddress": "Đà Nẵng",
+                        "createdAt": now,
+                        "updatedAt": now,
+                    },
                 ],
                 [],
             )
             stats = clear_short_addresses(path, batch=10)
-            self.assertEqual(stats["cleared"], 3)
+            self.assertEqual(stats["cleared"], 4)
             self.assertTrue(short_addresses_ready(path))
             again = clear_short_addresses(path, batch=10)
             self.assertEqual(again["changed"], 0)
@@ -325,6 +335,8 @@ class CustomerCleanTests(unittest.TestCase):
             self.assertEqual(rows["ngan"][3], "0901222333")
             self.assertEqual(rows["hai-muoi"][0], "")
             self.assertEqual(rows["cach"][0], "")
+            self.assertEqual(rows["hai-chin"][0], "")
+            self.assertEqual(rows["hai-chin"][1], "Đà Nẵng")
             self.assertEqual(rows["dai"][0], long_addr)
 
 
@@ -449,11 +461,11 @@ class CustomerMergeTests(unittest.TestCase):
         self.assertEqual(folded[0]["codAmount"], "230000\n120000")
         parts, part_stats, _removed = fold_customers(
             [],
-            [{"name": "Lan", "phone": "0901555666", "address": "12 Lê Lợi\nQuận 1\nTP.HCM"}],
+            [{"name": "Lan", "phone": "0901555666", "address": "12 Lê Lợi, phường Bến Nghé\nQuận 1\nTP.HCM"}],
             "2026-01-01T00:00:00+00:00",
         )
         self.assertEqual(part_stats["created"], 1)
-        self.assertEqual(parts[0]["address"], "12 Lê Lợi, Quận 1, TP.HCM")
+        self.assertEqual(parts[0]["address"], "12 Lê Lợi, phường Bến Nghé, Quận 1, TP.HCM")
         again, again_stats, _removed = fold_customers(
             folded,
             [{"name": "hoa", "phone": "84901222333", "address": f"{LONG_HCM}\n{LONG_HN}", "codAmount": "120000\n230000"}],
@@ -465,11 +477,11 @@ class CustomerMergeTests(unittest.TestCase):
         self.assertEqual(again[0]["codAmount"], "230000\n120000")
         added, added_stats, _removed = fold_customers(
             again,
-            [{"phone": "0901222333", "address": "12 Lê Lợi\nQuận 1\nTP.HCM"}],
+            [{"phone": "0901222333", "address": "12 Lê Lợi, phường Bến Nghé\nQuận 1\nTP.HCM"}],
             "2026-01-03T00:00:00+00:00",
         )
         self.assertEqual(added_stats["updated"], 1)
-        self.assertEqual(added[0]["address"], f"{LONG_HN}\n{LONG_HCM}\n12 Lê Lợi, Quận 1, TP.HCM")
+        self.assertEqual(added[0]["address"], f"{LONG_HN}\n{LONG_HCM}\n12 Lê Lợi, phường Bến Nghé, Quận 1, TP.HCM")
 
     def test_blank_address_keeps_stored_and_admin_still_appends(self) -> None:
         stored = [
@@ -2105,7 +2117,7 @@ class ShortAdminOnlyAddressTests(unittest.TestCase):
             batch.mkdir(parents=True)
             (batch / "khach.csv").write_text(
                 "Tên,Số điện thoại,Địa chỉ\n"
-                "Lan,0901222333,\"12 Lê Lợi, Phường 1, Hà Nội\"\n"
+                "Lan,0901222333,\"12 Lê Lợi, phường Bến Nghé, Hà Nội\"\n"
                 "Minh,0901444555,Hà Nội\n",
                 encoding="utf-8",
             )
@@ -2116,7 +2128,7 @@ class ShortAdminOnlyAddressTests(unittest.TestCase):
                 self.assertGreaterEqual(stats["phones"], 1)
                 self.assertEqual(
                     store.get(db.phone_key("0901222333")),
-                    "12 Lê Lợi, Phường 1, Hà Nội",
+                    "12 Lê Lợi, phường Bến Nghé, Hà Nội",
                 )
                 self.assertEqual(store.get(db.phone_key("0901444555")), "")
             finally:
@@ -2268,17 +2280,17 @@ class WarehouseContactStatsTests(unittest.TestCase):
             "updatedAt": now,
         }
 
-    def test_complete_contact_needs_phone_and_address_over_20_chars(self) -> None:
-        long_addr = "12 Nguyễn Huệ, Quận 1, TP.HCM"
-        self.assertGreater(len(long_addr), 20)
+    def test_complete_contact_needs_phone_and_address_from_30_chars(self) -> None:
+        long_addr = "12 Nguyễn Huệ, phường Bến Nghé, Quận 1"
+        self.assertGreaterEqual(len(long_addr), 30)
         db.replace_customers(
             self.db_path,
             [
                 self._row("a", "0901111111", long_addr),
                 self._row("b", "0902222222", "Huế"),
                 self._row("c", "", long_addr, "Không số"),
-                self._row("d", "0903333333", "12345678901234567890"),
-                self._row("e", "0904444444", "123456789012345678901"),
+                self._row("d", "0903333333", "1" * 29),
+                self._row("e", "0904444444", "1" * 30),
                 self._row("f", "0905555555", "12" + (" " * 30) + "345"),
             ],
             [],
@@ -2339,7 +2351,7 @@ class WarehouseContactStatsTests(unittest.TestCase):
         self.assertEqual(db.page_warehouse_stats(self.db_path)["completeContacts"], 0)
         restore_stored_addresses(
             self.db_path,
-            {db.phone_key("0901222333"): "12 Nguyễn Huệ, Quận 1, TP.HCM"},
+            {db.phone_key("0901222333"): "12 Nguyễn Huệ, phường Bến Nghé, Quận 1, TP.HCM"},
             batch=10,
         )
         stats = db.page_warehouse_stats(self.db_path)
