@@ -173,6 +173,62 @@ def is_vn_phone(value: str) -> bool:
     return bool(value) and _VN_PHONE.fullmatch(value) is not None
 
 
+_EXACT_10_PHONE = re.compile(r"0[2-9]\d{8}")
+MAX_PHONE_CHARS = 12
+
+
+def _only_digits(value: str) -> str:
+    return "".join(character for character in value if character.isdigit())
+
+
+def _exact_country_phone(digits: str) -> str:
+    """0084, 084 hoặc 84 cộng đúng phần còn lại, không dư chữ số subscriber."""
+    for prefix in ("0084", "084", "84"):
+        if not digits.startswith(prefix):
+            continue
+        rest = digits[len(prefix) :]
+        if not rest or rest[0] in "16":
+            return ""
+        phone = rest if rest.startswith("0") else "0" + rest
+        if len(phone) == 10 and _EXACT_10_PHONE.fullmatch(phone):
+            return phone
+        if is_vn_phone(phone) and phone.startswith("0") and len(phone) <= MAX_PHONE_CHARS:
+            return phone
+        return ""
+    return ""
+
+
+def keep_stored_phone(value: str) -> str:
+    """Giữ số bắt đầu bằng 0 hoặc 84, không quá 12 chữ số.
+
+    Số đúng 10 ký tự bắt đầu bằng 0 được giữ nguyên, không cắt và không xóa.
+    Dãy bắt đầu bằng 1 hoặc 6 bị bỏ. Dãy dài hơn 12 chữ số chỉ còn lại khi
+    đó đúng là mã 84 bọc một số 10 ký tự, không phải một dãy dài bị cắt cụt.
+    """
+    digits = value if value.isdigit() else _only_digits(value)
+    if not digits or digits[0] in "16":
+        return ""
+    if len(digits) == 10 and digits.startswith("0") and _EXACT_10_PHONE.fullmatch(digits):
+        return digits
+    if len(digits) > MAX_PHONE_CHARS:
+        return _exact_country_phone(digits)
+    if digits.startswith("84"):
+        return _exact_country_phone(digits)
+    if not digits.startswith("0"):
+        phone = clean_phone(digits)
+        if (
+            len(phone) == 10
+            and phone.startswith("0")
+            and _EXACT_10_PHONE.fullmatch(phone)
+            and digits == phone[1:]
+        ):
+            return phone
+        return ""
+    if is_vn_phone(digits) and len(digits) <= MAX_PHONE_CHARS:
+        return digits
+    return ""
+
+
 def _national_len(rest: str) -> int | None:
     head = rest[:1]
     if head in ("3", "4", "5", "6", "7", "8", "9"):
@@ -264,10 +320,11 @@ def extract_phone(value: Any) -> str:
 
 
 def keep_vn_phones(value: Any) -> str:
-    """Giữ mỗi số điện thoại Việt Nam trong cột SĐT; bỏ UID, số nước ngoài, số ngắn.
+    """Giữ số bắt đầu bằng 0 hoặc 84, dài không quá 12 ký tự.
 
-    Số Việt Nam chuẩn 0xx: di động thường 10 số, cố định / đầu 01x cũ 11 số.
-    Một ô nhiều dòng thì mỗi dòng còn lại một hoặc nhiều số Việt Nam.
+    Số đúng 10 ký tự bắt đầu bằng 0 giữ nguyên. Dãy bắt đầu bằng 1 hoặc 6,
+    và dãy dài hơn 12 chữ số, không được nạp. Một ô nhiều dòng thì mỗi dòng
+    còn lại một số hợp lệ.
     """
     text = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
     if not text.strip():
@@ -276,10 +333,11 @@ def keep_vn_phones(value: Any) -> str:
     seen: set[str] = set()
 
     def add(phone: str) -> None:
-        if not is_vn_phone(phone) or phone in seen:
+        kept_phone = keep_stored_phone(phone)
+        if not kept_phone or kept_phone in seen:
             return
-        seen.add(phone)
-        kept.append(phone)
+        seen.add(kept_phone)
+        kept.append(kept_phone)
 
     for raw in text.split("\n"):
         stripped = raw.strip()
@@ -2134,6 +2192,10 @@ def clear_admin_or_short_addresses(
 
 _VN_PHONES_READY = "vn_phones_ready"
 _VN_PHONES_ROWID = "vn_phones_rowid"
+_PHONE_PREFIX_READY = "phone_prefix_len_ready"
+_KEPT_PHONE_SQL = (
+    "phone GLOB '0[2-9]????????' OR phone GLOB '0[12]?????????'"
+)
 _SHORT_ADDRESSES_READY = "addresses_min_30_ready"
 _SHORT_ADDRESSES_ROWID = "short_addresses_rowid"
 
@@ -2254,6 +2316,82 @@ def vn_phones_ready(db_path: Any) -> bool:
         return False
     finally:
         conn.close()
+
+
+def phone_prefix_len_ready(db_path: Any) -> bool:
+    conn = db.connect(Path(db_path))
+    try:
+        row = conn.execute("SELECT value FROM kv_meta WHERE key=?", (_PHONE_PREFIX_READY,)).fetchone()
+        return bool(row) and str(row["value"]) == "1"
+    except Exception:
+        return False
+    finally:
+        conn.close()
+
+
+def clear_disallowed_phones(db_path: Any) -> dict[str, int]:
+    """Xóa số dài hơn 12 ký tự và số bắt đầu bằng 1 hoặc 6.
+
+    Không xóa khách. Số đúng 10 ký tự bắt đầu bằng 0, và số 11 ký tự đầu 0,
+    được giữ nguyên. Số 84 hợp lệ được đổi về dạng 10 ký tự đầu 0.
+    """
+    conn = db.connect(Path(db_path))
+    seen = 0
+    changed = 0
+    cleared = 0
+    trimmed = 0
+    try:
+        conn.execute("PRAGMA busy_timeout=60000;")
+        rows = conn.execute(
+            "SELECT id, phone, phone_key, address FROM customers "
+            f"WHERE phone != '' AND NOT ({_KEPT_PHONE_SQL})"
+        ).fetchall()
+        updates: list[tuple[str, str, str, str]] = []
+        old_rows: dict[str, dict[str, str]] = {}
+        new_rows: dict[str, dict[str, str]] = {}
+        for row in rows:
+            seen += 1
+            current = str(row["phone"] or "")
+            kept = keep_vn_phones(current)
+            key = db.phone_key(kept) if kept else ""
+            old_key = str(row["phone_key"] or "")
+            if kept == current and key == old_key:
+                continue
+            customer_id = str(row["id"])
+            updates.append((kept, key, customer_id, current))
+            old_rows[customer_id] = {
+                "id": customer_id,
+                "phone": current,
+                "phone_key": old_key or db.phone_key(current),
+                "address": str(row["address"] or ""),
+            }
+            new_rows[customer_id] = {
+                "id": customer_id,
+                "phone": kept,
+                "phone_key": key,
+                "address": str(row["address"] or ""),
+            }
+            if kept:
+                trimmed += 1
+            else:
+                cleared += 1
+        if updates:
+            before = conn.total_changes
+            conn.executemany(
+                "UPDATE customers SET phone=?, phone_key=? WHERE id=? AND phone=?",
+                updates,
+            )
+            changed += conn.total_changes - before
+            db.note_phone_rewrites(conn, old_rows, new_rows)
+        conn.execute(
+            "INSERT INTO kv_meta(key, value) VALUES(?, '1') "
+            "ON CONFLICT(key) DO UPDATE SET value='1'",
+            (_PHONE_PREFIX_READY,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return {"seen": seen, "changed": changed, "cleared": cleared, "trimmed": trimmed}
 
 
 def clear_short_addresses(

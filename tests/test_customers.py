@@ -20,6 +20,7 @@ from control_plane.customers import (
     facebook_uids_in_text,
     has_phone,
     is_facebook_id_digits,
+    keep_stored_phone,
     keep_vn_phones,
     keep_long_address,
     is_long_address,
@@ -39,6 +40,7 @@ from control_plane.customers import (
     repair_stored_customers,
     clean_address,
     clear_province_only_addresses,
+    clear_disallowed_phones,
     clear_non_vn_phones,
     clear_short_addresses,
     dedupe_exact_address,
@@ -52,6 +54,7 @@ from control_plane.customers import (
     should_restore_address,
     strip_admin_or_short_address,
     strip_province_only_address,
+    phone_prefix_len_ready,
     vn_phones_ready,
     short_addresses_ready,
 )
@@ -134,6 +137,14 @@ class CustomerCleanTests(unittest.TestCase):
             "0901222333\n0912345678",
         )
         self.assertEqual(keep_vn_phones("0901222333 - 12345678"), "0901222333")
+        self.assertEqual(keep_stored_phone("0901222333"), "0901222333")
+        self.assertEqual(keep_stored_phone("0612345678"), "0612345678")
+        self.assertEqual(keep_stored_phone("02838221234"), "02838221234")
+        self.assertEqual(keep_vn_phones("1623456789"), "")
+        self.assertEqual(keep_vn_phones("6123456789"), "")
+        self.assertEqual(keep_vn_phones("0901222333123"), "")
+        self.assertEqual(keep_vn_phones("0901222333\n16234567890123"), "0901222333")
+        self.assertEqual(keep_vn_phones("100012345678901"), "")
         self.assertEqual(clean_phone_field("0901 222 333 gặp chiều"), "0901222333")
         self.assertEqual(clean_phone_field("+12025550123"), "")
         self.assertEqual(_usable_mapped_phone("12345678"), "")
@@ -181,6 +192,39 @@ class CustomerCleanTests(unittest.TestCase):
             self.assertEqual(rows["us"][0], "")
             self.assertEqual(rows["uid"][2], "UID")
             self.assertEqual(rows["uid"][3], "Hà Nội")
+
+    def test_clear_disallowed_phones_keeps_exact_ten_digits(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="khach-phone-prefix-") as folder:
+            path = Path(folder) / "server.db"
+            db.init_db(path)
+            now = "2026-01-01T00:00:00+00:00"
+            db.replace_customers(
+                path,
+                [
+                    {"id": "muoi", "name": "Lan", "phone": "0901222333", "address": "Số 12 đường Nguyễn Huệ, phường Phú Hội", "createdAt": now, "updatedAt": now},
+                    {"id": "sau", "name": "Hoa", "phone": "0612345678", "address": "Số 12 đường Nguyễn Huệ, phường Phú Hội", "createdAt": now, "updatedAt": now},
+                    {"id": "co-dinh", "name": "Minh", "phone": "02838221234", "address": "Số 12 đường Nguyễn Huệ, phường Phú Hội", "createdAt": now, "updatedAt": now},
+                    {"id": "mot", "name": "UID", "phone": "1623456789", "address": "Số 12 đường Nguyễn Huệ, phường Phú Hội", "createdAt": now, "updatedAt": now},
+                    {"id": "dai", "name": "Dài", "phone": "0901222333123", "address": "Số 12 đường Nguyễn Huệ, phường Phú Hội", "createdAt": now, "updatedAt": now},
+                    {"id": "tron", "name": "Trộn", "phone": "0901555666\n6123456789012", "address": "Số 12 đường Nguyễn Huệ, phường Phú Hội", "createdAt": now, "updatedAt": now},
+                ],
+                [],
+            )
+            stats = clear_disallowed_phones(path)
+            self.assertEqual(stats["cleared"], 2)
+            self.assertEqual(stats["trimmed"], 1)
+            self.assertTrue(phone_prefix_len_ready(path))
+            with db.session(path) as conn:
+                rows = {
+                    row["id"]: row["phone"]
+                    for row in conn.execute("SELECT id, phone FROM customers")
+                }
+            self.assertEqual(rows["muoi"], "0901222333")
+            self.assertEqual(rows["sau"], "0612345678")
+            self.assertEqual(rows["co-dinh"], "02838221234")
+            self.assertEqual(rows["mot"], "")
+            self.assertEqual(rows["dai"], "")
+            self.assertEqual(rows["tron"], "0901555666")
 
     def test_facebook_uid_from_url_and_scientific(self) -> None:
         self.assertEqual(clean_facebook_uid("https://www.facebook.com/profile.php?id=1000123456789"), "1000123456789")
