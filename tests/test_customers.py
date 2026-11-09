@@ -41,6 +41,8 @@ from control_plane.customers import (
     clean_address,
     clear_province_only_addresses,
     clear_disallowed_phones,
+    clear_phones_matching_uids,
+    phones_without_matching_uids,
     clear_non_vn_phones,
     clear_short_addresses,
     dedupe_exact_address,
@@ -225,6 +227,55 @@ class CustomerCleanTests(unittest.TestCase):
             self.assertEqual(rows["mot"], "")
             self.assertEqual(rows["dai"], "")
             self.assertEqual(rows["tron"], "0901555666")
+
+    def test_phone_equal_to_facebook_uid_is_removed(self) -> None:
+        self.assertEqual(
+            phones_without_matching_uids("0901222333\n100012345678901", "100012345678901"),
+            "0901222333",
+        )
+        self.assertEqual(phones_without_matching_uids("0901222333", "100012345678901"), "0901222333")
+        self.assertEqual(phones_without_matching_uids("100012345678901", "100012345678901"), "")
+        with tempfile.TemporaryDirectory(prefix="khach-phone-uid-") as folder:
+            path = Path(folder) / "server.db"
+            db.init_db(path)
+            now = "2026-01-01T00:00:00+00:00"
+            long_addr = "Số 12 đường Nguyễn Huệ, phường Phú Hội"
+            db.replace_customers(
+                path,
+                [
+                    {
+                        "id": "trung",
+                        "name": "Lan",
+                        "phone": "100012345678901",
+                        "facebookUid": "100012345678901",
+                        "address": long_addr,
+                        "createdAt": now,
+                        "updatedAt": now,
+                    },
+                    {
+                        "id": "giu",
+                        "name": "Minh",
+                        "phone": "0901222333",
+                        "facebookUid": "10001999888777",
+                        "address": long_addr,
+                        "createdAt": now,
+                        "updatedAt": now,
+                    },
+                ],
+                [],
+            )
+            stats = clear_phones_matching_uids(path, batch=10)
+            self.assertEqual(stats["cleared"], 1)
+            with db.session(path) as conn:
+                rows = {
+                    row["id"]: (row["phone"], row["facebook_uid"], row["name"], row["address"])
+                    for row in conn.execute("SELECT id, phone, facebook_uid, name, address FROM customers")
+                }
+            self.assertEqual(rows["trung"][0], "")
+            self.assertEqual(rows["trung"][1], "100012345678901")
+            self.assertEqual(rows["trung"][2], "Lan")
+            self.assertEqual(rows["trung"][3], long_addr)
+            self.assertEqual(rows["giu"][0], "0901222333")
 
     def test_facebook_uid_from_url_and_scientific(self) -> None:
         self.assertEqual(clean_facebook_uid("https://www.facebook.com/profile.php?id=1000123456789"), "1000123456789")

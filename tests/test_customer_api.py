@@ -682,6 +682,26 @@ class CustomerApiTests(unittest.TestCase):
                     "createdAt": "2026-01-01T00:00:00+00:00",
                     "updatedAt": "2026-01-01T00:00:00+00:00",
                 },
+                {
+                    "id": "c3",
+                    "name": "Hoa",
+                    "phone": "0901888999",
+                    "address": "",
+                    "adminAddress": "",
+                    "facebookUid": "1000555666777",
+                    "createdAt": "2026-01-01T00:00:00+00:00",
+                    "updatedAt": "2026-01-01T00:00:00+00:00",
+                },
+                {
+                    "id": "c4",
+                    "name": "An",
+                    "phone": "1000666777888",
+                    "address": "Đà Nẵng",
+                    "adminAddress": "",
+                    "facebookUid": "1000666777888",
+                    "createdAt": "2026-01-01T00:00:00+00:00",
+                    "updatedAt": "2026-01-01T00:00:00+00:00",
+                },
             ],
             [],
         )
@@ -740,6 +760,32 @@ class CustomerApiTests(unittest.TestCase):
         self.assertEqual(rows[0][0], "UID tra cứu")
         self.assertEqual(rows[1][:2], ["1000123456789", "Có"])
         self.assertEqual(rows[2][:2], ["1000777666555", "Không"])
+        copied = self.client.post(
+            "/v1/customers/lookup",
+            headers=self.headers,
+            json={
+                "text": "1000123456789\n10001999888777\n1000555666777\n1000666777888\n1000777666555\n",
+                "by": "facebookUid",
+                "requestId": "req-uid-copy-0001",
+            },
+        )
+        self.assertEqual(copied.status_code, 200, copied.text)
+        copy_job = self._wait_job(copied.json()["job"])
+        self.assertEqual(copy_job["status"], "done", copy_job)
+        table = self.client.get(f"/v1/customers/lookup/jobs/{copy_job['id']}/copy", headers=self.headers)
+        self.assertEqual(table.status_code, 200, table.text)
+        lines = [line for line in table.text.splitlines() if line]
+        self.assertEqual(lines[0], "UID Facebook\tSố điện thoại\tĐịa chỉ")
+        self.assertEqual(
+            lines[1:],
+            [
+                "1000123456789\t0901222333\tHuế | Thừa Thiên Huế",
+                "10001999888777\t0375866792\tĐà Nẵng",
+                "1000555666777\t0901888999\t.",
+                "1000666777888\t.\tĐà Nẵng",
+                "1000777666555\t.\t.",
+            ],
+        )
 
     def test_preview_and_import_many_files(self) -> None:
         files = [
