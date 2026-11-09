@@ -208,7 +208,7 @@ class CustomerApiTests(unittest.TestCase):
                         "Tên hàng hóa",
                         "Tiền thu hộ COD",
                     ],
-                    [["1", "VD1", "GHN", "Trần Minh", "0901444555", "12 Lê Lợi, phường Bến Nghé", "Hồ Chí Minh", "Quận 1", "Nước mắm", "150000"]],
+                    [["1", "VD1", "GHN", "Trần Minh", "0901444555", "12 Lê Lợi, phường Bến Nghé, Quận 1", "Hồ Chí Minh", "Quận 1", "Nước mắm", "150000"]],
                 ),
             ],
         )
@@ -328,7 +328,7 @@ class CustomerApiTests(unittest.TestCase):
         name, body = self._xlsx(
             "diachi.xlsx",
             ["Tên khách", "SĐT", "Số nhà", "Phường", "Tỉnh"],
-            [["Nguyễn Lan", "0901222333", "12 Lê Lợi", "Quận 1", "TP.HCM"]],
+            [["Nguyễn Lan", "0901222333", "12 Lê Lợi, phường Bến Nghé", "Quận 1", "TP.HCM"]],
         )
         preview = self.client.post(
             "/v1/customers/preview",
@@ -363,7 +363,7 @@ class CustomerApiTests(unittest.TestCase):
         )
         self.assertEqual(imported.status_code, 200, imported.text)
         listed = self.client.get("/v1/customers", headers=self.headers)
-        self.assertEqual(listed.json()["items"][0]["address"], "12 Lê Lợi, Quận 1, TP.HCM")
+        self.assertEqual(listed.json()["items"][0]["address"], "12 Lê Lợi, phường Bến Nghé, Quận 1, TP.HCM")
 
     def test_preview_preselects_hamlet_and_keeps_street_first(self) -> None:
         name, body = self._xlsx(
@@ -1646,7 +1646,7 @@ class CustomerApiTests(unittest.TestCase):
 
     def test_import_headerless_file_keeps_name_phone_address(self) -> None:
         rows = [
-            ["Nguyễn Lan", "0901222333", "12 Lê Lợi, Quận 1, TP.HCM"],
+            ["Nguyễn Lan", "0901222333", "12 Lê Lợi, phường Bến Nghé, Quận 1, TP.HCM"],
             ["Trần Minh", "0901444555", "Ha Noi"],
         ]
         imported = self.client.post(
@@ -1689,7 +1689,7 @@ class CustomerApiTests(unittest.TestCase):
                 self._file(
                     "tong-hop.xlsx",
                     ["Nguyễn Lan", "0901222333", "lô 41 đường số 2, KCN An Đồn, Sơn Trà, Đà Nẵng"],
-                    [["Trần Minh", "0901444555", "12 Lê Lợi, Quận 1, TP.HCM"]],
+                    [["Trần Minh", "0901444555", "12 Lê Lợi, phường Bến Nghé, Quận 1, TP.HCM"]],
                 )
             ],
         )
@@ -1746,7 +1746,7 @@ class CustomerApiTests(unittest.TestCase):
                 self._file(
                     "file-b.xlsx",
                     ["Số điện thoại", "Họ tên", "Địa chỉ giao"],
-                    [["0901444555", "Trần Minh", "12 Lê Lợi, Quận 1, TP.HCM"]],
+                    [["0901444555", "Trần Minh", "12 Lê Lợi, phường Bến Nghé, Quận 1, TP.HCM"]],
                 ),
                 self._file(
                     "file-c.xlsx",
