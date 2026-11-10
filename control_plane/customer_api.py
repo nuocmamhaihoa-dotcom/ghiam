@@ -493,7 +493,7 @@ def customers_list(
     limit: int = Query(default=LIST_LIMIT, ge=1, le=LIST_LIMIT),
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
-    _manager(_actor(request))
+    _actor(request)
     db.init_db(settings.db_path)
     warehouse = db.page_warehouse_stats(settings.db_path)
     total = int(warehouse["total"] or 0)
@@ -1761,7 +1761,7 @@ def customers_lookup_job_copy(
 
 @router.get("/v1/customers/export")
 def customers_export(request: Request, authorization: str | None = Header(default=None)) -> FileResponse:
-    _manager(_actor(request))
+    _actor(request)
     db.init_db(settings.db_path)
     headers = [FIELD_LABELS[field] for field in FIELDS]
     dest = _new_xlsx_path("kho-khach-")

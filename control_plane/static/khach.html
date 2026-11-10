@@ -249,7 +249,7 @@
   <header class="topbar">
     <h1>Kho khách Excel</h1>
     <p class="row" id="whoBar" hidden>
-      <button class="ghost manager-only" type="button" id="navStore">Khách đã lưu</button>
+      <button class="ghost" type="button" id="navStore">Khách đã lưu</button>
       <button class="ghost" type="button" id="navHome" hidden>Trang chủ</button>
       <span id="whoText"></span>
       <button class="ghost" type="button" id="logout">Đăng xuất</button>
@@ -262,7 +262,7 @@
 
   <section id="gate" hidden>
     <h2 id="gateTitle">Đăng nhập</h2>
-    <p class="note" id="gateLead">Quản lý đăng nhập để nạp kho, tạo tài khoản nhân viên và cấp hạn mức tra cứu. Nhân viên chỉ tra cứu trong hạn mức mỗi ngày.</p>
+    <p class="note" id="gateLead">Quản lý đăng nhập để nạp kho, tạo tài khoản nhân viên và cấp hạn mức tra cứu. Nhân viên xem kho, tra cứu và copy cùng kết quả với quản lý, trong hạn mức mỗi ngày.</p>
     <label for="gateUser">Tên đăng nhập</label>
     <input id="gateUser" type="text" autocomplete="username" />
     <label for="gatePass">Mật khẩu</label>
@@ -377,9 +377,9 @@
     </div>
   </section>
 
-  <section id="storeBox" class="manager-only">
+  <section id="storeBox">
     <h2>Khách đã lưu</h2>
-    <p class="note">Trang này để xem toàn bộ kho. Kéo xuống để hiện tiếp, không dừng ở 100 khách. Chọn các ô bên dưới để chỉ hiện khách đã có đủ những thông tin đó.</p>
+    <p class="note">Trang này để xem toàn bộ kho. Nhân viên thấy cùng danh sách, cùng cột và cùng file Excel với quản lý. Kéo xuống để hiện tiếp, không dừng ở 100 khách. Chọn các ô bên dưới để chỉ hiện khách đã có đủ những thông tin đó.</p>
     <div class="stats" id="storeStats"></div>
     <fieldset class="filters" id="storeFilters">
       <legend>Chỉ hiện khách đã có đủ</legend>
@@ -1988,14 +1988,10 @@
     var home = document.getElementById("navHome");
     var store = document.getElementById("navStore");
     if (home) home.hidden = true;
-    if (store) store.hidden = !isManager();
+    if (store) store.hidden = false;
   }
 
   function showStore() {
-    if (!isManager()) {
-      showHome();
-      return;
-    }
     document.body.classList.remove("view-home");
     document.body.classList.add("view-store");
     var home = document.getElementById("navHome");
@@ -2694,7 +2690,7 @@
     document.getElementById("gateTitle").textContent = setup ? "Tạo tài khoản quản lý" : "Đăng nhập";
     document.getElementById("gateLead").textContent = setup
       ? "Kho chưa có tài khoản. Tạo tài khoản quản lý đầu tiên. Quản lý sẽ tạo thêm nhân viên và cấp hạn mức tra cứu."
-      : "Quản lý đăng nhập để nạp kho, tạo tài khoản nhân viên và cấp hạn mức tra cứu. Nhân viên chỉ tra cứu trong hạn mức mỗi ngày.";
+      : "Quản lý đăng nhập để nạp kho, tạo tài khoản nhân viên và cấp hạn mức tra cứu. Nhân viên xem kho, tra cứu và copy cùng kết quả với quản lý, trong hạn mức mỗi ngày.";
     document.getElementById("gateNameWrap").hidden = !setup;
     document.getElementById("gatePass").setAttribute("autocomplete", setup ? "new-password" : "current-password");
     document.getElementById("gateSubmit").textContent = setup ? "Tạo tài khoản quản lý" : "Đăng nhập";
@@ -2726,10 +2722,8 @@
       loadSessions();
       loadAccounts();
       loadPaused();
-      routeView();
-    } else {
-      showHome();
     }
+    routeView();
     resumeJob();
   }
 
