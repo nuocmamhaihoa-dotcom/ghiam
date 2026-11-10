@@ -379,7 +379,7 @@
 
   <section id="storeBox" class="manager-only">
     <h2>Khách đã lưu</h2>
-    <p class="note">Trang này chỉ để xem kho. Mỗi trang 100 khách. Bấm Trang sau để xem tiếp đến hết. Chọn các ô bên dưới để chỉ hiện khách đã có đủ những thông tin đó.</p>
+    <p class="note">Trang này để xem toàn bộ kho. Kéo xuống để hiện tiếp, không dừng ở 100 khách. Chọn các ô bên dưới để chỉ hiện khách đã có đủ những thông tin đó.</p>
     <div class="stats" id="storeStats"></div>
     <fieldset class="filters" id="storeFilters">
       <legend>Chỉ hiện khách đã có đủ</legend>
@@ -401,7 +401,7 @@
     </p>
     <p class="row">
       <button class="ghost" type="button" id="storePrev" hidden>Trang trước</button>
-      <button class="ghost" type="button" id="storeNext" hidden>Trang sau</button>
+      <button class="ghost" type="button" id="storeNext" hidden>Xem tiếp</button>
     </p>
     <div class="scroll" id="people"></div>
     <p id="listNote" class="note"></p>
@@ -466,7 +466,10 @@
   var storeCursor = 0;
   var storeAfter = 0;
   var storeBack = [];
-  var STORE_PAGE = 100;
+  var storeShown = 0;
+  var storeLoading = false;
+  var storeHasMore = false;
+  var STORE_PAGE = 400;
 
   function token() { return serverToken; }
 
@@ -1828,26 +1831,30 @@
     }
   }
 
-  function renderRows(items) {
-    if (!items.length) {
-      document.getElementById("people").innerHTML = "<p class='note'>Chưa có khách, hoặc không khớp từ tìm.</p>";
+  function renderRows(items, append) {
+    var host = document.getElementById("people");
+    if (!items.length && !append) {
+      host.innerHTML = "<p class='note'>Chưa có khách, hoặc không khớp từ tìm.</p>";
       return;
     }
-    var html = "<table class='sheet'><colgroup><col class='col-name'><col class='col-phone'><col class='col-addr'><col class='col-addr'><col class='col-addr'><col class='col-cod'><col class='col-id'><col class='col-id'></colgroup><thead><tr><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>";
-    items.forEach(function (row) {
-      html += "<tr>" +
-        "<td>" + escapeHtml(row.name || "—") + "</td>" +
-        "<td>" + escapeHtml(row.phone || "—") + "</td>" +
-        "<td class='addr'>" + escapeHtml(row.address || "—") + "</td>" +
-        "<td class='addr'>" + escapeHtml(row.adminAddress || "—") + "</td>" +
-        "<td class='addr'>" + escapeHtml(row.orderContent || "—") + "</td>" +
-        "<td>" + escapeHtml(row.codAmount || "—") + "</td>" +
-        "<td>" + escapeHtml(row.facebookUid || "—") + "</td>" +
-        "<td>" + escapeHtml(row.tiktokId || "—") + "</td>" +
-        "</tr>";
-    });
-    html += "</tbody></table>";
-    document.getElementById("people").innerHTML = html;
+    var rows = items.map(customerRowHtml).join("");
+    var body = append ? host.querySelector("tbody") : null;
+    if (body) {
+      body.insertAdjacentHTML("beforeend", rows);
+      return;
+    }
+    host.innerHTML = "<table class='sheet'><colgroup><col class='col-name'><col class='col-phone'><col class='col-addr'><col class='col-addr'><col class='col-addr'><col class='col-cod'><col class='col-id'><col class='col-id'></colgroup><thead><tr><th>Tên khách</th><th>Số điện thoại</th><th>Địa chỉ</th><th>Địa chỉ hành chính</th><th>Hàng mua</th><th>COD</th><th>UID Facebook</th><th>ID TikTok</th></tr></thead><tbody>" + rows + "</tbody></table>";
+  }
+
+  function nearStoreEnd() {
+    var doc = document.documentElement;
+    return doc.scrollHeight - window.scrollY - window.innerHeight < 900;
+  }
+
+  function maybeLoadMoreStore() {
+    if (!document.body.classList.contains("view-store")) return;
+    if (!storeHasMore || storeLoading) return;
+    if (nearStoreEnd()) loadCustomers(true);
   }
 
   function vnTime(iso) {
@@ -1958,6 +1965,21 @@
     storeCursor = 0;
     storeAfter = 0;
     storeBack = [];
+    storeShown = 0;
+    storeHasMore = false;
+  }
+
+  function customerRowHtml(row) {
+    return "<tr>" +
+      "<td>" + escapeHtml(row.name || "—") + "</td>" +
+      "<td>" + escapeHtml(row.phone || "—") + "</td>" +
+      "<td class='addr'>" + escapeHtml(row.address || "—") + "</td>" +
+      "<td class='addr'>" + escapeHtml(row.adminAddress || "—") + "</td>" +
+      "<td class='addr'>" + escapeHtml(row.orderContent || "—") + "</td>" +
+      "<td>" + escapeHtml(row.codAmount || "—") + "</td>" +
+      "<td>" + escapeHtml(row.facebookUid || "—") + "</td>" +
+      "<td>" + escapeHtml(row.tiktokId || "—") + "</td>" +
+      "</tr>";
   }
 
   function showHome() {
@@ -1989,16 +2011,29 @@
     else showHome();
   }
 
-  async function loadCustomers() {
+  async function loadCustomers(append) {
     if (!document.body.classList.contains("view-store")) return;
+    if (storeLoading) return;
+    if (append && !storeHasMore) return;
+    storeLoading = true;
+    var nextButton = document.getElementById("storeNext");
+    if (nextButton) nextButton.disabled = true;
     try {
       var query = document.getElementById("query").value.trim();
       var fields = chosenFields();
+      var cursor = storeCursor;
+      var after = storeAfter;
+      if (append) {
+        var pendingBefore = nextButton ? nextButton.getAttribute("data-before") || "" : "";
+        var pendingAfter = nextButton ? nextButton.getAttribute("data-after") || "" : "";
+        cursor = pendingBefore ? Number(pendingBefore) : 0;
+        after = pendingAfter ? Number(pendingAfter) : 0;
+      }
       var params = ["limit=" + STORE_PAGE];
       if (query) params.push("q=" + encodeURIComponent(query));
       if (fields.length) params.push("has=" + encodeURIComponent(fields.join(",")));
-      if (storeAfter) params.push("after=" + encodeURIComponent(String(storeAfter)));
-      else if (storeCursor) params.push("before=" + encodeURIComponent(String(storeCursor)));
+      if (after) params.push("after=" + encodeURIComponent(String(after)));
+      else if (cursor) params.push("before=" + encodeURIComponent(String(cursor)));
       var response = await api("/v1/customers?" + params.join("&"));
       if (response.status === 401) {
         showGate(false);
@@ -2019,14 +2054,18 @@
         stat(storeComplete, "Đủ SĐT và địa chỉ", true) +
         stat(body.uniquePhones != null ? body.uniquePhones : 0, "Số điện thoại khác nhau") +
         stat(body.emptyPhone != null ? body.emptyPhone : 0, "Không có SĐT") +
-        stat(shown, "Khách trang này");
+        stat(append ? storeShown + shown : shown, "Đang hiện");
       padSpaces(document.getElementById("storeStats"));
-      renderRows(items);
-      padSpaces(document.getElementById("people"));
+      renderRows(items, !!append);
+      storeShown = append ? storeShown + shown : shown;
+      storeHasMore = !!body.hasMore;
+      storeCursor = cursor;
+      storeAfter = after;
+      if (!append) padSpaces(document.getElementById("people"));
       var next = document.getElementById("storeNext");
       var prev = document.getElementById("storePrev");
       if (next) {
-        next.hidden = !body.hasMore;
+        next.hidden = !storeHasMore;
         next.disabled = false;
         next.setAttribute("data-before", body.nextBefore || "");
         next.setAttribute("data-after", body.nextAfter || "");
@@ -2035,20 +2074,22 @@
       var filled = fields.map(fieldLabel).filter(Boolean).join(", ");
       var lead = filled ? "Khách đã có đủ " + filled + ". " : "";
       if (!shown && body.hasMore) {
-        setNote("listNote", lead + "Phần vừa xem chưa có khách khớp. Bấm Trang sau để tìm tiếp.");
-      } else if (!shown) {
+        setNote("listNote", lead + "Phần vừa xem chưa có khách khớp. Kéo xuống để tìm tiếp.");
+      } else if (!storeShown) {
         setNote("listNote", lead + (query || filled ? "Không có khách khớp." : "Kho còn trống."));
-      } else if (matched != null && matched > shown && !body.hasMore) {
-        setNote("listNote", lead + "Tìm thấy " + vnNum(matched) + " khách, trang này hiện " + vnNum(shown) + ".");
-      } else if (body.hasMore) {
-        setNote("listNote", lead + "Trang này hiện " + vnNum(shown) + " khách. Bấm Trang sau để xem tiếp.");
-      } else if (storeBack.length) {
-        setNote("listNote", lead + "Hết danh sách. Trang này hiện " + vnNum(shown) + " khách.");
+      } else if (matched != null && matched > storeShown && !storeHasMore) {
+        setNote("listNote", lead + "Tìm thấy " + vnNum(matched) + " khách, đang hiện " + vnNum(storeShown) + ".");
+      } else if (storeHasMore) {
+        setNote("listNote", lead + "Đang hiện " + vnNum(storeShown) + " khách. Kéo xuống để xem tiếp toàn bộ kho.");
       } else {
-        setNote("listNote", lead + "Đang hiện " + vnNum(shown) + " khách.");
+        setNote("listNote", lead + "Đã hiện hết " + vnNum(storeShown) + " khách.");
       }
     } catch (error) {
       setNote("listNote", "Không tải được kho khách.", "warn");
+    } finally {
+      storeLoading = false;
+      if (nextButton) nextButton.disabled = false;
+      if (storeHasMore) maybeLoadMoreStore();
     }
   }
 
@@ -2613,16 +2654,11 @@
     loadCustomers();
   });
   document.getElementById("storeNext").addEventListener("click", function () {
-    var button = document.getElementById("storeNext");
-    var nextBefore = button.getAttribute("data-before") || "";
-    var nextAfter = button.getAttribute("data-after") || "";
-    if (!nextBefore && !nextAfter) return;
-    storeBack.push({ cursor: storeCursor, after: storeAfter });
-    storeCursor = nextBefore ? Number(nextBefore) : 0;
-    storeAfter = nextAfter ? Number(nextAfter) : 0;
-    loadCustomers();
-    window.scrollTo(0, 0);
+    loadCustomers(true);
   });
+  window.addEventListener("scroll", function () {
+    maybeLoadMoreStore();
+  }, { passive: true });
   document.getElementById("storePrev").addEventListener("click", function () {
     var prev = storeBack.length ? storeBack.pop() : { cursor: 0, after: 0 };
     storeCursor = prev.cursor || 0;
