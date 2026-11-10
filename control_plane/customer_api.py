@@ -1623,10 +1623,10 @@ def _write_lookup_copy(groups: list[list[str]], by: str = "phone") -> Path:
     try:
         with dest.open("w", encoding="utf-8", newline="\n") as handle:
             if by == "facebookUid":
-                handle.write("UID Facebook\tSố điện thoại\tĐịa chỉ\n")
-                for uid, phone, address in iter_uid_copy_rows(settings.db_path, groups):
+                handle.write("Số điện thoại\tUID Facebook\tĐịa chỉ\n")
+                for phone, uid, address in iter_uid_copy_rows(settings.db_path, groups):
                     handle.write(
-                        f"{_tsv_field(uid or '.')}\t{_tsv_field(phone or '.')}\t{_tsv_field(address or '.')}\n"
+                        f"{_tsv_field(phone or '.')}\t{_tsv_field(uid or '.')}\t{_tsv_field(address or '.')}\n"
                     )
             else:
                 handle.write("Số điện thoại\tĐịa chỉ\n")
@@ -1745,7 +1745,7 @@ def customers_lookup_job_copy(
     request: Request,
     authorization: str | None = Header(default=None),
 ) -> FileResponse:
-    """Hai cột của khách tra được, số/UID bên trái và địa chỉ bên phải, để dán vào Excel."""
+    """Bảng dán vào Excel. Tra UID là số điện thoại, UID Facebook, địa chỉ. Ô trống là dấu chấm."""
     actor = _actor(request)
     db.init_db(settings.db_path)
     groups, by = _lookup_job_groups(actor, job_id)

@@ -775,17 +775,100 @@ class CustomerApiTests(unittest.TestCase):
         table = self.client.get(f"/v1/customers/lookup/jobs/{copy_job['id']}/copy", headers=self.headers)
         self.assertEqual(table.status_code, 200, table.text)
         lines = [line for line in table.text.splitlines() if line]
-        self.assertEqual(lines[0], "UID Facebook\tSố điện thoại\tĐịa chỉ")
+        self.assertEqual(lines[0], "Số điện thoại\tUID Facebook\tĐịa chỉ")
         self.assertEqual(
             lines[1:],
             [
-                "1000123456789\t0901222333\tHuế | Thừa Thiên Huế",
-                "10001999888777\t0375866792\tĐà Nẵng",
-                "1000555666777\t0901888999\t.",
-                "1000666777888\t.\tĐà Nẵng",
-                "1000777666555\t.\t.",
+                "0901222333\t1000123456789\tHuế | Thừa Thiên Huế",
+                "0375866792\t10001999888777\tĐà Nẵng",
+                "0901888999\t1000555666777\t.",
+                ".\t1000666777888\tĐà Nẵng",
+                ".\t1000777666555\t.",
             ],
         )
+        self.assertEqual(len(lines) - 1, 5)
+
+    def test_one_thousand_uid_lines_keep_a_row_and_dot_empty_cells(self) -> None:
+        now = "2026-01-01T00:00:00+00:00"
+        full = "100000000000000"
+        phone_only = "100000000000001"
+        uid_as_phone = "100000000000002"
+        db.replace_customers(
+            settings.db_path,
+            [
+                {
+                    "id": "full",
+                    "name": "Lan",
+                    "phone": "0901222333",
+                    "address": "12 Lê Lợi, phường Phú Hội, thành phố Huế",
+                    "adminAddress": "Thừa Thiên Huế",
+                    "facebookUid": full,
+                    "createdAt": now,
+                    "updatedAt": now,
+                },
+                {
+                    "id": "phone",
+                    "name": "Minh",
+                    "phone": "0901555666",
+                    "address": "",
+                    "adminAddress": "",
+                    "facebookUid": phone_only,
+                    "createdAt": now,
+                    "updatedAt": now,
+                },
+                {
+                    "id": "same",
+                    "name": "Hoa",
+                    "phone": uid_as_phone,
+                    "address": "45 Trần Phú, quận Hải Châu, thành phố Đà Nẵng",
+                    "facebookUid": uid_as_phone,
+                    "createdAt": now,
+                    "updatedAt": now,
+                },
+            ],
+            [],
+        )
+        uids = [f"1000000000{index:05d}" for index in range(1000)]
+        self.assertEqual(uids[0], full)
+        self.assertEqual(len(uids[0]), 15)
+        looked = self.client.post(
+            "/v1/customers/lookup",
+            headers=self.headers,
+            json={"text": "\n".join(uids), "by": "facebookUid"},
+        )
+        self.assertEqual(looked.status_code, 200, looked.text)
+        items = looked.json()["items"]
+        self.assertEqual(len(items), 1000)
+        self.assertEqual(items[0]["customer"]["phone"], "0901222333")
+        self.assertIn("Lê Lợi", items[0]["resultAddress"])
+        self.assertEqual(items[1]["customer"]["phone"], "0901555666")
+        self.assertEqual(items[1]["resultAddress"], ".")
+        self.assertFalse(items[1]["found"])
+        self.assertEqual(items[2]["customer"]["phone"], ".")
+        self.assertIn("Trần Phú", items[2]["resultAddress"])
+        self.assertEqual(items[3]["query"], uids[3])
+        self.assertEqual(items[3]["customer"]["phone"], ".")
+        self.assertEqual(items[3]["resultAddress"], ".")
+        self.assertEqual(items[-1]["query"], uids[-1])
+        self.assertEqual(items[-1]["resultAddress"], ".")
+        copied = self.client.post(
+            "/v1/customers/lookup",
+            headers=self.headers,
+            json={"text": "\n".join(uids), "by": "facebookUid", "requestId": "req-uid-1000"},
+        )
+        self.assertEqual(copied.status_code, 200, copied.text)
+        job = self._wait_job(copied.json()["job"])
+        self.assertEqual(job["status"], "done", job)
+        table = self.client.get(f"/v1/customers/lookup/jobs/{job['id']}/copy", headers=self.headers)
+        self.assertEqual(table.status_code, 200, table.text)
+        lines = [line for line in table.text.splitlines() if line]
+        self.assertEqual(lines[0], "Số điện thoại\tUID Facebook\tĐịa chỉ")
+        self.assertEqual(len(lines) - 1, 1000)
+        self.assertTrue(lines[1].startswith("0901222333\t100000000000000\t"))
+        self.assertEqual(lines[2], "0901555666\t100000000000001\t.")
+        self.assertTrue(lines[3].startswith(".\t100000000000002\t"))
+        self.assertEqual(lines[4], f".\t{uids[3]}\t.")
+        self.assertEqual(lines[-1], f".\t{uids[-1]}\t.")
 
     def test_preview_and_import_many_files(self) -> None:
         files = [
