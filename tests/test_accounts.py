@@ -111,7 +111,8 @@ class AccountApiTests(unittest.TestCase):
         self.assertIn("Hạn mức tra cứu", home.text)
         self.assertIn("boot()", home.text)
         self.assertIn('var serverToken = "";', home.text)
-        self.assertIn("20261110a", home.text)
+        self.assertIn("20261110b", home.text)
+        self.assertIn("Copy số điện thoại - UID Facebook - địa chỉ", home.text)
         store_nav = next(line for line in home.text.splitlines() if 'id="navStore"' in line)
         store_box = next(line for line in home.text.splitlines() if 'id="storeBox"' in line)
         self.assertNotIn("manager-only", store_nav)
@@ -315,9 +316,9 @@ class AccountApiTests(unittest.TestCase):
         self.assertEqual(
             staff_uid["copy"],
             [
-                "UID Facebook\tSố điện thoại\tĐịa chỉ",
-                "1000123456789\t0901222333\t12 Lê Lợi, phường Phú Hội, thành phố Huế | Thừa Thiên Huế",
-                "1000777666555\t.\t.",
+                "Số điện thoại\tUID Facebook\tĐịa chỉ",
+                "0901222333\t1000123456789\t12 Lê Lợi, phường Phú Hội, thành phố Huế | Thừa Thiên Huế",
+                ".\t1000777666555\t.",
             ],
         )
         self.assertEqual(staff_uid["copy"], manager_uid["copy"])

@@ -1825,7 +1825,8 @@ def _grouped_from_batches(
             missing += stats["missing"]
             for query, bucket in _index_lookup_items(items).items():
                 by_phone.setdefault(query, []).extend(bucket)
-        rows = [combine_phone_group(group, by_phone) for group in chunk]
+        combine = combine_uid_group if by == "facebookUid" else combine_phone_group
+        rows = [combine(group, by_phone) for group in chunk]
         yield rows, {"found": found, "missing": missing, "queried": len(flat)}
 
 
@@ -1863,12 +1864,12 @@ def lookup_phone_groups(
 
 
 def uid_copy_cells(group: list[str], by_uid: dict[str, list[dict[str, Any]]]) -> tuple[str, str, str]:
-    """Một dòng UID ra một dòng: UID, số điện thoại, địa chỉ. Ô thiếu là dấu chấm."""
+    """Một dòng UID ra một dòng: số điện thoại, UID Facebook, địa chỉ. Ô thiếu là dấu chấm."""
     labels = [item[1:] for item in group if is_lookup_line_mark(item)]
     real = real_lookup_phones(group)
     query = "\n".join(real) if real else (labels[0] if labels else "")
     if not real:
-        return query or ".", ".", "."
+        return ".", query or ".", "."
     phones: list[str] = []
     addresses: list[str] = []
     for uid in real:
@@ -1884,7 +1885,46 @@ def uid_copy_cells(group: list[str], by_uid: dict[str, list[dict[str, Any]]]) ->
             contact = lookup_contact_text(public)
             if contact and contact not in addresses:
                 addresses.append(contact)
-    return query or ".", ("\n".join(phones) if phones else "."), ("\n".join(addresses) if addresses else ".")
+    return (
+        "\n".join(phones) if phones else ".",
+        query or ".",
+        "\n".join(addresses) if addresses else ".",
+    )
+
+
+def combine_uid_group(group: list[str], by_uid: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
+    """Một dòng UID ra một dòng kết quả. Không có số hoặc địa chỉ thì ô đó là dấu chấm."""
+    bag: dict[str, list[dict[str, Any]]] = {}
+    first: dict[str, Any] | None = None
+    for uid in real_lookup_phones(group):
+        for item in by_uid.get(uid) or []:
+            customer = item.get("customer") or item
+            if not isinstance(customer, dict):
+                continue
+            bag.setdefault(uid, []).append(customer)
+            if first is None:
+                first = customer
+    phone, uid_cell, address = uid_copy_cells(group, bag)
+    base = first or {}
+    found = address != "."
+    return {
+        "query": uid_cell,
+        "found": found,
+        "resultAddress": address,
+        "customer": {
+            "id": str(base.get("id") or ""),
+            "name": str(base.get("name") or ""),
+            "phone": phone,
+            "address": address,
+            "adminAddress": str(base.get("adminAddress") or "") if found else "",
+            "orderContent": str(base.get("orderContent") or "") if found else "",
+            "codAmount": str(base.get("codAmount") or "") if found else "",
+            "facebookUid": uid_cell,
+            "tiktokId": str(base.get("tiktokId") or "") if found else "",
+            "createdAt": str(base.get("createdAt") or ""),
+            "updatedAt": str(base.get("updatedAt") or ""),
+        },
+    }
 
 
 def iter_uid_copy_rows(
@@ -1964,6 +2004,7 @@ def lookup_by_uid_map(
         matches = by_uid.get(uid) or []
         seen_ids: set[str] = set()
         ready: list[dict[str, str]] = []
+        without_address: list[dict[str, str]] = []
         for row in matches:
             public = public_customer(row)
             customer_id = str(public.get("id") or "")
@@ -1973,12 +2014,16 @@ def lookup_by_uid_map(
                 seen_ids.add(customer_id)
             if has_lookup_address(public):
                 ready.append(public)
-        if not ready:
+            else:
+                without_address.append(public)
+        if ready:
+            found += 1
+            for public in ready:
+                items.append({"query": uid, "found": True, "customer": public})
+        else:
             missing += 1
-            continue
-        found += 1
-        for public in ready:
-            items.append({"query": uid, "found": True, "customer": public})
+        for public in without_address:
+            items.append({"query": uid, "found": False, "customer": public})
     return items, {
         "queried": len(uids),
         "found": found,
