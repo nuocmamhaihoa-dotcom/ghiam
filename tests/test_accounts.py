@@ -111,7 +111,14 @@ class AccountApiTests(unittest.TestCase):
         self.assertIn("Hạn mức tra cứu", home.text)
         self.assertIn("boot()", home.text)
         self.assertIn('var serverToken = "";', home.text)
-        self.assertIn("20261027d", home.text)
+        self.assertIn("20261110a", home.text)
+        store_nav = next(line for line in home.text.splitlines() if 'id="navStore"' in line)
+        store_box = next(line for line in home.text.splitlines() if 'id="storeBox"' in line)
+        self.assertNotIn("manager-only", store_nav)
+        self.assertNotIn("manager-only", store_box)
+        self.assertIn('id="lookupCopy"', home.text)
+        self.assertIn('id="uploadBox" class="manager-only"', home.text)
+        self.assertIn('id="accountBox" class="manager-only"', home.text)
         self.assertIn("min-width: 1100px", home.text)
         self.assertIn("Cách nạp kho và tra cứu", home.text)
         self.assertNotIn("page-token", home.text)
@@ -188,8 +195,12 @@ class AccountApiTests(unittest.TestCase):
         self._setup()
         created = self._staff(limit=1)
         self._login(self.staff, "nhanvien", "nhanvien1")
-        self.assertEqual(self.staff.get("/v1/customers").status_code, 403)
-        self.assertEqual(self.staff.get("/v1/customers/export").status_code, 403)
+        listed = self.staff.get("/v1/customers")
+        self.assertEqual(listed.status_code, 200, listed.text)
+        self.assertEqual(listed.json()["items"], [])
+        exported = self.staff.get("/v1/customers/export")
+        self.assertEqual(exported.status_code, 200)
+        self.assertIn("spreadsheetml", exported.headers["content-type"])
         self.assertEqual(self.staff.get("/v1/accounts").status_code, 403)
         self.assertEqual(self.staff.get("/v1/customers/sessions").status_code, 403)
         blocked = self.staff.post(
@@ -227,6 +238,91 @@ class AccountApiTests(unittest.TestCase):
         self.assertEqual(job["status"], "error")
         self.assertIn("Hết hạn mức", job.get("error") or "")
         self.assertEqual(self._usage(created["id"]), 1)
+
+    def test_staff_warehouse_and_lookup_copy_match_manager(self) -> None:
+        self._setup()
+        self._staff(limit=20)
+        self._login(self.staff, "nhanvien", "nhanvien1")
+        now = "2026-01-01T00:00:00+00:00"
+        address = "12 Lê Lợi, phường Phú Hội, thành phố Huế"
+        db.replace_customers(
+            settings.db_path,
+            [
+                {
+                    "id": "lan",
+                    "name": "Lan",
+                    "phone": "0901222333",
+                    "address": address,
+                    "adminAddress": "Thừa Thiên Huế",
+                    "facebookUid": "1000123456789",
+                    "createdAt": now,
+                    "updatedAt": now,
+                }
+            ],
+            [],
+        )
+
+        def visible(body: dict) -> list[dict]:
+            return [
+                {
+                    "name": item.get("name"),
+                    "phone": item.get("phone"),
+                    "address": item.get("address"),
+                    "adminAddress": item.get("adminAddress"),
+                    "facebookUid": item.get("facebookUid"),
+                }
+                for item in body["items"]
+            ]
+
+        manager_list = self.manager.get("/v1/customers")
+        staff_list = self.staff.get("/v1/customers")
+        self.assertEqual(manager_list.status_code, 200, manager_list.text)
+        self.assertEqual(staff_list.status_code, 200, staff_list.text)
+        self.assertEqual(visible(staff_list.json()), visible(manager_list.json()))
+        self.assertEqual(staff_list.json()["items"][0]["phone"], "0901222333")
+        self.assertEqual(staff_list.json()["items"][0]["address"], address)
+
+        def lookup(client: TestClient, text: str, by: str, request_id: str) -> dict:
+            started = client.post(
+                "/v1/customers/lookup",
+                json={"text": text, "by": by, "requestId": request_id},
+            )
+            self.assertEqual(started.status_code, 200, started.text)
+            job = self._wait_job(client, started.json()["job"]["id"])
+            self.assertEqual(job["status"], "done", job)
+            copied = client.get(f"/v1/customers/lookup/jobs/{job['id']}/copy")
+            self.assertEqual(copied.status_code, 200, copied.text)
+            return {"items": job["result"]["items"], "copy": [line for line in copied.text.splitlines() if line]}
+
+        phone_text = "0901222333\n0985000000"
+        manager_phone = lookup(self.manager, phone_text, "phone", "req-staff-phone-manager")
+        staff_phone = lookup(self.staff, phone_text, "phone", "req-staff-phone-staff")
+        self.assertEqual(staff_phone["items"], manager_phone["items"])
+        self.assertEqual(
+            staff_phone["copy"],
+            [
+                "Số điện thoại\tĐịa chỉ",
+                "0901222333\t12 Lê Lợi, phường Phú Hội, thành phố Huế | Thừa Thiên Huế",
+                "0985000000\t.",
+            ],
+        )
+        self.assertEqual(staff_phone["copy"], manager_phone["copy"])
+
+        uid_text = "1000123456789\n1000777666555"
+        manager_uid = lookup(self.manager, uid_text, "facebookUid", "req-staff-uid-manager")
+        staff_uid = lookup(self.staff, uid_text, "facebookUid", "req-staff-uid-staff")
+        self.assertEqual(staff_uid["items"], manager_uid["items"])
+        self.assertEqual(
+            staff_uid["copy"],
+            [
+                "UID Facebook\tSố điện thoại\tĐịa chỉ",
+                "1000123456789\t0901222333\t12 Lê Lợi, phường Phú Hội, thành phố Huế | Thừa Thiên Huế",
+                "1000777666555\t.\t.",
+            ],
+        )
+        self.assertEqual(staff_uid["copy"], manager_uid["copy"])
+        self.assertEqual(self.staff.get("/v1/accounts").status_code, 403)
+        self.assertEqual(self.staff.get("/v1/customers/sessions").status_code, 403)
 
     def test_manager_sets_limit_and_is_not_charged(self) -> None:
         manager = self._setup()
