@@ -70,6 +70,8 @@
     .bar i { display: block; height: 100%; background: var(--blue); }
     .pcbtns { display: flex; gap: 0.35rem; flex-wrap: wrap; margin-top: 0.35rem; }
     .pcbtns button { min-height: 36px; padding: 0 0.7rem; font-size: 0.9rem; }
+    .vname { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+    button.mini { min-height: 34px; padding: 0 0.7rem; font-size: 0.88rem; }
     .pcbtns input { width: 8.5rem; padding: 0.4rem 0.5rem; font: inherit; font-size: 0.9rem; border: 1px solid #cfd5dc; border-radius: 8px; }
     .small { font-size: 0.86rem; color: var(--muted); }
     #employees td.num { font-weight: 750; font-size: 1.2rem; }
@@ -146,7 +148,7 @@
       <button type="button" class="ghost" data-span="all">Toàn bộ thời gian</button>
     </div>
     <p id="queueScope" class="note"></p>
-    <p class="note">Nhiều danh sách tải cùng lúc đều vào đây và chờ đến lượt đọc. Cột Điện thoại là máy đã tải video đó. Cột Đủ 3 ô hiện sau khi đọc xong: số kết quả có đủ số điện thoại, tên và id, trên tổng số điện thoại trong video. Video mới được giữ trên máy chủ. Khi ổ đĩa đầy 80%, video cũ nhất tự xóa để còn chỗ. Kết quả đã đọc vẫn giữ. Video còn trên máy chủ có nút Đọc lại để đọc lại bằng bộ đọc mới nhất.</p>
+    <p class="note">Nhiều danh sách tải cùng lúc đều vào đây và chờ đến lượt đọc. Cột Điện thoại là máy đã tải video đó. Cột Đủ 3 ô hiện sau khi đọc xong: số kết quả có đủ số điện thoại, tên và id, trên tổng số điện thoại trong video. Video mới được giữ trên máy chủ. Khi ổ đĩa đầy 80%, video cũ nhất tự xóa để còn chỗ. Kết quả đã đọc vẫn giữ. Video còn trên máy chủ có nút Đọc lại để đọc lại bằng bộ đọc mới nhất. Nút Xem kết quả cạnh tên video mở đúng các dòng video đó đọc được.</p>
     <p class="note">Thứ tự đọc: video bấm <b>Đọc gấp</b> trước. Còn lại xoay vòng theo điện thoại: mỗi máy lần lượt được đọc một video, nên một máy tải cả chục video không làm video của máy khác phải chờ hết đợt đó.</p>
     <div id="queue"></div>
   </section>
@@ -173,7 +175,7 @@
     <div id="missing"></div>
   </section>
 
-  <section>
+  <section id="ket-qua-da-luu">
     <h2>Kết quả đã lưu</h2>
     <p class="note">@id là dữ liệu chính. Mỗi @id chỉ hiện một lần, là lần quét đầu trong toàn bộ thời gian. Đã từng quét được thì không hiện lại, kể cả khi lọc ngày mới. Dòng chưa có @id vẫn hiện. Dòng mới nhất ở trên. Cột Đọc bởi ghi video nào do PC nào đọc, video nào do VPS đọc. Số chuẩn và nhà mạng tính lúc hiện, số đã lưu giữ nguyên.</p>
     <p class="note"><a href="/ket-qua">Mở bảng kết quả đọc được</a>. Bảng đó có bộ lọc thống kê theo hôm nay, toàn bộ thời gian, ngày quét, máy quét và loại dòng, rồi tải hoặc nạp file.</p>
@@ -209,6 +211,7 @@
       <button id="exportExcel" class="primary" type="button">Tải Excel theo bộ lọc</button>
     </p>
     <p id="exportNote" class="note"></p>
+    <p id="resultVideoNote" class="note"></p>
     <p id="resultCount" class="note"></p>
     <div id="results"></div>
   </section>
@@ -857,6 +860,35 @@
   }
 
   var queueSig = null;
+  var resultVideoFocus = 0;
+
+  function showVideoResults(id, name, status) {
+    var videoId = Number(id);
+    if (!videoId) return;
+    resultVideoFocus = videoId;
+    document.getElementById("query").value = "";
+    document.getElementById("dayFrom").value = "";
+    document.getElementById("dayTo").value = "";
+    var device = document.getElementById("resultDevice");
+    if (device) device.value = "";
+    document.getElementById("resultBucket").value = "";
+    document.getElementById("resultChecked").value = "";
+    document.getElementById("resultVideo").value = String(videoId);
+    followSpanDates = false;
+    var note = document.getElementById("resultVideoNote");
+    var label = name || ("Video " + videoId);
+    if (status === "done" || status === "error") {
+      note.textContent = "Kết quả " + label + " đọc được. @id đã quét ở video trước không hiện lại.";
+    } else {
+      note.textContent = label + " chưa đọc xong. Dòng đã đọc được sẽ hiện ở đây.";
+    }
+    document.querySelectorAll("[data-results]").forEach(function (button) {
+      button.className = button.getAttribute("data-results") === String(videoId) ? "mini primary" : "mini ghost";
+    });
+    loadResults(true);
+    var target = document.getElementById("ket-qua-da-luu");
+    if (target && target.scrollIntoView) target.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   function renderQueue(items) {
     var sig = items.map(function (item) {
@@ -880,13 +912,26 @@
       }
       var place = item.position ? "<div class='small'>" + (item.priority ? "Gấp · " : "") + "thứ " + item.position + " trong hàng chờ</div>" : "";
       var phone = item.device ? escapeHtml(item.device) : "<span class='note'>Chưa gắn máy</span>";
-      html += "<tr><td>" + escapeHtml(item.name) + extra + "</td><td>" + phone + "</td><td>" + countText(item) + filmHint(item) + "</td><td>" + escapeHtml(readerLabel(item)) + "</td><td>" + statusText(item) + retry + urgent + place + progressNote(item) + "</td></tr>";
+      var opened = String(resultVideoFocus || "") === String(item.id);
+      var resultsBtn = item.status === "uploading"
+        ? ""
+        : "<button class='" + (opened ? "mini primary" : "mini ghost") + "' type='button' data-results='" + item.id + "' data-status='" + escapeHtml(item.status) + "' data-name=\"" + escapeHtml(item.name) + "\">Xem kết quả</button>";
+      html += "<tr><td><div class='vname'>" + escapeHtml(item.name) + resultsBtn + "</div>" + extra + "</td><td>" + phone + "</td><td>" + countText(item) + filmHint(item) + "</td><td>" + escapeHtml(readerLabel(item)) + "</td><td>" + statusText(item) + retry + urgent + place + progressNote(item) + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
     box.querySelectorAll("[data-retry]").forEach(function (button) {
       button.addEventListener("click", async function () {
         await api("/v1/videos/" + button.getAttribute("data-retry") + "/retry", { method: "POST" });
         refresh();
+      });
+    });
+    box.querySelectorAll("[data-results]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        showVideoResults(
+          button.getAttribute("data-results"),
+          button.getAttribute("data-name") || "",
+          button.getAttribute("data-status") || ""
+        );
       });
     });
     box.querySelectorAll("[data-urgent]").forEach(function (button) {
@@ -1020,14 +1065,16 @@
     var sig = resultSig(items, total, capped);
     if (box.getAttribute("data-sig") === sig) return;
     box.setAttribute("data-sig", sig);
+    var videoId = document.getElementById("resultVideo").value.trim();
     if (!items.length) {
-      note.textContent = "0 kết quả.";
+      note.textContent = videoId ? "Video này chưa có dòng nào đọc được." : "0 kết quả.";
       box.innerHTML = "<p class='note'>Chưa có dòng nào.</p>";
       return;
     }
+    var head = videoId ? " kết quả của video này" : " kết quả";
     note.textContent = capped
-      ? "Đang hiện " + items.length + " / " + total + ". Mới nhất ở trên."
-      : total + " kết quả. Mới nhất ở trên.";
+      ? "Đang hiện " + items.length + " / " + total + head + ". Mới nhất ở trên."
+      : total + head + ". Mới nhất ở trên.";
     var html = "<table><tr><th>Số điện thoại</th><th>Số chuẩn</th><th>Nhà mạng</th><th>Tên</th><th>Username</th><th>Loại</th><th>Đọc bởi</th><th>Kiểm</th></tr>";
     items.forEach(function (item) {
       var reason = item.reason ? "<div class='note'>" + escapeHtml(item.reason) + "</div>" : "";
@@ -1625,12 +1672,22 @@
     var html = "<table><tr><th>Video đang tải lên</th><th>Trạng thái</th></tr>";
     jobs.forEach(function (job, index) {
       var retry = job.state === "fail" ? " <button class='ghost' type='button' data-again='" + index + "'>Tải lại</button>" : "";
+      var seen = job.videoId ? " <button class='mini ghost' type='button' data-results='" + job.videoId + "' data-status='queued' data-name=\"" + escapeHtml(job.file.name) + "\">Xem kết quả</button>" : "";
       var detailHidden = job.detail ? "" : " hidden";
       var title = listTitle(job);
       var titleHtml = title ? "<div class='note'>" + escapeHtml(title) + "</div>" : "";
-      html += "<tr data-row='" + index + "'><td>" + titleHtml + escapeHtml(job.file.name) + "<div class='note job-detail'" + detailHidden + ">" + escapeHtml(job.detail) + "</div></td><td><span class='job-status'>" + statusLabel(job) + "</span>" + retry + "</td></tr>";
+      html += "<tr data-row='" + index + "'><td><div class='vname'>" + titleHtml + escapeHtml(job.file.name) + seen + "</div><div class='note job-detail'" + detailHidden + ">" + escapeHtml(job.detail) + "</div></td><td><span class='job-status'>" + statusLabel(job) + "</span>" + retry + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
+    box.querySelectorAll("[data-results]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        showVideoResults(
+          button.getAttribute("data-results"),
+          button.getAttribute("data-name") || "",
+          button.getAttribute("data-status") || ""
+        );
+      });
+    });
     box.querySelectorAll("[data-again]").forEach(function (button) {
       button.addEventListener("click", function () {
         var job = jobs[Number(button.getAttribute("data-again"))];
@@ -1705,6 +1762,7 @@
     }).then(function (result) {
       if (result.ok) {
         job.state = result.body.duplicate ? "dup" : "queued";
+        job.videoId = Number(result.body.id) || job.videoId || 0;
         job.detail = "";
         if (result.body.duplicate && result.body.device && result.body.device !== thisPhone) {
           job.detail = "File này đã có, tải từ " + result.body.device + ".";
@@ -1888,7 +1946,15 @@
   ["resultDevice", "resultBucket", "resultChecked"].forEach(function (id) {
     document.getElementById(id).addEventListener("change", loadResults);
   });
-  document.getElementById("resultVideo").addEventListener("input", queueResultReload);
+  document.getElementById("resultVideo").addEventListener("input", function () {
+    var typed = Number(document.getElementById("resultVideo").value);
+    if (typed !== resultVideoFocus) {
+      resultVideoFocus = 0;
+      var picked = document.getElementById("resultVideoNote");
+      if (picked) picked.textContent = "";
+    }
+    queueResultReload();
+  });
   document.getElementById("exportExcel").addEventListener("click", async function () {
     var note = document.getElementById("exportNote");
     note.textContent = "Đang tạo file Excel theo bộ lọc đang chọn...";
