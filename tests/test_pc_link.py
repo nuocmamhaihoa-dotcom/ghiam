@@ -132,6 +132,8 @@ class LinkTests(unittest.TestCase):
         self.assertIn("/v1/results/check/start", page)
         self.assertIn("/v1/results/check/stop", page)
         self.assertIn("id=\"exportExcel\"", page)
+        self.assertIn("id=\"exportAll\"", page)
+        self.assertIn("Tải toàn bộ kết quả về PC", page)
         self.assertIn("/v1/results/export/ticket", page)
         self.assertIn('href="/ket-qua"', page)
         self.assertIn('href="/ket-qua?span=today"', page)

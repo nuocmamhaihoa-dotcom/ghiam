@@ -106,7 +106,7 @@
   <section>
     <h2>Tải kết quả</h2>
     <p class="row">
-      <button id="downloadAll" class="primary" type="button">Tải toàn bộ kết quả</button>
+      <button id="downloadAll" class="primary" type="button">Tải toàn bộ kết quả về PC</button>
       <button id="downloadFiltered" class="ghost" type="button">Tải theo bộ lọc</button>
     </p>
     <p id="downloadNote" class="note"></p>
@@ -399,7 +399,7 @@
 
   async function download(filtered) {
     var note = document.getElementById("downloadNote");
-    note.textContent = filtered ? "Đang tạo file theo bộ lọc..." : "Đang tạo file toàn bộ kết quả...";
+    note.textContent = filtered ? "Đang tạo file theo bộ lọc..." : "Đang tạo file Excel toàn bộ kết quả...";
     note.className = "note";
     var response = await api("/v1/results/export/ticket", { method: "POST" });
     if (!response.ok) {
@@ -409,7 +409,9 @@
     }
     var body = await response.json();
     var query = filtered ? queryString("") : "";
-    note.textContent = "Trình duyệt đang tải file Excel.";
+    note.textContent = filtered
+      ? "Trình duyệt đang tải file Excel theo bộ lọc."
+      : "Trình duyệt đang tải file Excel về máy. Mở thư mục Tải xuống để lấy file.";
     note.className = "note ok";
     window.location.href = body.url + (query ? "?" + query : "");
   }
