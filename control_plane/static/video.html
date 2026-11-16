@@ -148,7 +148,7 @@
       <button type="button" class="ghost" data-span="all">Toàn bộ thời gian</button>
     </div>
     <p id="queueScope" class="note"></p>
-    <p class="note">Nhiều danh sách tải cùng lúc đều vào đây và chờ đến lượt đọc. Cột Điện thoại là máy đã tải video đó. Cột Đủ 3 ô hiện sau khi đọc xong: số kết quả có đủ số điện thoại, tên và id, trên tổng số điện thoại trong video. Video mới được giữ trên máy chủ. Khi ổ đĩa đầy 80%, video cũ nhất tự xóa để còn chỗ. Kết quả đã đọc vẫn giữ. Video còn trên máy chủ có nút Đọc lại để đọc lại bằng bộ đọc mới nhất. Nút Kết quả cạnh tên video mở đúng các dòng video đó đọc được.</p>
+    <p class="note">Nhiều danh sách tải cùng lúc đều vào đây và chờ đến lượt đọc. Cột Điện thoại là máy đã tải video đó. Cột Đủ 3 ô hiện sau khi đọc xong: số kết quả có đủ số điện thoại, tên và id, trên tổng số điện thoại trong video. Video mới được giữ trên máy chủ. Khi ổ đĩa đầy 80%, video cũ nhất tự xóa để còn chỗ. Kết quả đã đọc vẫn giữ. Video còn trên máy chủ có nút Đọc lại để đọc lại bằng bộ đọc mới nhất. Nút Xem kết quả cạnh tên video mở đúng các dòng video đó đọc được.</p>
     <p class="note">Thứ tự đọc: video bấm <b>Đọc gấp</b> trước. Còn lại xoay vòng theo điện thoại: mỗi máy lần lượt được đọc một video, nên một máy tải cả chục video không làm video của máy khác phải chờ hết đợt đó.</p>
     <div id="queue"></div>
   </section>
@@ -915,7 +915,7 @@
       var opened = String(resultVideoFocus || "") === String(item.id);
       var resultsBtn = item.status === "uploading"
         ? ""
-        : "<button class='" + (opened ? "mini primary" : "mini ghost") + "' type='button' data-results='" + item.id + "' data-status='" + escapeHtml(item.status) + "' data-name=\"" + escapeHtml(item.name) + "\">Kết quả</button>";
+        : "<button class='" + (opened ? "mini primary" : "mini ghost") + "' type='button' data-results='" + item.id + "' data-status='" + escapeHtml(item.status) + "' data-name=\"" + escapeHtml(item.name) + "\">Xem kết quả</button>";
       html += "<tr><td><div class='vname'>" + escapeHtml(item.name) + resultsBtn + "</div>" + extra + "</td><td>" + phone + "</td><td>" + countText(item) + filmHint(item) + "</td><td>" + escapeHtml(readerLabel(item)) + "</td><td>" + statusText(item) + retry + urgent + place + progressNote(item) + "</td></tr>";
     });
     box.innerHTML = html + "</table>";
@@ -1672,7 +1672,7 @@
     var html = "<table><tr><th>Video đang tải lên</th><th>Trạng thái</th></tr>";
     jobs.forEach(function (job, index) {
       var retry = job.state === "fail" ? " <button class='ghost' type='button' data-again='" + index + "'>Tải lại</button>" : "";
-      var seen = job.videoId ? " <button class='mini ghost' type='button' data-results='" + job.videoId + "' data-status='queued' data-name=\"" + escapeHtml(job.file.name) + "\">Kết quả</button>" : "";
+      var seen = job.videoId ? " <button class='mini ghost' type='button' data-results='" + job.videoId + "' data-status='queued' data-name=\"" + escapeHtml(job.file.name) + "\">Xem kết quả</button>" : "";
       var detailHidden = job.detail ? "" : " hidden";
       var title = listTitle(job);
       var titleHtml = title ? "<div class='note'>" + escapeHtml(title) + "</div>" : "";
