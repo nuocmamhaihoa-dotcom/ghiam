@@ -208,8 +208,10 @@
       </label>
     </div>
     <p class="row" style="margin-top:0.7rem">
-      <button id="exportExcel" class="primary" type="button">Tải Excel theo bộ lọc</button>
+      <button id="exportAll" class="primary" type="button">Tải toàn bộ kết quả về PC</button>
+      <button id="exportExcel" class="ghost" type="button">Tải Excel theo bộ lọc</button>
     </p>
+    <p class="note">Nút Tải toàn bộ kết quả về PC lưu file Excel mọi dòng đã đọc, không theo bộ lọc đang chọn. File vào thư mục Tải xuống của máy tính.</p>
     <p id="exportNote" class="note"></p>
     <p id="resultVideoNote" class="note"></p>
     <p id="resultCount" class="note"></p>
@@ -1954,6 +1956,21 @@
       if (picked) picked.textContent = "";
     }
     queueResultReload();
+  });
+  document.getElementById("exportAll").addEventListener("click", async function () {
+    var note = document.getElementById("exportNote");
+    note.textContent = "Đang tạo file Excel toàn bộ kết quả...";
+    note.className = "note";
+    var response = await api("/v1/results/export/ticket", { method: "POST" });
+    if (!response.ok) {
+      note.textContent = await errorDetail(response, "Chưa tải được. Thử lại sau vài giây.");
+      note.className = "note warn";
+      return;
+    }
+    var body = await response.json();
+    note.textContent = "Trình duyệt đang tải file Excel về máy. Mở thư mục Tải xuống để lấy file.";
+    note.className = "note ok";
+    window.location.href = body.url;
   });
   document.getElementById("exportExcel").addEventListener("click", async function () {
     var note = document.getElementById("exportNote");

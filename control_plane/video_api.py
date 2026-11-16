@@ -899,7 +899,8 @@ def export_download(
     init_db(settings.video_db_path)
     chosen = _filters(q, day_from, day_to, device, video, bucket, checked, reader)
     payload = export_xlsx(settings.video_db_path, chosen)
-    filename = time.strftime("ket-qua-%Y%m%d-%H%M.xlsx")
+    stamp = time.strftime("%Y%m%d-%H%M")
+    filename = f"toan-bo-ket-qua-{stamp}.xlsx" if chosen.empty() else f"ket-qua-{stamp}.xlsx"
     return Response(
         content=payload,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
