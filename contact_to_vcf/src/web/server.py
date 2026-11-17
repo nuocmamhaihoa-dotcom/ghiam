@@ -52,6 +52,7 @@ class PoolApp:
         self.lock = threading.Lock()
         self.export_lock = threading.Lock()
         self.software_zip: bytes | None = None
+        self.download_key = _load_download_key(self.kho)
 
     def login(self, user: str, password: str) -> str | None:
         if user != USER or password != PASSWORD:
@@ -95,6 +96,12 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                 if file_path.is_file():
                     self._vcf(file_path.read_bytes(), file_path.name)
                     return
+            if path == "/tai" or path.startswith("/tai/"):
+                if not self._auth() and not self._download_key_ok():
+                    self._json(401, {"error": "Chưa đăng nhập"})
+                    return
+                self._serve_download(path)
+                return
             if not self._auth():
                 self._json(401, {"error": "Chưa đăng nhập"})
                 return
@@ -117,24 +124,6 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                         ],
                     },
                 )
-                return
-            if path == "/tai":
-                self._download_page()
-                return
-            if path == "/tai/phan-mem.zip":
-                self._download_software()
-                return
-            if path == "/tai/danh-ba-pc.zip":
-                self._download_pc_bundle()
-                return
-            if path == "/tai/DanhBa-Setup.exe":
-                self._download_pc_installer()
-                return
-            if path == "/tai/danh-sach-so.csv":
-                self._download_numbers()
-                return
-            if path == "/tai/danh-sach-danh-ba.csv":
-                self._download_book_list()
                 return
             if path == "/api/download-pending":
                 self._download_pending()
@@ -309,9 +298,31 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             payload_json["delimiter"] = info.delimiter
             self._json(200, payload_json)
 
+        def _serve_download(self, path: str) -> None:
+            if path == "/tai":
+                self._download_page()
+                return
+            if path == "/tai/phan-mem.zip":
+                self._download_software()
+                return
+            if path == "/tai/danh-ba-pc.zip":
+                self._download_pc_bundle()
+                return
+            if path == "/tai/DanhBa-Setup.exe":
+                self._download_pc_installer()
+                return
+            if path == "/tai/danh-sach-so.csv":
+                self._download_numbers()
+                return
+            if path == "/tai/danh-sach-danh-ba.csv":
+                self._download_book_list()
+                return
+            self._json(404, {"error": "Không thấy trang"})
+
         def _download_page(self) -> None:
-            query_key = parse_qs(urlparse(self.path).query).get("key", [""])[0]
-            key = quote(self._cookie_token() or query_key, safe="")
+            key = quote(app.download_key, safe="")
+            host = self.headers.get("Host", "127.0.0.1")
+            installer = f"http://{host}/tai/DanhBa-Setup.exe?key={key}"
             total = pool_total(app.kho)
             books = list_books(app.kho, "all")
             body = (
@@ -323,18 +334,22 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                 "a.go{display:flex;align-items:center;justify-content:center;min-height:52px;"
                 "margin:0 0 12px;border-radius:14px;background:#0f766e;color:#fff;"
                 "text-decoration:none;font-weight:650;text-align:center;padding:8px 12px}"
+                "code{display:block;overflow-wrap:anywhere;background:#fff;border-radius:12px;"
+                "padding:12px;margin:0 0 12px}"
                 "p{color:#78716c;line-height:1.45}"
                 "</style></head><body><div class=\"wrap\">"
                 "<h1>Tải phần mềm và danh sách số</h1>"
                 f"<p>Kho đang có {total} số, đã chia vào {len(books)} danh bạ. "
                 "Mỗi danh bạ mới đủ 4.000 số. Số đã chia không sang danh bạ khác.</p>"
-                f'<a class="go" href="/tai/DanhBa-Setup.exe?key={key}">Tải file cài đặt DanhBa-Setup.exe</a>'
+                f'<a class="go" href="{installer}">Tải file cài đặt DanhBa-Setup.exe</a>'
+                f"<p>Link tải file cài đặt:</p><code>{installer}</code>"
                 f'<a class="go" href="/tai/danh-ba-pc.zip?key={key}">Tải bản máy tính kèm kho số đã làm</a>'
                 f'<a class="go" href="/tai/phan-mem.zip?key={key}">Tải mã phần mềm, không kèm kho</a>'
                 f'<a class="go" href="/tai/danh-sach-so.csv?key={key}">Tải mọi số đã chia vào danh bạ</a>'
                 f'<a class="go" href="/tai/danh-sach-danh-ba.csv?key={key}">Tải danh sách từng danh bạ</a>'
                 "<p>File số gồm cột so và danh_ba. Tải danh sách này không khóa danh bạ "
-                "và không chuyển số sang file khác. Lần đầu với kho lớn có thể mất vài phút.</p>"
+                "và không chuyển số sang file khác. Lần đầu với kho lớn có thể mất vài phút. "
+                "File lớn có thể tải tiếp nếu mạng bị đứt.</p>"
                 '<p><a href="/">Quay lại</a></p></div></body></html>'
             )
             self._bytes(200, body.encode("utf-8"), "text/html; charset=utf-8")
@@ -369,18 +384,33 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
 
         def _send_path(self, path: Path, content_type: str, filename: str) -> None:
             size = path.stat().st_size
-            self.send_response(200)
+            start, end, partial = _byte_range(self.headers.get("Range"), size)
+            if start is None or end is None:
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.send_header("Accept-Ranges", "bytes")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            length = end - start + 1
+            self.send_response(206 if partial else 200)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
             self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Length", str(size))
+            self.send_header("Accept-Ranges", "bytes")
+            if partial:
+                self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+            self.send_header("Content-Length", str(length))
             self.end_headers()
             with path.open("rb") as handle:
-                while True:
-                    chunk = handle.read(256 * 1024)
+                handle.seek(start)
+                remaining = length
+                while remaining > 0:
+                    chunk = handle.read(min(256 * 1024, remaining))
                     if not chunk:
                         break
                     self.wfile.write(chunk)
+                    remaining -= len(chunk)
 
         def _attachment(self, payload: bytes, content_type: str, filename: str) -> None:
             self.send_response(200)
@@ -502,9 +532,17 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                     return value
             return ""
 
+        def _query_key(self) -> str:
+            return parse_qs(urlparse(self.path).query).get("key", [""])[0]
+
+        def _download_key_ok(self) -> bool:
+            query_key = self._query_key()
+            if not query_key or not app.download_key:
+                return False
+            return secrets.compare_digest(query_key, app.download_key)
+
         def _auth(self) -> bool:
-            query_key = parse_qs(urlparse(self.path).query).get("key", [""])[0]
-            if app.allowed(query_key):
+            if app.allowed(self._query_key()):
                 return True
             return app.allowed(self._cookie_token())
 
@@ -566,6 +604,44 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             return
 
     return Handler
+
+
+def _load_download_key(kho: Path) -> str:
+    path = kho / "exports" / "download.key"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.is_file():
+        key = path.read_text(encoding="utf-8").strip()
+        if key:
+            return key
+    key = secrets.token_urlsafe(24)
+    path.write_text(key + "\n", encoding="utf-8")
+    return key
+
+
+def _byte_range(header: str | None, size: int) -> tuple[int | None, int | None, bool]:
+    if size <= 0:
+        return 0, -1, False
+    if not header or not header.startswith("bytes="):
+        return 0, size - 1, False
+    spec = header.removeprefix("bytes=").split(",", 1)[0].strip()
+    left, separator, right = spec.partition("-")
+    if not separator:
+        return None, None, False
+    try:
+        if left == "":
+            length = int(right)
+            if length <= 0:
+                return None, None, False
+            start = max(size - length, 0)
+            end = size - 1
+        else:
+            start = int(left)
+            end = int(right) if right else size - 1
+    except ValueError:
+        return None, None, False
+    if start < 0 or start >= size or end < start:
+        return None, None, False
+    return start, min(end, size - 1), True
 
 
 def _assigned_catalog(app: PoolApp) -> Path:

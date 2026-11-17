@@ -217,6 +217,7 @@ def test_download_software_and_full_number_list(tmp_path: Path) -> None:
         bundle = opener.open(f"http://127.0.0.1:{port}/tai").read().decode()
         assert "Tải mọi số đã chia vào danh bạ" in bundle
         assert "Tải file cài đặt DanhBa-Setup.exe" in bundle
+        assert "Link tải file cài đặt" in bundle
         assert "Tải bản máy tính kèm kho số đã làm" in bundle
         assert "Tải mã phần mềm, không kèm kho" in bundle
         package = opener.open(f"http://127.0.0.1:{port}/tai/phan-mem.zip").read()
@@ -235,6 +236,38 @@ def test_download_software_and_full_number_list(tmp_path: Path) -> None:
         assert "danhba_00001.vcf,2,chua_tai" in books
         listed = json.load(opener.open(f"http://127.0.0.1:{port}/api/books"))
         assert listed["books"][0]["downloaded_at"] is None
+    finally:
+        server.shutdown()
+
+
+def test_installer_link_works_without_a_login_cookie(tmp_path: Path) -> None:
+    from urllib.error import HTTPError
+
+    kho = tmp_path / "kho"
+    server = serve(kho, host="127.0.0.1", port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = server.server_address[1]
+    opener = build_opener()
+    try:
+        key = server.app.download_key  # type: ignore[attr-defined]
+        page = opener.open(f"http://127.0.0.1:{port}/tai?key={key}").read().decode()
+        link = f"http://127.0.0.1:{port}/tai/DanhBa-Setup.exe?key={key}"
+        assert link in page
+        try:
+            opener.open(f"http://127.0.0.1:{port}/api/books?key={key}")
+            raise AssertionError("download key must not open the address books")
+        except HTTPError as exc:
+            assert exc.code == 401
+        installer = kho / "exports" / "DanhBa-Setup.exe"
+        installer.write_bytes(b"MZ-danh-ba")
+        partial = opener.open(
+            Request(link, headers={"Range": "bytes=0-1"})
+        )
+        assert partial.status == 206
+        assert partial.read() == b"MZ"
+        assert partial.headers.get("Content-Range") == "bytes 0-1/10"
+        assert partial.headers.get("Accept-Ranges") == "bytes"
     finally:
         server.shutdown()
 
