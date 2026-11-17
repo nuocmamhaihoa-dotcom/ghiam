@@ -27,7 +27,12 @@ from processors.pool import (
     mark_books_downloaded,
     pool_total,
     read_book_vcf,
+    write_assigned_catalog,
+    write_book_catalog,
 )
+
+PACKAGE_ROOT = Path(__file__).resolve().parents[2]
+_SKIP_PARTS = {"__pycache__", ".pytest_cache", ".venv", "uploads", "exports"}
 
 MAX_UPLOAD_BYTES = 512 * 1024 * 1024
 
@@ -45,6 +50,8 @@ class PoolApp:
         _purge_old_uploads(self.uploads)
         self.sessions: set[str] = set()
         self.lock = threading.Lock()
+        self.export_lock = threading.Lock()
+        self.software_zip: bytes | None = None
 
     def login(self, user: str, password: str) -> str | None:
         if user != USER or password != PASSWORD:
@@ -106,6 +113,18 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                         ],
                     },
                 )
+                return
+            if path == "/tai":
+                self._download_page()
+                return
+            if path == "/tai/phan-mem.zip":
+                self._download_software()
+                return
+            if path == "/tai/danh-sach-so.csv":
+                self._download_numbers()
+                return
+            if path == "/tai/danh-sach-danh-ba.csv":
+                self._download_book_list()
                 return
             if path == "/api/download-pending":
                 self._download_pending()
@@ -279,6 +298,72 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             payload_json["has_header"] = info.has_header
             payload_json["delimiter"] = info.delimiter
             self._json(200, payload_json)
+
+        def _download_page(self) -> None:
+            query_key = parse_qs(urlparse(self.path).query).get("key", [""])[0]
+            key = quote(self._cookie_token() or query_key, safe="")
+            total = pool_total(app.kho)
+            books = list_books(app.kho, "all")
+            body = (
+                "<!DOCTYPE html><html lang=\"vi\"><head><meta charset=\"utf-8\">"
+                "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+                "<title>Tải phần mềm</title><style>"
+                "body{font-family:system-ui,sans-serif;margin:0;background:#f4f1ea;color:#1c1917}"
+                ".wrap{max-width:560px;margin:0 auto;padding:20px}"
+                "a.go{display:flex;align-items:center;justify-content:center;min-height:52px;"
+                "margin:0 0 12px;border-radius:14px;background:#0f766e;color:#fff;"
+                "text-decoration:none;font-weight:650;text-align:center;padding:8px 12px}"
+                "p{color:#78716c;line-height:1.45}"
+                "</style></head><body><div class=\"wrap\">"
+                "<h1>Tải phần mềm và danh sách số</h1>"
+                f"<p>Kho đang có {total} số, đã chia vào {len(books)} danh bạ. "
+                "Mỗi danh bạ mới đủ 4.000 số. Số đã chia không sang danh bạ khác.</p>"
+                f'<a class="go" href="/tai/phan-mem.zip?key={key}">Tải phần mềm đầy đủ tính năng</a>'
+                f'<a class="go" href="/tai/danh-sach-so.csv?key={key}">Tải mọi số đã chia vào danh bạ</a>'
+                f'<a class="go" href="/tai/danh-sach-danh-ba.csv?key={key}">Tải danh sách từng danh bạ</a>'
+                "<p>File số gồm cột so và danh_ba. Tải danh sách này không khóa danh bạ "
+                "và không chuyển số sang file khác. Lần đầu với kho lớn có thể mất vài phút.</p>"
+                '<p><a href="/">Quay lại</a></p></div></body></html>'
+            )
+            self._bytes(200, body.encode("utf-8"), "text/html; charset=utf-8")
+
+        def _download_software(self) -> None:
+            payload = _software_zip(app)
+            self._attachment(payload, "application/zip", "danh-ba-phan-mem.zip")
+
+        def _download_numbers(self) -> None:
+            path = _assigned_catalog(app)
+            self._send_path(path, "text/csv; charset=utf-8", "danh-sach-so.csv")
+
+        def _download_book_list(self) -> None:
+            destination = app.kho / "exports" / "danh-sach-danh-ba.csv"
+            with app.export_lock:
+                write_book_catalog(app.kho, destination)
+            self._send_path(destination, "text/csv; charset=utf-8", "danh-sach-danh-ba.csv")
+
+        def _send_path(self, path: Path, content_type: str, filename: str) -> None:
+            size = path.stat().st_size
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(size))
+            self.end_headers()
+            with path.open("rb") as handle:
+                while True:
+                    chunk = handle.read(256 * 1024)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+
+        def _attachment(self, payload: bytes, content_type: str, filename: str) -> None:
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
 
         def _download_pending(self) -> None:
             pending = list_books(app.kho, "pending")
@@ -455,6 +540,61 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             return
 
     return Handler
+
+
+def _assigned_catalog(app: PoolApp) -> Path:
+    destination = app.kho / "exports" / "danh-sach-so.csv"
+    marker = destination.with_suffix(".count")
+    with app.export_lock:
+        total = pool_total(app.kho)
+        if destination.is_file() and marker.is_file() and marker.read_text(encoding="utf-8").strip() == str(total):
+            return destination
+        write_assigned_catalog(app.kho, destination)
+        marker.write_text(str(total), encoding="utf-8")
+        return destination
+
+
+def _software_zip(app: PoolApp) -> bytes:
+    if app.software_zip is not None:
+        return app.software_zip
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("contact_to_vcf/TINH_NANG.txt", _feature_note())
+        for path in PACKAGE_ROOT.rglob("*"):
+            if not path.is_file():
+                continue
+            if any(part in _SKIP_PARTS for part in path.parts):
+                continue
+            if path.suffix in {".sqlite", ".pyc"}:
+                continue
+            relative = path.relative_to(PACKAGE_ROOT)
+            archive.write(path, f"contact_to_vcf/{relative.as_posix()}")
+    app.software_zip = buffer.getvalue()
+    return app.software_zip
+
+
+def _feature_note() -> str:
+    return """PHẦN MỀM DANH BẠ
+=================
+
+Tính năng đang dùng
+- Nạp nhiều file một lúc, không giới hạn số file.
+- Đọc CSV, Excel, TXT, UTF-16 và file có chứa số điện thoại.
+- File Excel lấy số ở cột B và đưa về 10 số nhà mạng Việt Nam.
+- Tên liên hệ ghi đúng bằng số điện thoại đó.
+- Mỗi danh bạ mới chia đúng 4.000 số.
+- Số đã chia vào danh bạ nào thì giữ nguyên danh bạ đó.
+- Các cách viết 090…, 84…, +84… và đầu số 11 số cũ đều bị lọc trùng.
+- Tải từng danh bạ trên máy tính và trên iPhone.
+
+Danh sách số đã chia
+- Mở trang web, vào «Tải phần mềm và danh sách số».
+- File danh-sach-so.csv có cột so và danh_ba.
+- File danh-sach-danh-ba.csv có từng danh bạ, số lượng và trạng thái đã tải hay chưa.
+- Tải hai file này không khóa danh bạ và không chuyển số sang danh bạ khác.
+
+Kho số nằm trên máy chủ. Gói phần mềm này là chương trình. Danh sách số tải riêng từ kho đang chạy.
+"""
 
 
 def _import_payload(kho: Path, stats: ImportStats) -> dict[str, object]:

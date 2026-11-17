@@ -162,6 +162,60 @@ def list_books(folder: Path, status: str = "all") -> list[BookInfo]:
     ]
 
 
+def write_assigned_catalog(folder: Path, destination: Path) -> int:
+    """Write every stored phone and the book it already belongs to.
+
+    This is a copy of the list. It does not mark any book as downloaded and
+    does not move a number to another book.
+    """
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_suffix(destination.suffix + ".part")
+    connection = _connect(pool_path(folder))
+    count = 0
+    try:
+        _ensure_schema(connection)
+        with temporary.open("w", encoding="utf-8", newline="") as handle:
+            handle.write("so,danh_ba\n")
+            cursor = connection.execute(
+                "SELECT phone, book_id FROM numbers ORDER BY book_id, rowid"
+            )
+            for row in cursor:
+                book_name = f"danhba_{int(row['book_id']):05d}.vcf"
+                phone = str(row["phone"]).replace('"', "")
+                handle.write(f"{phone},{book_name}\n")
+                count += 1
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
+    else:
+        temporary.replace(destination)
+    finally:
+        connection.close()
+    return count
+
+
+def write_book_catalog(folder: Path, destination: Path) -> int:
+    """Write one row per address book. Does not mark any book as downloaded."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    books = list_books(folder, "all")
+    temporary = destination.with_suffix(destination.suffix + ".part")
+    try:
+        with temporary.open("w", encoding="utf-8", newline="") as handle:
+            handle.write("ma,ten_file,so_luong,trang_thai,luc_tai\n")
+            for book in books:
+                state = "da_tai" if book.downloaded_at else "chua_tai"
+                when = book.downloaded_at or ""
+                handle.write(
+                    f"{book.id},{book.file_name},{book.contact_count},{state},{when}\n"
+                )
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
+    else:
+        temporary.replace(destination)
+    return len(books)
+
+
 def pool_total(folder: Path) -> int:
     if not pool_path(folder).is_file():
         return 0

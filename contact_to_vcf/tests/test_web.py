@@ -184,6 +184,59 @@ def test_books_stay_fixed_at_1000_even_if_a_size_is_sent(tmp_path: Path) -> None
         server.shutdown()
 
 
+def test_download_software_and_full_number_list(tmp_path: Path) -> None:
+    import io
+    import zipfile
+
+    server = serve(tmp_path / "kho", host="127.0.0.1", port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = server.server_address[1]
+    opener = build_opener(HTTPCookieProcessor(CookieJar()))
+    try:
+        opener.open(
+            Request(
+                f"http://127.0.0.1:{port}/api/login",
+                data=json.dumps({"user": "danhba", "password": "danhba123"}).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+        )
+        body, content_type = _form({"file": ("so.txt", "0901234567\n0912345678\n".encode())})
+        imported = json.load(
+            opener.open(
+                Request(
+                    f"http://127.0.0.1:{port}/api/import-now",
+                    data=body,
+                    headers={"Content-Type": content_type},
+                )
+            )
+        )
+        assert imported["added"] == 2
+        page = opener.open(f"http://127.0.0.1:{port}/").read().decode()
+        assert "Tải phần mềm và danh sách số" in page
+        bundle = opener.open(f"http://127.0.0.1:{port}/tai").read().decode()
+        assert "Tải mọi số đã chia vào danh bạ" in bundle
+        assert "Tải phần mềm đầy đủ tính năng" in bundle
+        package = opener.open(f"http://127.0.0.1:{port}/tai/phan-mem.zip").read()
+        archive = zipfile.ZipFile(io.BytesIO(package))
+        names = archive.namelist()
+        assert "contact_to_vcf/TINH_NANG.txt" in names
+        assert any(name.endswith("src/web/server.py") for name in names)
+        note = archive.read("contact_to_vcf/TINH_NANG.txt").decode("utf-8")
+        assert "4.000" in note
+        assert "lọc trùng" in note
+        numbers = opener.open(f"http://127.0.0.1:{port}/tai/danh-sach-so.csv").read().decode()
+        assert numbers.startswith("so,danh_ba\n")
+        assert "0901234567,danhba_00001.vcf" in numbers
+        assert "0912345678,danhba_00001.vcf" in numbers
+        books = opener.open(f"http://127.0.0.1:{port}/tai/danh-sach-danh-ba.csv").read().decode()
+        assert "danhba_00001.vcf,2,chua_tai" in books
+        listed = json.load(opener.open(f"http://127.0.0.1:{port}/api/books"))
+        assert listed["books"][0]["downloaded_at"] is None
+    finally:
+        server.shutdown()
+
+
 def _form(
     files: dict[str, tuple[str, bytes]],
     fields: dict[str, bytes] | None = None,
