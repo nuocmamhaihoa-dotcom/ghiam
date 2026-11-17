@@ -25,7 +25,8 @@ def test_pc_launcher_uses_this_computer_and_the_bundled_pool(tmp_path: Path, mon
     assert "Danh ba.lnk" in text
     assert "14.225" not in text
     installer = (root / "scripts" / "build_pc_installer.py").read_text(encoding="utf-8")
-    assert 'RunProgram="cmd.exe /c Mo-Danh-Ba.bat"' in installer
+    assert 'RunProgram="Mo-Danh-Ba.exe"' in installer
+    assert "cmd.exe /c" not in installer
     assert "14.225" not in installer
     page = (root / "src" / "web" / "index.html").read_text(encoding="utf-8")
     assert "14.225" not in page

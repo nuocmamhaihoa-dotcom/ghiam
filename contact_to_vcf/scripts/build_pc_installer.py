@@ -10,13 +10,12 @@ import zipfile
 from pathlib import Path
 
 SFX_PAGE = "https://www.7-zip.org/a/lzma2301.7z"
+# 7zSD.sfx extracts to a temp folder and runs ".\\" + RunProgram with CreateProcess.
+# The program must be a real exe stored at the archive root.
 CONFIG = """;!@Install@!UTF-8!
 Title="Cài Danh bạ"
 BeginPrompt="Cài Danh bạ vào máy tính này? Phần mềm chạy trên máy này, kèm toàn bộ số đã chia."
-ExtractDialogText="Đang chép phần mềm và kho số vào máy tính..."
-InstallPath="%LOCALAPPDATA%\\DanhBa"
-OverwriteMode="2"
-RunProgram="cmd.exe /c Mo-Danh-Ba.bat"
+RunProgram="Mo-Danh-Ba.exe"
 ;!@InstallEnd@!
 """
 
@@ -29,6 +28,8 @@ def main() -> None:
     args = parser.parse_args()
     if not (args.folder / "Mo-Danh-Ba.bat").is_file():
         raise SystemExit(f"Không thấy bộ cài trong {args.folder}")
+    if not (args.folder / "Mo-Danh-Ba.exe").is_file():
+        raise SystemExit("Thiếu Mo-Danh-Ba.exe ở thư mục gốc của bộ cài")
     if not (args.folder / "kho" / "kho.sqlite").is_file():
         raise SystemExit("Bộ cài chưa có kho số")
     args.cache.mkdir(parents=True, exist_ok=True)
