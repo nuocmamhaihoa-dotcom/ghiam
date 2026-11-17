@@ -216,7 +216,8 @@ def test_download_software_and_full_number_list(tmp_path: Path) -> None:
         assert "Tải phần mềm và danh sách số" in page
         bundle = opener.open(f"http://127.0.0.1:{port}/tai").read().decode()
         assert "Tải mọi số đã chia vào danh bạ" in bundle
-        assert "Tải phần mềm đầy đủ tính năng" in bundle
+        assert "Tải bản máy tính kèm kho số đã làm" in bundle
+        assert "Tải mã phần mềm, không kèm kho" in bundle
         package = opener.open(f"http://127.0.0.1:{port}/tai/phan-mem.zip").read()
         archive = zipfile.ZipFile(io.BytesIO(package))
         names = archive.namelist()

@@ -120,6 +120,9 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             if path == "/tai/phan-mem.zip":
                 self._download_software()
                 return
+            if path == "/tai/danh-ba-pc.zip":
+                self._download_pc_bundle()
+                return
             if path == "/tai/danh-sach-so.csv":
                 self._download_numbers()
                 return
@@ -318,7 +321,8 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                 "<h1>Tải phần mềm và danh sách số</h1>"
                 f"<p>Kho đang có {total} số, đã chia vào {len(books)} danh bạ. "
                 "Mỗi danh bạ mới đủ 4.000 số. Số đã chia không sang danh bạ khác.</p>"
-                f'<a class="go" href="/tai/phan-mem.zip?key={key}">Tải phần mềm đầy đủ tính năng</a>'
+                f'<a class="go" href="/tai/danh-ba-pc.zip?key={key}">Tải bản máy tính kèm kho số đã làm</a>'
+                f'<a class="go" href="/tai/phan-mem.zip?key={key}">Tải mã phần mềm, không kèm kho</a>'
                 f'<a class="go" href="/tai/danh-sach-so.csv?key={key}">Tải mọi số đã chia vào danh bạ</a>'
                 f'<a class="go" href="/tai/danh-sach-danh-ba.csv?key={key}">Tải danh sách từng danh bạ</a>'
                 "<p>File số gồm cột so và danh_ba. Tải danh sách này không khóa danh bạ "
@@ -326,6 +330,13 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                 '<p><a href="/">Quay lại</a></p></div></body></html>'
             )
             self._bytes(200, body.encode("utf-8"), "text/html; charset=utf-8")
+
+        def _download_pc_bundle(self) -> None:
+            path = app.kho / "exports" / "danh-ba-pc.zip"
+            if not path.is_file():
+                self._json(404, {"error": "Bản máy tính chưa được đóng gói."})
+                return
+            self._send_path(path, "application/zip", "danh-ba-pc.zip")
 
         def _download_software(self) -> None:
             payload = _software_zip(app)
@@ -586,6 +597,7 @@ Tính năng đang dùng
 - Số đã chia vào danh bạ nào thì giữ nguyên danh bạ đó.
 - Các cách viết 090…, 84…, +84… và đầu số 11 số cũ đều bị lọc trùng.
 - Tải từng danh bạ trên máy tính và trên iPhone.
+- Bản tải về máy tính chạy độc lập, không cần VPS, và mang theo kho số đã chia.
 
 Danh sách số đã chia
 - Mở trang web, vào «Tải phần mềm và danh sách số».
