@@ -175,9 +175,14 @@
     if (onThisComputer) {
       document.title = "Danh bạ trên máy tính";
       document.querySelector("h1").textContent = "Danh bạ trên máy tính";
-      $("lead").textContent = "Phần mềm đang chạy trên máy tính này. Kho số đã có sẵn, không cần máy chủ.";
+      $("lead").textContent = "Phần mềm đang chạy trên máy tính này. Kho số nằm trong máy này. Không kết nối máy chủ.";
       const getApp = $("get-app");
-      if (getApp) getApp.classList.add("hide");
+      if (getApp) getApp.remove();
+      $("login").classList.add("hide");
+      $("app").classList.remove("hide");
+      loadBooks().catch((error) => {
+        $("result").textContent = error.message;
+      });
     } else {
       $("lead").textContent = touch
         ? "Giao diện điện thoại. Chọn nhiều file cùng lúc, không giới hạn số file."

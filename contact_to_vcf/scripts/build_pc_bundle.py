@@ -69,12 +69,12 @@ def _write_guide(path: Path) -> None:
         """DANH BẠ TRÊN MÁY TÍNH
 =====================
 
-Bản này chạy trên máy tính, không cần VPS.
+Bản này chạy trên máy tính. Trình duyệt chỉ mở http://127.0.0.1:8080/
 
 1. Giải nén cả thư mục DanhBaPC.
 2. Bấm đúp Mo-Danh-Ba.bat.
 3. Trình duyệt mở http://127.0.0.1:8080/
-4. Đăng nhập bằng tài khoản và mật khẩu đang hiện trên trang.
+4. Lần sau bấm biểu tượng Danh ba trên màn hình nền.
 
 Thư mục kho đã chứa toàn bộ số đã tạo danh bạ. Không xóa thư mục này.
 Khi nạp thêm file, số đã có sẽ bị lọc trùng và không tạo danh bạ mới.

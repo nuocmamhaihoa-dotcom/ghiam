@@ -89,7 +89,10 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                 return
             if path == "/api/kho":
                 books = list_books(app.kho, "all")
-                self._json(200, {"total": pool_total(app.kho), "books": len(books)})
+                payload: dict[str, object] = {"total": pool_total(app.kho), "books": len(books)}
+                if _running_on_this_computer():
+                    payload["local"] = True
+                self._json(200, payload)
                 return
             if path.startswith("/") and path.endswith(".vcf") and "/" not in path[1:]:
                 file_path = PAGE.parent / path[1:]
@@ -320,6 +323,9 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             self._json(404, {"error": "Không thấy trang"})
 
         def _download_page(self) -> None:
+            if _running_on_this_computer():
+                self._local_download_page()
+                return
             key = quote(app.download_key, safe="")
             host = self.headers.get("Host", "127.0.0.1")
             installer = f"http://{host}/tai/DanhBa-Setup.exe?key={key}"
@@ -351,6 +357,30 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                 "và không chuyển số sang file khác. Lần đầu với kho lớn có thể mất vài phút. "
                 "File lớn có thể tải tiếp nếu mạng bị đứt.</p>"
                 '<p><a href="/">Quay lại</a></p></div></body></html>'
+            )
+            self._bytes(200, body.encode("utf-8"), "text/html; charset=utf-8")
+
+        def _local_download_page(self) -> None:
+            total = pool_total(app.kho)
+            books = list_books(app.kho, "all")
+            body = (
+                "<!DOCTYPE html><html lang=\"vi\"><head><meta charset=\"utf-8\">"
+                "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+                "<title>Danh bạ trên máy tính</title><style>"
+                "body{font-family:system-ui,sans-serif;margin:0;background:#f4f1ea;color:#1c1917}"
+                ".wrap{max-width:560px;margin:0 auto;padding:20px}"
+                "a.go{display:flex;align-items:center;justify-content:center;min-height:52px;"
+                "margin:0 0 12px;border-radius:14px;background:#0f766e;color:#fff;"
+                "text-decoration:none;font-weight:650;text-align:center;padding:8px 12px}"
+                "p{color:#78716c;line-height:1.45}"
+                "</style></head><body><div class=\"wrap\">"
+                "<h1>Danh bạ trên máy tính</h1>"
+                f"<p>Phần mềm đang chạy trên máy tính này. Kho có {total} số trong {len(books)} danh bạ. "
+                "Không kết nối máy chủ.</p>"
+                '<a class="go" href="/">Quay lại phần mềm</a>'
+                '<a class="go" href="/tai/danh-sach-so.csv">Tải mọi số đã chia vào danh bạ</a>'
+                '<a class="go" href="/tai/danh-sach-danh-ba.csv">Tải danh sách từng danh bạ</a>'
+                "</div></body></html>"
             )
             self._bytes(200, body.encode("utf-8"), "text/html; charset=utf-8")
 
@@ -542,6 +572,8 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             return secrets.compare_digest(query_key, app.download_key)
 
         def _auth(self) -> bool:
+            if _running_on_this_computer() and self.client_address[0] in {"127.0.0.1", "::1"}:
+                return True
             if app.allowed(self._query_key()):
                 return True
             return app.allowed(self._cookie_token())
@@ -604,6 +636,10 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             return
 
     return Handler
+
+
+def _running_on_this_computer() -> bool:
+    return os.environ.get("DANHBA_LOCAL", "") == "1"
 
 
 def _load_download_key(kho: Path) -> str:

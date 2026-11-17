@@ -12,10 +12,11 @@ from pathlib import Path
 SFX_PAGE = "https://www.7-zip.org/a/lzma2301.7z"
 CONFIG = """;!@Install@!UTF-8!
 Title="Cài Danh bạ"
-BeginPrompt="Cài Danh bạ vào máy tính này, kèm toàn bộ số đã chia?"
-ExtractDialogText="Đang cài Danh bạ và kho số..."
+BeginPrompt="Cài Danh bạ vào máy tính này? Phần mềm chạy trên máy này, kèm toàn bộ số đã chia."
+ExtractDialogText="Đang chép phần mềm và kho số vào máy tính..."
 InstallPath="%LOCALAPPDATA%\\DanhBa"
-RunProgram="Mo-Danh-Ba.bat"
+OverwriteMode="2"
+RunProgram="cmd.exe /c Mo-Danh-Ba.bat"
 ;!@InstallEnd@!
 """
 
