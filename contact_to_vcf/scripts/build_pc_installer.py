@@ -9,7 +9,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-SFX_PAGE = "https://www.7-zip.org/a/7z2409-extra.7z"
+SFX_PAGE = "https://www.7-zip.org/a/7z2301-extra.7z"
 CONFIG = """;!@Install@!UTF-8!
 Title="Cài Danh bạ"
 BeginPrompt="Cài Danh bạ vào máy tính này, kèm toàn bộ số đã chia?"
