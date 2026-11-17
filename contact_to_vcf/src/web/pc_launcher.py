@@ -30,14 +30,29 @@ def local_port() -> int:
     return int(raw)
 
 
+def require_existing_pool(kho: Path) -> Path:
+    """Use the phone pool shipped with the app. Never start from an empty one."""
+    database = kho / "kho.sqlite"
+    if not database.is_file():
+        print("Không thấy kho số đã làm. Hãy giải nén đủ thư mục kho cạnh file Mo-Danh-Ba.bat.")
+        print(f"Đang tìm: {database}")
+        raise SystemExit(1)
+    return database
+
+
 def run(kho: Path, host: str, port: int, *, open_browser: bool) -> None:
     root = Path(__file__).resolve().parents[1]
     root_text = str(root)
     if root_text not in sys.path:
         sys.path.insert(0, root_text)
+    require_existing_pool(kho)
+    from processors.pool import list_books, pool_total
     from web.server import serve
 
-    kho.mkdir(parents=True, exist_ok=True)
+    total = pool_total(kho)
+    book_count = len(list_books(kho, "all"))
+    print(f"Đã nạp {total} số từ {book_count} danh bạ đã làm.")
+    print("Số đã có trong kho sẽ không được tạo danh bạ mới.")
     server = serve(kho, host=host, port=port)
     bound_port = int(server.server_address[1])
     url = f"http://{host}:{bound_port}/"

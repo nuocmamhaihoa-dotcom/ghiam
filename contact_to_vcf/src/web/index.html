@@ -111,6 +111,7 @@
       <label>Mật khẩu</label>
       <input id="password" type="password" value="danhba123" autocomplete="current-password">
       <button class="primary" id="enter" type="button">Vào phần mềm</button>
+      <p class="status" id="kho-ready">Đang đọc kho số đã làm...</p>
       <p class="error hide" id="login-error"></p>
     </section>
 
@@ -174,6 +175,12 @@
       : "Giao diện máy tính. Chọn nhiều file cùng lúc, không giới hạn số file.";
 
     const $ = (id) => document.getElementById(id);
+    fetch("/api/kho").then((response) => response.json()).then((data) => {
+      const total = Number(data.total || 0).toLocaleString("vi-VN");
+      $("kho-ready").textContent = "Đã có " + total + " số trong " + data.books + " danh bạ. Số đã tạo danh bạ sẽ không bị tạo lại.";
+    }).catch(() => {
+      $("kho-ready").textContent = "Chưa đọc được kho số đã làm.";
+    });
     let upload = null;
     let phoneColumn = 0;
     let filter = "all";

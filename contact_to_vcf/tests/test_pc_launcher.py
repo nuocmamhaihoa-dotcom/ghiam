@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from web.pc_launcher import local_host, local_kho, local_port
+import pytest
+
+from web.pc_launcher import local_host, local_kho, local_port, require_existing_pool
 
 
 def test_pc_launcher_uses_this_computer_and_the_bundled_pool(tmp_path: Path, monkeypatch) -> None:
@@ -20,6 +22,11 @@ def test_pc_launcher_uses_this_computer_and_the_bundled_pool(tmp_path: Path, mon
     assert "127.0.0.1" in text
     assert "DANHBA_KHO=%~dp0kho" in text
     assert "14.225" not in text
+    with pytest.raises(SystemExit):
+        require_existing_pool(tmp_path)
+    database = tmp_path / "kho.sqlite"
+    database.write_bytes(b"")
+    assert require_existing_pool(tmp_path) == database
 
 
 def test_pc_launcher_serves_the_local_pool(tmp_path: Path) -> None:
@@ -37,6 +44,9 @@ def test_pc_launcher_serves_the_local_pool(tmp_path: Path) -> None:
         page = urlopen(f"http://127.0.0.1:{port}/", timeout=5).read().decode()
         assert "Danh bạ" in page
         assert "4.000" in page
+        assert "Số đã tạo danh bạ sẽ không bị tạo lại." in page
+        status = json.load(urlopen(f"http://127.0.0.1:{port}/api/kho", timeout=5))
+        assert status == {"total": 0, "books": 0}
         login = urlopen(
             Request(
                 f"http://127.0.0.1:{port}/api/login",

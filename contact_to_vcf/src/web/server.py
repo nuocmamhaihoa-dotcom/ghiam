@@ -86,6 +86,10 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             if path in {"/", "/index.html"}:
                 self._bytes(200, PAGE.read_bytes(), "text/html; charset=utf-8")
                 return
+            if path == "/api/kho":
+                books = list_books(app.kho, "all")
+                self._json(200, {"total": pool_total(app.kho), "books": len(books)})
+                return
             if path.startswith("/") and path.endswith(".vcf") and "/" not in path[1:]:
                 file_path = PAGE.parent / path[1:]
                 if file_path.is_file():

@@ -76,8 +76,9 @@ Bản này chạy trên máy tính, không cần VPS.
 3. Trình duyệt mở http://127.0.0.1:8080/
 4. Đăng nhập bằng tài khoản và mật khẩu đang hiện trên trang.
 
-Kho số đã chia nằm trong thư mục kho. Mỗi danh bạ mới vẫn là 4.000 số.
-Số đã nằm trong danh bạ nào thì không chuyển sang danh bạ khác.
+Thư mục kho đã chứa toàn bộ số đã tạo danh bạ. Không xóa thư mục này.
+Khi nạp thêm file, số đã có sẽ bị lọc trùng và không tạo danh bạ mới.
+Mỗi danh bạ mới vẫn là 4.000 số. Số đã nằm trong danh bạ nào thì không chuyển đi.
 Đóng cửa sổ đen để tắt phần mềm.
 """,
         encoding="utf-8",
@@ -92,7 +93,10 @@ def _install_python(python_dir: Path, vendor_dir: Path, cache: Path) -> None:
     with zipfile.ZipFile(embed) as archive:
         archive.extractall(python_dir)
     pth = next(python_dir.glob("python*._pth"))
-    pth.write_text("python312.zip\n.\nimport site\n", encoding="utf-8")
+    pth.write_text(
+        "python312.zip\n.\n..\\vendor\n..\\contact_to_vcf\\src\nimport site\n",
+        encoding="utf-8",
+    )
     wheels = cache / "wheels"
     wheels.mkdir(exist_ok=True)
     subprocess.check_call(
