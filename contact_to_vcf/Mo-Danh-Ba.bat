@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 cd /d "%~dp0"
 set "DANHBA_KHO=%~dp0kho"
 set "DANHBA_HOST=127.0.0.1"

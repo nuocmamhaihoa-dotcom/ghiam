@@ -213,9 +213,10 @@ def test_download_software_and_full_number_list(tmp_path: Path) -> None:
         )
         assert imported["added"] == 2
         page = opener.open(f"http://127.0.0.1:{port}/").read().decode()
-        assert "Tải phần mềm và danh sách số" in page
+        assert "Tải file cài đặt cho máy tính" in page
         bundle = opener.open(f"http://127.0.0.1:{port}/tai").read().decode()
         assert "Tải mọi số đã chia vào danh bạ" in bundle
+        assert "Tải file cài đặt DanhBa-Setup.exe" in bundle
         assert "Tải bản máy tính kèm kho số đã làm" in bundle
         assert "Tải mã phần mềm, không kèm kho" in bundle
         package = opener.open(f"http://127.0.0.1:{port}/tai/phan-mem.zip").read()

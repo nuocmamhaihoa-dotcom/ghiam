@@ -127,6 +127,9 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             if path == "/tai/danh-ba-pc.zip":
                 self._download_pc_bundle()
                 return
+            if path == "/tai/DanhBa-Setup.exe":
+                self._download_pc_installer()
+                return
             if path == "/tai/danh-sach-so.csv":
                 self._download_numbers()
                 return
@@ -325,6 +328,7 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                 "<h1>Tải phần mềm và danh sách số</h1>"
                 f"<p>Kho đang có {total} số, đã chia vào {len(books)} danh bạ. "
                 "Mỗi danh bạ mới đủ 4.000 số. Số đã chia không sang danh bạ khác.</p>"
+                f'<a class="go" href="/tai/DanhBa-Setup.exe?key={key}">Tải file cài đặt DanhBa-Setup.exe</a>'
                 f'<a class="go" href="/tai/danh-ba-pc.zip?key={key}">Tải bản máy tính kèm kho số đã làm</a>'
                 f'<a class="go" href="/tai/phan-mem.zip?key={key}">Tải mã phần mềm, không kèm kho</a>'
                 f'<a class="go" href="/tai/danh-sach-so.csv?key={key}">Tải mọi số đã chia vào danh bạ</a>'
@@ -334,6 +338,13 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                 '<p><a href="/">Quay lại</a></p></div></body></html>'
             )
             self._bytes(200, body.encode("utf-8"), "text/html; charset=utf-8")
+
+        def _download_pc_installer(self) -> None:
+            path = app.kho / "exports" / "DanhBa-Setup.exe"
+            if not path.is_file():
+                self._json(404, {"error": "File cài đặt chưa được đóng gói."})
+                return
+            self._send_path(path, "application/octet-stream", "DanhBa-Setup.exe")
 
         def _download_pc_bundle(self) -> None:
             path = app.kho / "exports" / "danh-ba-pc.zip"

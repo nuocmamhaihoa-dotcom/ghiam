@@ -45,6 +45,7 @@ def test_pc_launcher_serves_the_local_pool(tmp_path: Path) -> None:
         assert "Danh bạ" in page
         assert "4.000" in page
         assert "Số đã tạo danh bạ sẽ không bị tạo lại." in page
+        assert "không cần máy chủ" in page
         status = json.load(urlopen(f"http://127.0.0.1:{port}/api/kho", timeout=5))
         assert status == {"total": 0, "books": 0}
         login = urlopen(

@@ -155,7 +155,7 @@
           </div>
           <button class="go" id="download-all" type="button">Tải hết chưa tải</button>
           <a class="go" href="/iphone">Tải trên iPhone</a>
-          <a class="go" href="/tai">Tải phần mềm và danh sách số</a>
+          <a class="go" id="get-app" href="/tai">Tải file cài đặt cho máy tính</a>
           <div style="overflow:auto">
             <table>
               <thead><tr><th>Danh bạ</th><th>Số lượng</th><th>Trạng thái</th><th></th></tr></thead>
@@ -170,11 +170,19 @@
   <script>
     const touch = navigator.maxTouchPoints > 0 || window.matchMedia("(max-width: 800px)").matches;
     document.body.classList.add(touch ? "phone" : "desktop");
-    document.getElementById("lead").textContent = touch
-      ? "Giao diện điện thoại. Chọn nhiều file cùng lúc, không giới hạn số file."
-      : "Giao diện máy tính. Chọn nhiều file cùng lúc, không giới hạn số file.";
-
     const $ = (id) => document.getElementById(id);
+    const onThisComputer = location.hostname === "127.0.0.1" || location.hostname === "localhost";
+    if (onThisComputer) {
+      document.title = "Danh bạ trên máy tính";
+      document.querySelector("h1").textContent = "Danh bạ trên máy tính";
+      $("lead").textContent = "Phần mềm đang chạy trên máy tính này. Kho số đã có sẵn, không cần máy chủ.";
+      const getApp = $("get-app");
+      if (getApp) getApp.classList.add("hide");
+    } else {
+      $("lead").textContent = touch
+        ? "Giao diện điện thoại. Chọn nhiều file cùng lúc, không giới hạn số file."
+        : "Giao diện máy tính. Chọn nhiều file cùng lúc, không giới hạn số file.";
+    }
     fetch("/api/kho").then((response) => response.json()).then((data) => {
       const total = Number(data.total || 0).toLocaleString("vi-VN");
       $("kho-ready").textContent = "Đã có " + total + " số trong " + data.books + " danh bạ. Số đã tạo danh bạ sẽ không bị tạo lại.";
