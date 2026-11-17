@@ -9,7 +9,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-SFX_PAGE = "https://www.7-zip.org/a/7z2301-extra.7z"
+SFX_PAGE = "https://www.7-zip.org/a/lzma2301.7z"
 CONFIG = """;!@Install@!UTF-8!
 Title="Cài Danh bạ"
 BeginPrompt="Cài Danh bạ vào máy tính này, kèm toàn bộ số đã chia?"
@@ -60,18 +60,18 @@ def _seven_zip() -> str:
 
 
 def _sfx_stub(cache: Path) -> Path:
-    stub = cache / "7zS.sfx"
+    stub = cache / "7zSD.sfx"
     if stub.is_file() and stub.stat().st_size > 10_000:
         return stub
-    extra = cache / "7z-extra.7z"
+    extra = cache / "lzma-sdk.7z"
     if not extra.is_file():
         urllib.request.urlretrieve(SFX_PAGE, extra)
-    extracted = cache / "7z-extra"
+    extracted = cache / "lzma-sdk"
     if extracted.exists():
         shutil.rmtree(extracted)
     extracted.mkdir()
     subprocess.check_call([_seven_zip(), "x", f"-o{extracted}", str(extra)], cwd=cache)
-    found = next(extracted.rglob("7zS.sfx"))
+    found = next(extracted.rglob("7zSD.sfx"))
     shutil.copyfile(found, stub)
     return stub
 
