@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Trang chủ · Quét bình luận công khai</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.45 "Segoe UI", Roboto, sans-serif; background: #e8edf3; color: #243140; }
+    header { background: #fff; height: 52px; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; border-bottom: 1px solid #e3e8ee; }
+    header strong { font-weight: 600; }
+    nav button { background: none; border: 0; color: #3d6f9a; cursor: pointer; margin-right: 14px; font: inherit; }
+    #who { color: #5c6b7a; }
+    main { max-width: 1180px; margin: 0 auto; padding: 18px; }
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+    .card { background: #fff; border-radius: 8px; padding: 16px 18px; box-shadow: 0 1px 2px rgba(20,40,60,.05); }
+    .kpi b { display: block; font-size: 32px; font-weight: 600; letter-spacing: -0.5px; }
+    .kpi span, .muted { color: #7d8b99; font-size: 13px; }
+    h2 { font-size: 16px; font-weight: 600; margin: 22px 0 10px; }
+    table { width: 100%; border-collapse: collapse; background: #fff; }
+    th { text-align: left; background: #e7f1fa; color: #35597a; font-weight: 600; padding: 8px 10px; }
+    td { padding: 8px 10px; border-top: 1px solid #eef2f6; vertical-align: top; }
+    tr.ok td { background: #eefaf3; }
+    .banner { background: #e5f7ec; color: #1e7a45; border-radius: 6px; padding: 10px 12px; margin: 8px 0 12px; }
+    .panel { background: #fff; border-radius: 8px; padding: 12px; }
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+    textarea { width: 100%; min-height: 180px; font: 13px/1.4 ui-monospace, monospace; padding: 8px; }
+    button.go { background: #2f7d32; color: #fff; border: 0; border-radius: 4px; padding: 8px 14px; cursor: pointer; }
+    .login { max-width: 380px; margin: 80px auto; }
+    .login input { width: 100%; padding: 8px; margin: 6px 0 12px; }
+    .err { color: #a12626; }
+    .hide { display: none; }
+    @media (max-width: 900px) { .kpis { grid-template-columns: 1fr 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <strong>Trang chủ</strong>
+      <span class="muted"> · quét bình luận công khai</span>
+    </div>
+    <div id="nav" class="hide">
+      <button data-page="home" type="button">Tổng quan</button>
+      <button data-page="posts" type="button">Bài viết</button>
+      <button data-page="proxy" type="button">Proxy 4G</button>
+      <button data-page="pc" type="button">PC nhà</button>
+      <span id="who"></span>
+      <button id="out" type="button">Thoát</button>
+    </div>
+  </header>
+  <main>
+    <section id="login" class="card login">
+      <h2>Đăng nhập</h2>
+      <form id="loginForm" method="post" action="/api/login" autocomplete="on">
+        <label>Tài khoản<input id="user" name="username" autocomplete="username" required /></label>
+        <label>Mật khẩu<input id="pass" name="password" type="password" autocomplete="current-password" required /></label>
+        <button class="go" id="in" type="submit">Vào</button>
+        <p id="loginErr" class="err"></p>
+      </form>
+    </section>
+    <section id="home" class="hide"></section>
+    <section id="posts" class="hide">
+      <h2>Danh sách bài công khai</h2>
+      <p class="muted">Mỗi dòng một link hoặc mã bài. Tối đa 500 bài. Hướng A bám đúng danh sách này.</p>
+      <textarea id="postText" placeholder="https://www.facebook.com/..."></textarea>
+      <h2>8 bài nóng</h2>
+      <p class="muted">Mỗi dòng một bài đã có trong danh sách. Tối đa 8. Mỗi line 4G bám một bài. Bài ngoài danh sách này không được GET.</p>
+      <textarea id="hotText"></textarea>
+      <p><button class="go" id="saveHot" type="button">Lưu bài nóng</button> <span id="hotMsg"></span></p>
+      <p><button class="go" id="savePosts" type="button">Lưu danh sách</button> <span id="postMsg"></span></p>
+    </section>
+    <section id="proxy" class="hide">
+      <h2>Line 4G xoay IP</h2>
+      <p class="muted">Line 4G, mỗi dòng host:port:user:pass hoặc host:port:user:pass|https://link-xoay. Xoay ngay khi im, 429 hoặc vỏ đếm. Trần 8 GET. Proxy hosting chỉ lưu để đối chiếu, không đọc chữ.</p>
+      <textarea id="staticText" placeholder="Proxy hosting, không dùng để GET"></textarea>
+      <textarea id="proxyText"></textarea>
+      <p><button class="go" id="saveProxy" type="button">Lưu line 4G</button> <span id="proxyMsg"></span></p>
+      <div id="proxyTable"></div>
+    </section>
+    <section id="pc" class="hide">
+      <h2>PC nhà nối vào VPS</h2>
+      <p class="muted">Cài PC bằng <a href="/pc/CaiDat-PC.exe">CaiDat-PC.exe</a>. File này hỏi token và slot, ghi kết nối, tự chạy khi đăng nhập Windows và tự bật bản mới ngay khi VPS có phiên bản khác. <a href="/pc/renew-home-ip.ps1">renew-home-ip.ps1</a> làm mới IP nhà.</p>
+      <p>Token PC: <code id="pcToken"></code></p>
+      <pre id="pcHelp"></pre>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
