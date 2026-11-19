@@ -1775,3 +1775,23 @@ def customers_export(request: Request, authorization: str | None = Header(defaul
         dest.unlink(missing_ok=True)
         raise
     return _xlsx_file_response(dest, "kho-khach.xlsx")
+
+
+def phone_workbook_path() -> Path:
+    return settings.data_dir / "exports" / "so-dien-thoai-kho.xlsx"
+
+
+@router.get("/v1/customers/phones.xlsx")
+def customers_phones_export(request: Request, authorization: str | None = Header(default=None)) -> FileResponse:
+    """File Excel mọi số điện thoại đang có trong kho. Quản lý và nhân viên đều tải được."""
+    _actor(request)
+    dest = phone_workbook_path()
+    if not dest.is_file() or dest.stat().st_size <= 0:
+        raise HTTPException(status_code=404, detail="File số điện thoại đang được tạo. Hãy tải lại sau ít phút.")
+    filename = quote("so-dien-thoai-kho.xlsx")
+    return FileResponse(
+        path=dest,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename="so-dien-thoai-kho.xlsx",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+    )
