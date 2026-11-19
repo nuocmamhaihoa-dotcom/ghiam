@@ -27,6 +27,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from control_plane import db  # noqa: E402
 from control_plane.app import app  # noqa: E402
+from control_plane.excel_import import iter_xlsx_rows, write_phone_xlsx  # noqa: E402
 from control_plane.settings import settings  # noqa: E402
 
 
@@ -111,7 +112,8 @@ class AccountApiTests(unittest.TestCase):
         self.assertIn("Hạn mức tra cứu", home.text)
         self.assertIn("boot()", home.text)
         self.assertIn('var serverToken = "";', home.text)
-        self.assertIn("20261110b", home.text)
+        self.assertIn("20261119a", home.text)
+        self.assertIn("Tải hết số điện thoại", home.text)
         self.assertIn("Copy số điện thoại - UID Facebook - địa chỉ", home.text)
         store_nav = next(line for line in home.text.splitlines() if 'id="navStore"' in line)
         store_box = next(line for line in home.text.splitlines() if 'id="storeBox"' in line)
@@ -324,6 +326,31 @@ class AccountApiTests(unittest.TestCase):
         self.assertEqual(staff_uid["copy"], manager_uid["copy"])
         self.assertEqual(self.staff.get("/v1/accounts").status_code, 403)
         self.assertEqual(self.staff.get("/v1/customers/sessions").status_code, 403)
+
+    def test_staff_and_manager_download_the_same_phone_workbook(self) -> None:
+        self._setup()
+        self._staff(limit=5)
+        self._login(self.staff, "nhanvien", "nhanvien1")
+        missing = self.manager.get("/v1/customers/phones.xlsx")
+        self.assertEqual(missing.status_code, 404, missing.text)
+        dest = settings.data_dir / "exports" / "so-dien-thoai-kho.xlsx"
+        written = write_phone_xlsx(
+            ["0901222333", "  ", "0901555666", "0987654321"],
+            dest,
+            sheet_rows=2,
+        )
+        self.assertEqual(written, 3)
+        manager = self.manager.get("/v1/customers/phones.xlsx")
+        staff = self.staff.get("/v1/customers/phones.xlsx")
+        anon = self.token_client.get("/v1/customers/phones.xlsx")
+        self.assertEqual(manager.status_code, 200, manager.content[:80])
+        self.assertEqual(staff.status_code, 200)
+        self.assertEqual(anon.status_code, 401)
+        self.assertEqual(staff.content, manager.content)
+        self.assertIn("spreadsheetml", manager.headers["content-type"])
+        rows = list(iter_xlsx_rows(manager.content))
+        self.assertEqual(rows[0], ["Số điện thoại"])
+        self.assertEqual(rows[1:], [["0901222333"], ["0901555666"], ["0987654321"]])
 
     def test_manager_sets_limit_and_is_not_charged(self) -> None:
         manager = self._setup()

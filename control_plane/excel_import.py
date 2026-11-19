@@ -1718,6 +1718,125 @@ def write_xlsx_to_path(
     return dest
 
 
+def _phone_workbook_parts(sheet_count: int) -> dict[str, str]:
+    """Các phần khung của file Excel sau khi từng sheet số điện thoại đã ghi xong."""
+    count = max(1, sheet_count)
+    overrides = [
+        f'<Override PartName="/xl/worksheets/sheet{index}.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        for index in range(1, count + 1)
+    ]
+    content_types = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">\n'
+        '  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>\n'
+        '  <Default Extension="xml" ContentType="application/xml"/>\n'
+        '  <Override PartName="/xl/workbook.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>\n'
+        + "\n".join(f"  {item}" for item in overrides)
+        + "\n</Types>\n"
+    )
+    rels = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>
+"""
+    sheet_nodes = "".join(
+        f'<sheet name="{_xlsx_escape(f"SĐT {index}")}" sheetId="{index}" r:id="rId{index}"/>'
+        for index in range(1, count + 1)
+    )
+    workbook = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">\n'
+        f"  <sheets>{sheet_nodes}</sheets>\n"
+        "</workbook>\n"
+    )
+    workbook_rels = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n'
+        + "".join(
+            f'  <Relationship Id="rId{index}" '
+            'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
+            f'Target="worksheets/sheet{index}.xml"/>\n'
+            for index in range(1, count + 1)
+        )
+        + "</Relationships>\n"
+    )
+    return {
+        "[Content_Types].xml": content_types,
+        "_rels/.rels": rels,
+        "xl/workbook.xml": workbook,
+        "xl/_rels/workbook.xml.rels": workbook_rels,
+    }
+
+
+def write_phone_xlsx(
+    phones: Iterable[str],
+    dest: Path,
+    *,
+    sheet_rows: int = EXCEL_SHEET_ROWS,
+) -> int:
+    """Mỗi số điện thoại một dòng. Chia sheet trước giới hạn một triệu dòng của Excel.
+
+    Ghi thẳng vào file nén, không giữ các sheet trên đĩa. Trả về số dòng đã ghi.
+    """
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    limit = max(1, min(int(sheet_rows), 1_048_575))
+    partial = dest.with_name(dest.name + ".partial")
+    written = 0
+    sheet_index = 0
+    data_in_sheet = 0
+    row_number = 1
+    sheet: Any = None
+    try:
+        with zipfile.ZipFile(
+            partial,
+            "w",
+            compression=zipfile.ZIP_DEFLATED,
+            compresslevel=6,
+            allowZip64=True,
+        ) as archive:
+            def start_sheet() -> None:
+                nonlocal sheet_index, data_in_sheet, row_number, sheet
+                sheet_index += 1
+                sheet = archive.open(f"xl/worksheets/sheet{sheet_index}.xml", "w")
+                sheet.write(_xlsx_sheet_header().encode())
+                sheet.write(_xlsx_row_xml(1, ["Số điện thoại"]).encode())
+                data_in_sheet = 0
+                row_number = 1
+
+            def end_sheet() -> None:
+                nonlocal sheet
+                if sheet is None:
+                    return
+                sheet.write(_xlsx_sheet_footer().encode())
+                sheet.close()
+                sheet = None
+
+            start_sheet()
+            for raw in phones:
+                phone = str(raw or "").strip()
+                if not phone:
+                    continue
+                if data_in_sheet >= limit:
+                    end_sheet()
+                    start_sheet()
+                row_number += 1
+                data_in_sheet += 1
+                written += 1
+                sheet.write(_xlsx_row_xml(row_number, [phone]).encode())
+            end_sheet()
+            for name, body in _phone_workbook_parts(sheet_index).items():
+                archive.writestr(name, body)
+        os.replace(partial, dest)
+    except Exception:
+        partial.unlink(missing_ok=True)
+        raise
+    return written
+
+
 def _phone_columns(sample: list[list[str]]) -> set[int]:
     """Cột SĐT của file tra cứu: tiêu đề là SĐT, hoặc ít nhất nửa số ô mẫu là số điện thoại."""
     if not sample:
