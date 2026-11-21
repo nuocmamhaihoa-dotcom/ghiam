@@ -6,6 +6,7 @@ import asyncio
 import ctypes
 import gc
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -1793,5 +1794,40 @@ def customers_phones_export(request: Request, authorization: str | None = Header
         path=dest,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         filename="so-dien-thoai-kho.xlsx",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+    )
+
+
+def phone_text_path() -> Path:
+    return settings.data_dir / "exports" / "so-dien-thoai-kho.txt"
+
+
+def phone_text_token_path() -> Path:
+    return settings.data_dir / "exports" / "so-dien-thoai-kho.token"
+
+
+def _phone_download_allowed(request: Request) -> None:
+    """Phiên đăng nhập hoặc đường dẫn riêng đã cấp cho quản lý."""
+    supplied = str(request.query_params.get("token") or "")
+    token_path = phone_text_token_path()
+    if supplied and token_path.is_file():
+        expected = token_path.read_text(encoding="utf-8").strip()
+        if expected and hmac.compare_digest(supplied, expected):
+            return
+    _actor(request)
+
+
+@router.get("/v1/customers/phones.txt")
+def customers_phones_text(request: Request, authorization: str | None = Header(default=None)) -> FileResponse:
+    """Danh sách mọi số điện thoại, mỗi số một dòng. Quản lý và nhân viên đều tải được."""
+    _phone_download_allowed(request)
+    dest = phone_text_path()
+    if not dest.is_file() or dest.stat().st_size <= 0:
+        raise HTTPException(status_code=404, detail="Danh sách số điện thoại đang được tạo. Hãy tải lại sau ít phút.")
+    filename = quote("so-dien-thoai-kho.txt")
+    return FileResponse(
+        path=dest,
+        media_type="text/plain; charset=utf-8",
+        filename="so-dien-thoai-kho.txt",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
     )
