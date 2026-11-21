@@ -346,7 +346,7 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
                 "</style></head><body><div class=\"wrap\">"
                 "<h1>Tải phần mềm và danh sách số</h1>"
                 f"<p>Kho đang có {total} số, đã chia vào {len(books)} danh bạ. "
-                "Mỗi danh bạ mới đủ 4.000 số. Số đã chia không sang danh bạ khác.</p>"
+                "Mỗi danh bạ mới đủ 1.000 số. Số đã chia không sang danh bạ khác.</p>"
                 f'<a class="go" href="{installer}">Tải file cài đặt DanhBa-Setup.exe</a>'
                 f"<p>Link tải file cài đặt:</p><code>{installer}</code>"
                 f'<a class="go" href="/tai/danh-ba-pc.zip?key={key}">Tải bản máy tính kèm kho số đã làm</a>'
@@ -514,8 +514,8 @@ def _handler(app: PoolApp) -> type[BaseHTTPRequestHandler]:
             if pending:
                 sections.append("<h2>Chưa tải</h2>")
                 sections.append(
-                    "<p>Danh bạ mới ở đây. File đã đủ có 4.000 số. "
-                    "File cuối cùng vẫn đang nhận số cho đến khi đủ 4.000.</p>"
+                    "<p>Danh bạ mới ở đây. File đã đủ có 1.000 số. "
+                    "File cuối cùng vẫn đang nhận số cho đến khi đủ 1.000.</p>"
                 )
                 sections.extend(link(book) for book in pending)
             if downloaded:
@@ -720,7 +720,7 @@ Tính năng đang dùng
 - Đọc CSV, Excel, TXT, UTF-16 và file có chứa số điện thoại.
 - File Excel lấy số ở cột B và đưa về 10 số nhà mạng Việt Nam.
 - Tên liên hệ ghi đúng bằng số điện thoại đó.
-- Mỗi danh bạ mới chia đúng 4.000 số.
+- Mỗi danh bạ mới chia đúng 1.000 số.
 - Số đã chia vào danh bạ nào thì giữ nguyên danh bạ đó.
 - Các cách viết 090…, 84…, +84… và đầu số 11 số cũ đều bị lọc trùng.
 - Tải từng danh bạ trên máy tính và trên iPhone.

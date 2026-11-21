@@ -19,7 +19,7 @@ from processors.phone_normalizer import (
     to_vietnam_10,
 )
 
-CONTACTS_PER_FILE = 4000
+CONTACTS_PER_FILE = 1000
 
 
 @dataclass(frozen=True)

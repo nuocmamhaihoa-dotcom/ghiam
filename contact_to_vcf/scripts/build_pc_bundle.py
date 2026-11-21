@@ -76,9 +76,9 @@ Bản này chạy trên máy tính. Trình duyệt chỉ mở http://127.0.0.1:8
 3. Trình duyệt mở http://127.0.0.1:8080/
 4. Lần sau bấm biểu tượng Danh ba trên màn hình nền.
 
-Thư mục kho đã chứa toàn bộ số đã tạo danh bạ. Không xóa thư mục này.
-Khi nạp thêm file, số đã có sẽ bị lọc trùng và không tạo danh bạ mới.
-Mỗi danh bạ mới vẫn là 4.000 số. Số đã nằm trong danh bạ nào thì không chuyển đi.
+Kho trong file này có 15.472.123 số thuộc 7.120 danh bạ đã chia. Không xóa thư mục kho.
+Những danh bạ đã chia giữ nguyên số lượng. Số đã có sẽ không bị chia lại.
+Mỗi danh bạ mới là 1.000 số.
 Đóng cửa sổ đen để tắt phần mềm.
 """,
         encoding="utf-8",

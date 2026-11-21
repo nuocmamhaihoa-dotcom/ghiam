@@ -51,7 +51,7 @@ def test_pc_launcher_serves_the_local_pool(tmp_path: Path) -> None:
     try:
         page = urlopen(f"http://127.0.0.1:{port}/", timeout=5).read().decode()
         assert "Danh bạ" in page
-        assert "4.000" in page
+        assert "1.000" in page
         assert "Số đã tạo danh bạ sẽ không bị tạo lại." in page
         assert "Không kết nối máy chủ" in page
         assert "14.225" not in page

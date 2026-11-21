@@ -30,7 +30,7 @@ def test_phone_and_computer_page_and_pool(tmp_path: Path) -> None:
         page = opener.open(f"http://127.0.0.1:{port}/").read().decode()
         assert "Vào phần mềm" in page
         assert "Tạo danh bạ" in page
-        assert "4.000" in page
+        assert "1.000" in page
         assert 'type="file" multiple' in page
         assert "Chọn nhiều file" in page
         assert "Mỗi danh bạ bao nhiêu số điện thoại?" not in page
@@ -226,7 +226,7 @@ def test_download_software_and_full_number_list(tmp_path: Path) -> None:
         assert "contact_to_vcf/TINH_NANG.txt" in names
         assert any(name.endswith("src/web/server.py") for name in names)
         note = archive.read("contact_to_vcf/TINH_NANG.txt").decode("utf-8")
-        assert "4.000" in note
+        assert "1.000" in note
         assert "lọc trùng" in note
         numbers = opener.open(f"http://127.0.0.1:{port}/tai/danh-sach-so.csv").read().decode()
         assert numbers.startswith("so,danh_ba\n")
