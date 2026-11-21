@@ -345,9 +345,10 @@
   <section id="lookupBox">
     <h2>Tra cứu hàng loạt</h2>
     <p class="row">
-      <button class="ghost" type="button" id="exportPhones">Tải hết số điện thoại</button>
+      <button class="ghost" type="button" id="exportPhones">Tải Excel số điện thoại</button>
+      <button class="ghost" type="button" id="exportPhonesTxt">Tải danh sách số .txt</button>
     </p>
-    <p class="note">Nút này tải một file Excel gồm mọi số điện thoại trong kho, mỗi số một dòng. File có nhiều sheet vì mỗi sheet chứa một triệu số.</p>
+    <p class="note">Hai nút này tải mọi số điện thoại trong kho, mỗi số một dòng. File Excel có nhiều sheet vì mỗi sheet chứa một triệu số. File văn bản là một danh sách thuần.</p>
     <details class="guide">
       <summary>Cách tra cứu</summary>
       <p class="note" id="lookupHelp">Dán list số rồi bấm Tra cứu — không bắt buộc chọn file. Số 84, 0 hoặc thiếu số 0 vẫn khớp. Một ô có hai số (0901… - 0912…) thì đó là một khách. File lấy số điện thoại Việt Nam ở mọi cột, kể cả cột SĐT: số Việt Nam thường 10 số; không lấy UID Facebook, số nước ngoài hay số ngắn. Chọn thêm file là cộng vào. Tra theo lô số, không đọc cả kho. Tải Excel kết quả không phải gửi lại file. Mỗi dòng trong ô dán ra đúng một dòng kết quả, kể cả dòng trống ở đầu, ở giữa, ở cuối và dòng không phải số. Mỗi dòng file có số cũng ra một dòng, kể cả khi số đó đã có ở dòng khác. Có địa chỉ hoặc địa chỉ hành chính thì trả địa chỉ. Cả dòng không có địa chỉ thì ô là dấu chấm. Một dòng có hai số mà cả hai đều có địa chỉ thì hai địa chỉ nằm cùng một ô, mỗi địa chỉ một dòng. Một trong hai số không có địa chỉ thì chỉ trả địa chỉ của số còn lại. Copy để số điện thoại bên trái và địa chỉ bên phải. Phần mềm đối chiếu với kho đã lưu, không nạp thêm khách. Nhân viên bị trừ hạn mức theo số mới trong ngày; số đã tra hôm nay không tính lại.</p>
@@ -402,7 +403,8 @@
       <input id="query" type="search" placeholder="Tìm tên, số, địa chỉ, hàng mua, COD, UID Facebook, ID TikTok" />
       <button class="ghost" type="button" id="storeClear">Bỏ lọc</button>
       <button class="ghost" type="button" id="export">Tải Excel kho khách</button>
-      <button class="ghost" type="button" id="exportPhonesStore">Tải hết số điện thoại</button>
+      <button class="ghost" type="button" id="exportPhonesStore">Tải Excel số điện thoại</button>
+      <button class="ghost" type="button" id="exportPhonesTxtStore">Tải danh sách số .txt</button>
     </p>
     <p class="row">
       <button class="ghost" type="button" id="storePrev" hidden>Trang trước</button>
@@ -2588,10 +2590,10 @@
     }
   }
 
-  async function downloadPhones(noteId) {
-    setNote(noteId, "Đang tải file Excel mọi số điện thoại trong kho…");
+  async function downloadPhoneFile(noteId, path, filename, waiting, done) {
+    setNote(noteId, waiting);
     try {
-      var response = await api("/v1/customers/phones.xlsx", { waitMs: 3 * 60 * 60 * 1000, tries: 1 });
+      var response = await api(path, { waitMs: 3 * 60 * 60 * 1000, tries: 1 });
       if (response.status === 401) {
         showGate(false);
         setNote("gateNote", "Hãy đăng nhập lại.", "warn");
@@ -2610,15 +2612,35 @@
       var url = URL.createObjectURL(blob);
       var link = document.createElement("a");
       link.href = url;
-      link.download = "so-dien-thoai-kho.xlsx";
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
-      setNote(noteId, "Đã tải file Excel mọi số điện thoại trong kho.", "ok");
+      setNote(noteId, done, "ok");
     } catch (error) {
       setNote(noteId, "Không tải được file số điện thoại.", "warn");
     }
+  }
+
+  function downloadPhones(noteId) {
+    downloadPhoneFile(
+      noteId,
+      "/v1/customers/phones.xlsx",
+      "so-dien-thoai-kho.xlsx",
+      "Đang tải file Excel mọi số điện thoại trong kho…",
+      "Đã tải file Excel mọi số điện thoại trong kho."
+    );
+  }
+
+  function downloadPhonesTxt(noteId) {
+    downloadPhoneFile(
+      noteId,
+      "/v1/customers/phones.txt",
+      "so-dien-thoai-kho.txt",
+      "Đang tải danh sách số điện thoại…",
+      "Đã tải danh sách số điện thoại."
+    );
   }
 
   async function exportBook() {
@@ -2720,7 +2742,9 @@
   });
   document.getElementById("export").addEventListener("click", exportBook);
   document.getElementById("exportPhones").addEventListener("click", function () { downloadPhones("lookupNote"); });
+  document.getElementById("exportPhonesTxt").addEventListener("click", function () { downloadPhonesTxt("lookupNote"); });
   document.getElementById("exportPhonesStore").addEventListener("click", function () { downloadPhones("listNote"); });
+  document.getElementById("exportPhonesTxtStore").addEventListener("click", function () { downloadPhonesTxt("listNote"); });
   document.getElementById("lookupPick").addEventListener("click", function () {
     document.getElementById("lookupFile").click();
   });
