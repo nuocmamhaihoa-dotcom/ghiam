@@ -66,6 +66,15 @@ from pc_macro.updater import (
 )
 from pc_macro.version import PC_MACRO_BUILD
 from pc_macro.cloak import mask_address
+from pc_macro.login_page import (
+    BOARD_COLORS,
+    BOARD_LABELS,
+    OUTCOME_PASSWORD_WAIT,
+    PASSWORD_WAIT_LABEL,
+    capture_login_view,
+    recover_login_after_password,
+    resolve_enter_outcome,
+)
 from pc_macro.vpn import KIND_LABELS, VpnClient, status_label
 from pc_macro.win_focus import (
     bring_window_at,
@@ -1412,6 +1421,14 @@ class App:
     def _lane_frame(self, index: int) -> dict[str, Any] | None:
         return lane_watch_frame(self.lanes.watch_frames, self._lane_focus_clicks(), index)
 
+    def _saved_back_click(self) -> dict[str, Any] | None:
+        """A recover click named 'quay lại' / back, if the user bound one."""
+        for item in sanitize_clicks(self.lanes.lane_clicks):
+            name = str(item.get("name") or "").lower()
+            if "quay" in name or "back" in name or "lại" in name:
+                return item
+        return None
+
     def _raise_customer(self) -> dict[str, Any] | None:
         target = customer_target(self._lane_focus_clicks()) or customer_target(self.lanes.lane_clicks)
         if target is None:
@@ -1667,7 +1684,9 @@ class App:
                 return []
             kept: list[str] = []
             hits: list[str] = []
-            for index, code in active:
+            waits: list[str] = []
+            clicks = self._lane_clicks_for(active)
+            for offset, (index, code) in enumerate(active):
                 try:
                     changed, _percent = watch_changed(
                         befores.get(index),
@@ -1676,14 +1695,44 @@ class App:
                     )
                 except Exception:
                     changed = False
-                self.lanes.note_enter(code, changed)
+                bound = clicks[offset] if offset < len(clicks) else None
+                view = None
+                try:
+                    view = capture_login_view(bound)
+                except Exception:
+                    view = None
+                pixels = (view or {}).get("pixels")
+                outcome = resolve_enter_outcome(
+                    changed=changed,
+                    pixels=pixels,
+                    width=int((view or {}).get("width") or 0),
+                    height=int((view or {}).get("height") or 0),
+                )
+                if outcome == OUTCOME_PASSWORD_WAIT:
+                    recover_login_after_password(
+                        self.desktop.send,
+                        time.sleep,
+                        bound,
+                        view,
+                        saved_back=self._saved_back_click(),
+                        cancelled=lambda: self.player2 is None or self.player2.cancelled,
+                        recapture=lambda click=bound: capture_login_view(click),
+                    )
+                self.lanes.note_enter(code, outcome != "ok", outcome)
                 self.lanes.take_lane(index)
                 kept.append(code)
-                if changed:
-                    hits.append(code_digits(code))
+                digits = code_digits(code)
+                if outcome == OUTCOME_PASSWORD_WAIT:
+                    waits.append(digits)
+                elif outcome == "changed" or changed:
+                    hits.append(digits)
             shown = " · ".join(code_digits(item) for item in kept) or "—"
             nxt = code_digits(self.lanes.peek_one()) or "—"
-            if hits:
+            if waits:
+                self._set_status(
+                    f"Đã Enter {shown}. {PASSWORD_WAIT_LABEL}: {' · '.join(waits)}. Đã bấm quay lại. Tiếp theo: {nxt}."
+                )
+            elif hits:
                 self._set_status(f"Đã Enter {shown}. Đổi giao diện: {' · '.join(hits)}. Tiếp theo: {nxt}.")
             else:
                 self._set_status(f"Đã Enter {shown}. Tăng 1 → tiếp theo: {nxt}.")
@@ -1856,8 +1905,8 @@ class App:
             return
         for child in body.winfo_children():
             child.destroy()
-        labels = {"run": "Đang chạy", "changed": "Đổi giao diện", "ok": "Giữ nguyên"}
-        colors = {"run": "#7dd3fc", "changed": "#fbbf24", "ok": "#94a3b8"}
+        labels = dict(BOARD_LABELS)
+        colors = dict(BOARD_COLORS)
         rows = self.lanes.board_rows(12)
         if not rows:
             tk.Label(body, text="Chưa gõ số nào.", font=("Segoe UI", 10), bg="#16324f", fg="#64748b").pack(
@@ -1886,10 +1935,14 @@ class App:
                 anchor="w",
             ).pack(side="left", fill="x", expand=True, padx=4)
         changed = self.lanes.changed_digits()
-        if changed:
-            self.changed_label.set("Đổi giao diện: " + " · ".join(changed))
-        else:
-            self.changed_label.set("Chưa có số đổi giao diện")
+        waiting = self.lanes.password_digits()
+        parts: list[str] = []
+        if waiting:
+            parts.append(PASSWORD_WAIT_LABEL + ": " + " · ".join(waiting))
+        leftover = [item for item in changed if item not in waiting]
+        if leftover:
+            parts.append("Đổi giao diện: " + " · ".join(leftover))
+        self.changed_label.set(" · ".join(parts) if parts else "Chưa có số đổi giao diện")
 
     def _persist_lanes(self, *, silent: bool) -> None:
         self._sync_lanes()

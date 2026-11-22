@@ -56,20 +56,22 @@ def code_digits(code: Any) -> str:
 
 
 def sanitize_turns(raw: Any) -> list[dict[str, Any]]:
-    """Keep each Enter as {digits, code, changed} so the board can replay it."""
+    """Keep each Enter as {digits, code, changed, outcome} so the board can replay it."""
     rows: list[dict[str, Any]] = []
     for item in raw or []:
         if isinstance(item, dict):
             code = "".join(ch for ch in str(item.get("code") or "") if ch.isalnum())[: PREFIX_LEN + DIGIT_LEN]
             digits = code_digits(item.get("digits") or code)
-            changed = bool(item.get("changed"))
+            outcome = _turn_outcome(item)
+            changed = bool(item.get("changed")) or outcome in {"password_wait", "changed"}
         else:
             code = "".join(ch for ch in str(item or "") if ch.isalnum())[: PREFIX_LEN + DIGIT_LEN]
             digits = code_digits(code)
+            outcome = "ok"
             changed = False
         if not digits:
             continue
-        rows.append({"digits": digits, "code": code or digits, "changed": changed})
+        rows.append({"digits": digits, "code": code or digits, "changed": changed, "outcome": outcome})
         if len(rows) >= _MAX_ITEMS:
             break
     return rows
@@ -609,12 +611,22 @@ class FourLaneQueue:
         self.running = _clean_code(code)
         return self.running
 
-    def note_enter(self, code: str, changed: bool = False) -> dict[str, Any]:
-        """Record one typed code after Enter. Keep a prior F9 'changed' mark."""
+    def note_enter(self, code: str, changed: bool = False, outcome: str = "") -> dict[str, Any]:
+        """Record one typed code after Enter. Keep a prior F9 / password-wait mark."""
         cleaned = _clean_code(code)
         digits = code_digits(cleaned)
-        was = bool(self.turns and self.turns[-1].get("code") == cleaned and self.turns[-1].get("changed"))
-        entry = {"digits": digits, "code": cleaned, "changed": bool(changed or was)}
+        prior = self.turns[-1] if self.turns and self.turns[-1].get("code") == cleaned else {}
+        was_wait = str(prior.get("outcome") or "") == "password_wait"
+        was_hit = bool(prior.get("changed"))
+        resolved = str(outcome or "").strip().lower()
+        if resolved in {"password_wait", "password", "doi_mat_khau", "wait_password"} or was_wait:
+            resolved = "password_wait"
+        elif resolved == "changed" or changed or was_hit:
+            resolved = "changed"
+        else:
+            resolved = "ok"
+        hit = resolved in {"changed", "password_wait"}
+        entry = {"digits": digits, "code": cleaned, "changed": hit, "outcome": resolved}
         if self.turns and self.turns[-1].get("code") == cleaned:
             self.turns[-1] = entry
         else:
@@ -637,16 +649,30 @@ class FourLaneQueue:
                     "digits": code_digits(current_code),
                     "code": current_code,
                     "changed": False,
+                    "outcome": "run",
                     "state": "run",
                 }
             )
         for item in reversed(self.turns[-max(1, int(limit or 40)) :]):
             if current_code and item.get("code") == current_code:
                 continue
-            rows.append({**item, "state": "changed" if item.get("changed") else "ok"})
+            state = str(item.get("outcome") or ("changed" if item.get("changed") else "ok"))
+            if state not in {"changed", "password_wait", "ok"}:
+                state = "changed" if item.get("changed") else "ok"
+            rows.append({**item, "state": state, "outcome": state})
             if len(rows) >= max(1, int(limit or 40)):
                 break
         return rows
+
+    def password_digits(self) -> list[str]:
+        seen: list[str] = []
+        for item in self.turns:
+            if str(item.get("outcome") or item.get("state") or "") != "password_wait":
+                continue
+            digits = str(item.get("digits") or "")
+            if digits and digits not in seen:
+                seen.append(digits)
+        return seen
 
     def take_lane(self, index: int) -> str:
         """Advance one browser after its frame did not change."""
@@ -785,3 +811,12 @@ def _pad_titles(raw: Any, count: int = LANE_COUNT) -> list[str]:
 
 def _digit_event(event: dict[str, Any]) -> bool:
     return event.get("kind") == "key" and str(event.get("key") or "").isdigit()
+
+
+def _turn_outcome(item: dict[str, Any]) -> str:
+    text = str(item.get("outcome") or item.get("state") or "").strip().lower()
+    if text in {"password_wait", "password", "doi_mat_khau", "wait_password"}:
+        return "password_wait"
+    if text == "changed" or item.get("changed"):
+        return "changed"
+    return "ok"

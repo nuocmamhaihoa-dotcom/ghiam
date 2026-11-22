@@ -7,7 +7,7 @@
   <meta http-equiv="content-language" content="vi" />
   <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate" />
   <title>Gõ số rồi Enter</title>
-    <meta name="ui-build" content="20261102-15" />
+    <meta name="ui-build" content="20261122-1" />
   <style>
     html, body, button, input, textarea {
       font-synthesis: none;
@@ -53,6 +53,7 @@
     .board td.num { width: 4.4em; font-weight: 800; letter-spacing: 0.06em; }
     .board tr.run td { color: #7dd3fc; }
     .board tr.changed td { color: #fbbf24; font-weight: 700; }
+    .board tr.password_wait td { color: #fb7185; font-weight: 700; }
     .board tr.ok td { color: #94a3b8; }
     .board .changed-line { color: #fbbf24; font-weight: 700; margin: 8px 0 2px; }
     h1 { font-size: 1.2rem; margin: 0 0 8px; }
@@ -388,6 +389,7 @@
     <p class="hint">Tải&nbsp;zip,&nbsp;<b>giải&nbsp;nén</b>,&nbsp;bấm&nbsp;<b>CHAY-O-DAY.cmd</b>.&nbsp;Máy&nbsp;<b>tự&nbsp;cập&nbsp;nhật</b>&nbsp;rồi&nbsp;tự&nbsp;mở&nbsp;lại,&nbsp;không&nbsp;cần&nbsp;ấn.</p>
     <div class="more">
     <p class="hint">Hub&nbsp;<b>không&nbsp;gõ</b>&nbsp;vào&nbsp;trình&nbsp;duyệt&nbsp;này.&nbsp;Trên&nbsp;PC&nbsp;mở&nbsp;<b>CHAY-O-DAY.cmd</b>,&nbsp;<b>Gắn&nbsp;trình&nbsp;khách</b>:&nbsp;cửa&nbsp;sổ&nbsp;<b>Evoshop</b>&nbsp;(ảnh&nbsp;login&nbsp;evoshop.vn,&nbsp;không&nbsp;bấm&nbsp;trang&nbsp;hub),&nbsp;rồi&nbsp;dòng&nbsp;<b>Mã&nbsp;khách&nbsp;hàng&nbsp;/&nbsp;số&nbsp;điện&nbsp;thoại</b>.&nbsp;Bật&nbsp;chạy&nbsp;=&nbsp;PC&nbsp;thu&nbsp;nhỏ&nbsp;hub,&nbsp;đưa&nbsp;Evoshop&nbsp;lên&nbsp;trước,&nbsp;gõ&nbsp;mã,&nbsp;Enter.</p>
+    <p class="hint">Nếu&nbsp;sau&nbsp;Enter&nbsp;hiện&nbsp;<b>ĐỔI&nbsp;MẬT&nbsp;KHẨU</b>:&nbsp;vẫn&nbsp;là&nbsp;đăng&nbsp;nhập&nbsp;thành&nbsp;công.&nbsp;Máy&nbsp;lưu&nbsp;<b>Đợi&nbsp;đổi&nbsp;mật&nbsp;khẩu</b>&nbsp;rồi&nbsp;bấm&nbsp;nút&nbsp;<b>quay&nbsp;lại</b>&nbsp;màn&nbsp;hình&nbsp;mã&nbsp;khách&nbsp;hàng&nbsp;/&nbsp;mật&nbsp;khẩu&nbsp;để&nbsp;tiếp&nbsp;tục.</p>
     <div class="pair">
       <div>
         <label for="delay2">Chờ (giây)</label>
@@ -1244,13 +1246,16 @@
     turns2.slice().reverse().forEach(function (item) {
       var digits = pad5((item.digits || (item.code || "").slice(-5) || "").replace(/\D/g, "").slice(-5));
       if (!digits || (runDigits && digits === pad5(runDigits))) return;
-      rows.push({ digits: digits, state: item.changed ? "changed" : "ok" });
+      var state = item.state || item.outcome || (item.changed ? "changed" : "ok");
+      rows.push({ digits: digits, state: state });
     });
     if (!rows.length) {
       body.innerHTML = '<tr class="ok"><td class="num" colspan="2">Chưa gõ số nào.</td></tr>';
     } else {
       rows.slice(0, 12).forEach(function (item) {
-        var label = item.state === "run" ? "Đang chạy" : (item.state === "changed" ? "Đổi giao diện" : "Giữ nguyên");
+        var label = item.state === "run" ? "Đang chạy"
+          : (item.state === "password_wait" ? "Đợi đổi mật khẩu"
+          : (item.state === "changed" ? "Đổi giao diện" : "Giữ nguyên"));
         var tr = document.createElement("tr");
         tr.className = item.state;
         tr.innerHTML = '<td class="num">' + item.digits + '</td><td>' + label + '</td>';
@@ -1258,15 +1263,21 @@
       });
     }
     var hits = [];
+    var waits = [];
     turns2.forEach(function (item) {
       var digits = pad5((item.digits || "").replace(/\D/g, "").slice(-5));
-      if (item.changed && digits && hits.indexOf(digits) < 0) hits.push(digits);
+      var state = item.state || item.outcome || "";
+      if (state === "password_wait" && digits && waits.indexOf(digits) < 0) waits.push(digits);
+      else if (item.changed && digits && hits.indexOf(digits) < 0) hits.push(digits);
     });
     flagged2.forEach(function (code) {
       var digits = pad5((code || "").replace(/\D/g, "").slice(-5));
-      if (digits && hits.indexOf(digits) < 0) hits.push(digits);
+      if (digits && hits.indexOf(digits) < 0 && waits.indexOf(digits) < 0) hits.push(digits);
     });
-    if (line) line.textContent = hits.length ? ("Đổi giao diện: " + hits.join(" · ")) : "Chưa có số đổi giao diện";
+    var parts = [];
+    if (waits.length) parts.push("Đợi đổi mật khẩu: " + waits.join(" · "));
+    if (hits.length) parts.push("Đổi giao diện: " + hits.join(" · "));
+    if (line) line.textContent = parts.length ? parts.join(" · ") : "Chưa có số đổi giao diện";
   }
   function persist2() {
     var range = bounds2();

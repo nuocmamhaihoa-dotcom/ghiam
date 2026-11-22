@@ -154,6 +154,19 @@ def is_window_alive(hwnd: int, api: Any = None) -> bool:
     return _alive(lib, handle)
 
 
+def window_box(hwnd: int, api: Any = None) -> tuple[int, int, int, int] | None:
+    """(left, top, right, bottom) of a live window, or None."""
+    handle = int(hwnd or 0)
+    if handle <= 0:
+        return None
+    lib = api if api is not None else _user32()
+    if lib is None:
+        return None
+    if not _alive(lib, handle):
+        return None
+    return _window_rect(lib, handle)
+
+
 def clean_title(raw: Any) -> str:
     return " ".join(str(raw or "").split())[:TITLE_MAX]
 
