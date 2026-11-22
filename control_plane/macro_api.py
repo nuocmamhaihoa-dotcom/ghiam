@@ -174,10 +174,18 @@ def _run_turns(raw: Any) -> list[dict[str, Any]]:
         digits = "".join(ch for ch in str(item.get("digits") or "") if ch.isdigit())[-5:]
         if not digits:
             continue
-        state = str(item.get("state") or ("changed" if item.get("changed") else "ok"))
-        if state not in {"run", "changed", "ok"}:
+        state = str(item.get("state") or item.get("outcome") or ("changed" if item.get("changed") else "ok"))
+        if state not in {"run", "changed", "ok", "password_wait"}:
             state = "ok"
-        rows.append({"digits": digits.zfill(5), "changed": state == "changed" or bool(item.get("changed")), "state": state})
+        hit = state in {"changed", "password_wait"} or bool(item.get("changed"))
+        rows.append(
+            {
+                "digits": digits.zfill(5),
+                "changed": hit,
+                "state": state,
+                "outcome": state if state != "run" else str(item.get("outcome") or "ok"),
+            }
+        )
         if len(rows) >= 40:
             break
     return rows
@@ -319,6 +327,9 @@ Cửa sổ lỗi sẽ đứng lại (không tắt ngay) để đọc được ch
 Hướng 2: chỉ 1 tiến trình. Trên PC: nhập mã, bấm Ctrl+F7 hoặc CHẠY, rồi
 bấm 1 lần vào ô Mã khách hàng / số điện thoại trên Evoshop (Gắn trình khách,
 không bấm trang hub). Mỗi số gõ xong ấn Enter một lần rồi tăng 1. F8 tắt.
+Nếu sau Enter hiện ĐỔI MẬT KHẨU: đó cũng là đăng nhập thành công, máy lưu
+Đợi đổi mật khẩu rồi bấm nút quay lại màn hình mã khách hàng / mật khẩu
+để tiếp tục dãy số.
 VPN trên PC: nút Bật VPN và nút Bảo mật trên màn hình chính
 (DNS, IPv6, kill switch, WARP, VPN Gate, miễn phí).
 Bảo mật: muối + mật mã địa chỉ máy — hub không đọc được IP / hostname.

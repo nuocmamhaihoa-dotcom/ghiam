@@ -83,6 +83,8 @@ class MacroHubPageTests(unittest.TestCase):
         self.assertIn("Mã&nbsp;khách&nbsp;hàng", home.text)
         self.assertIn("Sau Enter", home.text)
         self.assertIn("Đổi giao diện", home.text)
+        self.assertIn("Đợi đổi mật khẩu", home.text)
+        self.assertIn("quay&nbsp;lại", home.text)
         self.assertIn("5 số", home.text)
         self.assertIn("trình&nbsp;duyệt", home.text)
         self.assertIn("Tiếp&nbsp;tục", home.text)
@@ -156,6 +158,7 @@ class MacroHubPageTests(unittest.TestCase):
         self.assertIn("pc-macro/pc_macro/free_vpn.py", names)
         self.assertIn("pc-macro/pc_macro/privacy.py", names)
         self.assertIn("pc-macro/pc_macro/cloak.py", names)
+        self.assertIn("pc-macro/pc_macro/login_page.py", names)
         self.assertIn("pc-macro/Cai-dat.ps1", names)
         self.assertIn("pc-macro/Chay.cmd", names)
         self.assertIn("pc-macro/CHAY-O-DAY.cmd", names)
@@ -192,6 +195,8 @@ class MacroHubPageTests(unittest.TestCase):
         self.assertIn("Bảo mật", readme)
         self.assertIn("muối", readme)
         self.assertIn("mật mã", readme)
+        self.assertIn("Đợi đổi mật khẩu", readme)
+        self.assertIn("quay lại", readme)
         self.assertIn("IPv6", readme)
         self.assertIn("WARP", readme)
         self.assertIn("tự hỏi hub bản mới", readme)
@@ -249,6 +254,18 @@ class MacroHubPageTests(unittest.TestCase):
         self.assertEqual(board.json()["changed"], ["00003", "00007"])
         self.assertEqual(board.json()["turns"][0]["digits"], "00007")
         self.assertEqual(board.json()["turns"][1]["state"], "changed")
+        waiting = self.client.post(
+            "/v1/pc-macro/run",
+            headers=self.headers,
+            json={
+                "digits": "00008",
+                "turns": [
+                    {"digits": "00008", "changed": True, "state": "password_wait", "outcome": "password_wait"},
+                ],
+            },
+        )
+        self.assertEqual(waiting.json()["turns"][0]["state"], "password_wait")
+        self.assertTrue(waiting.json()["turns"][0]["changed"])
         cloaked = self.client.post(
             "/v1/pc-macro/run",
             headers=self.headers,
