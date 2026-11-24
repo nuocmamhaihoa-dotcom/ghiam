@@ -119,14 +119,16 @@ if (-not (Test-Path $userData)) {
   throw "Khong thay ho so Coc Coc tai $userData. Hay mo Coc Coc mot lan va xem duoc binh luan TikTok, roi chay lai."
 }
 
-Write-Host "Dung Coc Coc: $exe"
+Write-Host "Buoc 1: Tim thay Coc Coc: $exe"
 $running = @(Get-CocCocProcesses)
 if ($running) {
-  Write-Host "Dong Coc Coc dang mo de mo lai dung ho so cua ban..."
+  Write-Host "Buoc 2: Dong Coc Coc dang mo, roi mo lai cung ho so."
   foreach ($proc in $running) {
     Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
   }
   Start-Sleep -Seconds 2
+} else {
+  Write-Host "Buoc 2: Coc Coc dang tat. Mo moi bang ho so cu."
 }
 
 $args = @(
@@ -139,6 +141,7 @@ $args = @(
   "--lang=vi",
   $Url
 )
+Write-Host "Buoc 3: Mo Coc Coc bang ho so dang xem duoc binh luan."
 Start-Process -FilePath $exe -ArgumentList $args | Out-Null
 Wait-DebugPort -Port $Port | Out-Null
 $page = Get-TikTokPage -Port $Port -Url $Url
@@ -191,13 +194,42 @@ $scrollJs = @'
 }
 '@
 
+$openJs = @'
+() => {
+  const n = document.querySelectorAll('[data-e2e="comment-level-1"]').length;
+  if (n > 0) return "ready";
+  const body = document.body ? document.body.innerText : "";
+  if (/When's your birthday|ngày sinh|Kéo thanh trượt/i.test(body)) return "gate";
+  const btn = document.querySelector('[data-e2e="comment-icon"]');
+  if (btn) { btn.click(); return "clicked"; }
+  return "wait";
+}
+'@
+
+Write-Host "Buoc 4: Mo dung link video."
 $null = Invoke-Cdp -Socket $ws -Id 1 -Method "Runtime.enable" -Params @{}
 $null = Invoke-Cdp -Socket $ws -Id 2 -Method "Page.navigate" -Params @{ url = $Url }
-Start-Sleep -Seconds 6
+Start-Sleep -Seconds 4
+
+Write-Host "Buoc 5: Mo cot binh luan va doi cac dong chu hien ra."
+$nextId = 3
+$opened = "wait"
+for ($try = 0; $try -lt 12; $try++) {
+  $openedResp = Invoke-Cdp -Socket $ws -Id $nextId -Method "Runtime.evaluate" -Params @{
+    expression = $openJs
+    returnByValue = $true
+  }
+  $nextId++
+  if ($openedResp.result -and $openedResp.result.result) {
+    $opened = [string]$openedResp.result.result.value
+  }
+  if ($opened -eq "ready" -or $opened -eq "gate") { break }
+  Start-Sleep -Seconds 1
+}
 
 $merged = @{}
 $last = $null
-$nextId = 3
+Write-Host "Buoc 6: Keo cot binh luan de lay them dong dang hien."
 for ($i = 0; $i -le $Scrolls; $i++) {
   $resp = Invoke-Cdp -Socket $ws -Id $nextId -Method "Runtime.evaluate" -Params @{
     expression = $readJs
@@ -244,7 +276,7 @@ $result = [ordered]@{
   comments = $comments
 }
 ($result | ConvertTo-Json -Depth 8) | Set-Content -Path $OutFile -Encoding UTF8
-Write-Host "Da luu $($comments.Count) binh luan vao $OutFile"
+Write-Host "Buoc 7: Da luu $($comments.Count) binh luan vao $OutFile"
 
 $cfgPath = Join-Path $PSScriptRoot "config.json"
 if (($comments.Count -gt 0) -and (Test-Path $cfgPath)) {
@@ -272,7 +304,7 @@ if (($comments.Count -gt 0) -and (Test-Path $cfgPath)) {
     $syncUrl = ($cfg.control_url.TrimEnd("/")) + "/v1/sync/comments"
     try {
       $synced = Invoke-RestMethod -Uri $syncUrl -Method POST -Headers $headers -Body ($body | ConvertTo-Json -Depth 8 -Compress) -ContentType "application/json; charset=utf-8" -TimeoutSec 60
-      Write-Host "Da day len hub: nhan $($synced.received), moi $($synced.inserted_new)"
+      Write-Host "Buoc 8: Da day len hub: nhan $($synced.received), moi $($synced.inserted_new)"
     } catch {
       Write-Host "Luu file xong. Day len hub chua duoc: $($_.Exception.Message)"
     }
