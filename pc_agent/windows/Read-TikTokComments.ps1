@@ -2,11 +2,15 @@
 # Dung dung ho so Coc Coc ban dang xem duoc binh luan. Khong mo trinh duyet ao.
 #
 #   powershell -ExecutionPolicy Bypass -File .\pc_agent\windows\Read-TikTokComments.ps1 -Url "https://www.tiktok.com/@ten/video/123"
+#   powershell -ExecutionPolicy Bypass -File .\pc_agent\windows\Read-TikTokComments.ps1 -Watch -ControlUrl "http://may:8088" -ControlToken "..."
 #
 # Coc Coc dang mo se duoc dong roi mo lai bang cung ho so, de phan mem doc duoc cot binh luan.
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory = $true)][string]$Url,
+  [string]$Url = "",
+  [switch]$Watch,
+  [string]$ControlUrl = "",
+  [string]$ControlToken = "",
   [int]$Port = 9222,
   [int]$Scrolls = 6,
   [string]$OutFile = ""
@@ -105,7 +109,66 @@ function Invoke-Cdp {
   }
 }
 
+function Start-CommentWatch {
+  if (-not $ControlUrl -or -not $ControlToken) {
+    $cfgPath = Join-Path $PSScriptRoot "config.json"
+    if (Test-Path $cfgPath) {
+      $cfg = Get-Content $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
+      if (-not $ControlUrl -and $cfg.control_url) { $script:ControlUrl = [string]$cfg.control_url }
+      if (-not $ControlToken -and $cfg.control_token) { $script:ControlToken = [string]$cfg.control_token }
+    }
+  }
+  if (-not $ControlUrl -or -not $ControlToken) {
+    throw "Can -ControlUrl va -ControlToken, hoac file config.json nam canh script."
+  }
+  $headers = @{ Authorization = "Bearer $ControlToken" }
+  $base = $ControlUrl.TrimEnd("/")
+  Write-Host "Dang cho video moi tu $base. Giu cua so nay mo."
+  while ($true) {
+    try {
+      $claimed = Invoke-RestMethod -Uri ($base + "/v1/tiktok/jobs/claim") -Method POST -Headers $headers -TimeoutSec 30
+      if (-not $claimed.job) {
+        Start-Sleep -Seconds 4
+        continue
+      }
+      $job = $claimed.job
+      $out = Join-Path $env:TEMP ("ghiam-tiktok-job-" + $job.id + ".json")
+      Write-Host "Nhan video $($job.id): $($job.url)"
+      $arg = "-ExecutionPolicy Bypass -File `"$PSCommandPath`" -Url `"$($job.url)`" -Port $Port -Scrolls $Scrolls -OutFile `"$out`" -ControlUrl `"$ControlUrl`" -ControlToken `"$ControlToken`""
+      $proc = Start-Process -FilePath "powershell.exe" -ArgumentList $arg -Wait -PassThru -NoNewWindow
+      $status = "error"
+      $detail = "Coc Coc khong chay xong"
+      $count = 0
+      if (Test-Path $out) {
+        $saved = Get-Content $out -Raw -Encoding UTF8 | ConvertFrom-Json
+        $count = @($saved.comments).Count
+      }
+      if ($proc.ExitCode -eq 0) {
+        $status = "done"
+        $detail = "Da luu $count binh luan"
+      } elseif ($proc.ExitCode -eq 2) {
+        $status = "empty"
+        $detail = "Khong thay binh luan tren Coc Coc"
+      } else {
+        $detail = "Ma loi $($proc.ExitCode)"
+      }
+      $finish = @{ status = $status; detail = $detail; comment_count = $count } | ConvertTo-Json -Compress
+      Invoke-RestMethod -Uri ($base + "/v1/tiktok/jobs/$($job.id)/finish") -Method POST -Headers $headers -Body $finish -ContentType "application/json; charset=utf-8" -TimeoutSec 30 | Out-Null
+      Write-Host "Xong video $($job.id): $detail"
+    } catch {
+      Write-Host "Cho lai: $($_.Exception.Message)"
+      Start-Sleep -Seconds 5
+    }
+  }
+}
+
+if ($Watch) {
+  Start-CommentWatch
+  return
+}
+
 $Url = $Url.Trim()
+if (-not $Url) { throw "Can -Url, hoac chay -Watch de lay link tu trang web." }
 if ($Url -notmatch '^https://([a-z0-9-]+\.)*tiktok\.com/') {
   throw "Can dung link https cua tiktok.com. Vi du: https://www.tiktok.com/@ten/video/123"
 }
@@ -279,9 +342,14 @@ $result = [ordered]@{
 Write-Host "Buoc 7: Da luu $($comments.Count) binh luan vao $OutFile"
 
 $cfgPath = Join-Path $PSScriptRoot "config.json"
-if (($comments.Count -gt 0) -and (Test-Path $cfgPath)) {
+$hubUrl = $ControlUrl
+$hubToken = $ControlToken
+if ((-not $hubUrl -or -not $hubToken) -and (Test-Path $cfgPath)) {
   $cfg = Get-Content $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
-  if ($cfg.control_url -and $cfg.control_token) {
+  if (-not $hubUrl -and $cfg.control_url) { $hubUrl = [string]$cfg.control_url }
+  if (-not $hubToken -and $cfg.control_token) { $hubToken = [string]$cfg.control_token }
+}
+if (($comments.Count -gt 0) -and $hubUrl -and $hubToken) {
     $machine = $env:COMPUTERNAME
     $idFile = Join-Path $PSScriptRoot "state\machine_id.txt"
     if (Test-Path $idFile) { $machine = (Get-Content $idFile -Raw).Trim() }
@@ -300,15 +368,14 @@ if (($comments.Count -gt 0) -and (Test-Path $cfgPath)) {
         }
       )
     }
-    $headers = @{ Authorization = "Bearer $($cfg.control_token)" }
-    $syncUrl = ($cfg.control_url.TrimEnd("/")) + "/v1/sync/comments"
+    $headers = @{ Authorization = "Bearer $hubToken" }
+    $syncUrl = ($hubUrl.TrimEnd("/")) + "/v1/sync/comments"
     try {
       $synced = Invoke-RestMethod -Uri $syncUrl -Method POST -Headers $headers -Body ($body | ConvertTo-Json -Depth 8 -Compress) -ContentType "application/json; charset=utf-8" -TimeoutSec 60
       Write-Host "Buoc 8: Da day len hub: nhan $($synced.received), moi $($synced.inserted_new)"
     } catch {
       Write-Host "Luu file xong. Day len hub chua duoc: $($_.Exception.Message)"
     }
-  }
 }
 
 if ($comments.Count -eq 0) {

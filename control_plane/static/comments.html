@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bình luận TikTok</title>
+  <style>
+    :root { color-scheme: light; --ink: #17202a; --muted: #5c6770; --line: #e4e7ec; --bg: #f3f6f4; --card: #fff; --green: #0f7a45; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 17px/1.45 "Segoe UI", system-ui, sans-serif; color: var(--ink); background: var(--bg); }
+    main { max-width: 760px; margin: 0 auto; padding: 1.4rem 1rem 3rem; }
+    h1 { font-size: 1.8rem; margin: 0 0 0.3rem; }
+    h2 { font-size: 1.1rem; margin: 0 0 0.7rem; }
+    .lead { color: var(--muted); margin: 0 0 1rem; }
+    section { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 1rem; margin: 0 0 0.8rem; }
+    label { display: block; font-weight: 700; margin-bottom: 0.4rem; }
+    input[type="url"], input[type="search"] {
+      width: 100%; font: inherit; padding: 0.8rem 0.85rem; border: 1px solid #cfd5dc; border-radius: 12px; background: #fff;
+    }
+    .row { display: flex; gap: 0.5rem; margin-top: 0.7rem; }
+    button {
+      font: inherit; font-weight: 700; border: 0; border-radius: 12px; min-height: 48px; padding: 0 1rem; cursor: pointer;
+    }
+    button.primary { background: var(--green); color: #fff; flex: 1; }
+    button.ghost { background: #e7eee9; color: var(--ink); }
+    button:disabled { opacity: 0.55; cursor: default; }
+    .status { margin: 0.7rem 0 0; min-height: 1.3em; }
+    .status.bad { color: #8a2b2b; font-weight: 700; }
+    .job, .comment { padding: 0.75rem 0; border-top: 1px solid var(--line); }
+    .job:first-of-type, .comment:first-of-type { border-top: 0; }
+    .chip { display: inline-block; border-radius: 999px; padding: 0.1rem 0.55rem; background: #eef2f0; font-size: 0.85rem; font-weight: 700; }
+    .chip.running { background: #e5f3ea; color: var(--green); }
+    .chip.done { background: #e5f3ea; color: var(--green); }
+    .chip.empty, .chip.error { background: #fdecec; color: #8a2b2b; }
+    .who { font-weight: 700; }
+    .text { margin: 0.2rem 0; white-space: pre-wrap; }
+    .meta, .empty { color: var(--muted); }
+    a { color: var(--green); }
+    pre {
+      margin: 0.6rem 0 0; padding: 0.75rem; background: #f7f9f8; border-radius: 12px; overflow: auto;
+      font: 13px/1.4 ui-monospace, Consolas, monospace; white-space: pre-wrap;
+    }
+    details summary { cursor: pointer; font-weight: 700; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Bình luận TikTok</h1>
+  <p class="lead">Dán link video. Máy Cốc Cốc của bạn sẽ mở video đó và lưu các bình luận đang hiện.</p>
+
+  <section>
+    <label for="url">Link video</label>
+    <input id="url" type="url" inputmode="url" placeholder="https://www.tiktok.com/@ten/video/123" autocomplete="off" />
+    <div class="row">
+      <button class="primary" id="read" type="button">Đọc bình luận</button>
+    </div>
+    <p class="status" id="status" role="status"></p>
+  </section>
+
+  <section>
+    <h2>Hàng đọc</h2>
+    <div id="jobs"><p class="empty">Chưa có video nào.</p></div>
+  </section>
+
+  <section>
+    <h2>Bình luận đã lưu</h2>
+    <input id="find" type="search" placeholder="Tìm tên hoặc nội dung" />
+    <div id="comments"><p class="empty">Chưa có bình luận.</p></div>
+  </section>
+
+  <section>
+    <details>
+      <summary>Bật máy đọc một lần</summary>
+      <p class="lead" style="margin-top:0.7rem">Tải file về máy Windows, rồi chạy lệnh dưới đây. Cốc Cốc đang mở sẽ được đóng và mở lại đúng hồ sơ của bạn. Để cửa sổ đó chạy khi bạn thêm link ở trang này.</p>
+      <pre id="cmd"></pre>
+      <div class="row">
+        <button class="ghost" id="copy" type="button">Sao chép lệnh</button>
+      </div>
+    </details>
+  </section>
+</main>
+<script>
+var serverToken = __CONTROL_TOKEN__;
+var labels = {queued: "Đang chờ", running: "Đang mở Cốc Cốc", done: "Xong", empty: "Không thấy bình luận", error: "Lỗi"};
+
+function token() { return serverToken; }
+function api(path, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign({"Authorization": "Bearer " + token()}, opts.headers || {});
+  return fetch(path, opts).then(function (res) {
+    return res.json().catch(function () { return {}; }).then(function (body) {
+      if (!res.ok) throw new Error(body.detail || "Không tải được");
+      return body;
+    });
+  });
+}
+function esc(value) {
+  return String(value == null ? "" : value).replace(/[&<>"']/g, function (ch) {
+    return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[ch];
+  });
+}
+function say(text, bad) {
+  var node = document.getElementById("status");
+  node.textContent = text || "";
+  node.className = "status" + (bad ? " bad" : "");
+}
+function jobLine(job) {
+  var label = labels[job.status] || job.status;
+  var extra = job.comment_count ? " · " + job.comment_count + " bình luận" : "";
+  var detail = job.detail ? "<div class='meta'>" + esc(job.detail) + "</div>" : "";
+  return "<div class='job'><span class='chip " + esc(job.status) + "'>" + esc(label) + "</span>" + extra +
+    "<div class='meta'>" + esc(job.url) + "</div>" + detail + "</div>";
+}
+function commentLine(item) {
+  var who = item.author_name || "Ẩn danh";
+  var link = item.post_url ? "<div class='meta'><a href='" + esc(item.post_url) + "' target='_blank' rel='noopener'>Mở video</a></div>" : "";
+  return "<div class='comment'><div class='who'>" + esc(who) + "</div><p class='text'>" + esc(item.text || "") + "</p>" + link + "</div>";
+}
+function loadJobs() {
+  return api("/v1/tiktok/jobs").then(function (body) {
+    var box = document.getElementById("jobs");
+    box.innerHTML = body.items && body.items.length ? body.items.map(jobLine).join("") : "<p class='empty'>Chưa có video nào.</p>";
+  }).catch(function (err) { say(err.message, true); });
+}
+function loadComments() {
+  var q = document.getElementById("find").value.trim();
+  return api("/v1/comments?limit=100&q=" + encodeURIComponent(q)).then(function (body) {
+    var box = document.getElementById("comments");
+    box.innerHTML = body.items && body.items.length ? body.items.map(commentLine).join("") : "<p class='empty'>Chưa có bình luận.</p>";
+  }).catch(function (err) { say(err.message, true); });
+}
+document.getElementById("read").onclick = function () {
+  var url = document.getElementById("url").value.trim();
+  var button = document.getElementById("read");
+  button.disabled = true;
+  say("Đang thêm vào hàng…");
+  api("/v1/tiktok/jobs", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({url: url})})
+    .then(function () {
+      document.getElementById("url").value = "";
+      say("Đã thêm. Máy Cốc Cốc sẽ nhận video này.");
+      return loadJobs();
+    })
+    .catch(function (err) { say(err.message, true); })
+    .then(function () { button.disabled = false; });
+};
+document.getElementById("url").addEventListener("keydown", function (event) {
+  if (event.key === "Enter") document.getElementById("read").click();
+});
+var findTimer = 0;
+document.getElementById("find").addEventListener("input", function () {
+  clearTimeout(findTimer);
+  findTimer = setTimeout(loadComments, 250);
+});
+var watch = 'powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\\Read-TikTokComments.ps1" -Watch -ControlUrl "' +
+  location.origin + '" -ControlToken "' + token() + '"';
+document.getElementById("cmd").textContent = watch;
+document.getElementById("copy").onclick = function () {
+  navigator.clipboard.writeText(watch).then(function () { say("Đã sao chép lệnh."); }, function () { say("Hãy chọn và sao chép lệnh bằng tay.", true); });
+};
+loadJobs();
+loadComments();
+setInterval(function () { loadJobs(); loadComments(); }, 4000);
+</script>
+</body>
+</html>

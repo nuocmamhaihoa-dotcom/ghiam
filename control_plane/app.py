@@ -17,6 +17,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -151,6 +152,31 @@ def _auth(authorization: str | None) -> None:
         raise HTTPException(status_code=401, detail="unauthorized")
 
 
+def _page_auth(authorization: str | None) -> None:
+    """Token trang chủ hoặc token máy đọc. Token trang không mở các API quản trị."""
+    accepted = {token for token in (settings.token, settings.page_token, os.environ.get("CONTROL_TOKEN")) if token}
+    if not accepted:
+        return
+    offered = ""
+    if authorization and authorization.startswith("Bearer "):
+        offered = authorization.removeprefix("Bearer ").strip()
+    if offered not in accepted:
+        raise HTTPException(status_code=401, detail="unauthorized")
+
+
+def _tiktok_url(value: str) -> str:
+    text = value.strip()
+    parsed = urlsplit(text)
+    host = (parsed.hostname or "").lower().rstrip(".")
+    if parsed.scheme != "https" or parsed.username or parsed.password or any(ord(ch) <= 32 for ch in text):
+        raise HTTPException(status_code=400, detail="link không hợp lệ")
+    if host != "tiktok.com" and not host.endswith(".tiktok.com"):
+        raise HTTPException(status_code=400, detail="chỉ nhận link tiktok.com")
+    if parsed.path in ("", "/"):
+        raise HTTPException(status_code=400, detail="dán link một video")
+    return parsed.geturl()
+
+
 class RegisterBody(BaseModel):
     machine_id: str
     hostname: str | None = None
@@ -219,7 +245,12 @@ def _html(name: str) -> HTMLResponse:
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard() -> HTMLResponse:
-    """Trang duy nhất: thêm video, xem thống kê, tải bản sao lưu."""
+    """Trang chủ: dán link TikTok, xem tiến độ và các bình luận đã lưu."""
+    return _html("comments.html")
+
+
+@app.get("/danh-ba", response_class=HTMLResponse)
+def video_reader() -> HTMLResponse:
     return _html("video.html")
 
 
@@ -511,9 +542,67 @@ def list_comments(
     offset: int = Query(default=0, ge=0),
     q: str = Query(default=""),
 ) -> dict[str, Any]:
-    _auth(authorization)
+    _page_auth(authorization)
     items = db.list_comments(settings.db_path, limit=limit, offset=offset, q=q)
     return {"count": len(items), "offset": offset, "items": items}
+
+
+class TikTokJobBody(BaseModel):
+    url: str
+
+
+class TikTokFinishBody(BaseModel):
+    status: str
+    detail: str = ""
+    comment_count: int = 0
+
+
+_TIKTOK_DONE = {"done", "empty", "error"}
+
+
+@app.post("/v1/tiktok/jobs")
+def create_tiktok_job(body: TikTokJobBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _page_auth(authorization)
+    url = _tiktok_url(body.url)
+    return db.create_tiktok_job(settings.db_path, url, utcnow())
+
+
+@app.get("/v1/tiktok/jobs")
+def list_tiktok_jobs(
+    authorization: str | None = Header(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+) -> dict[str, Any]:
+    _page_auth(authorization)
+    items = db.list_tiktok_jobs(settings.db_path, limit=limit)
+    return {"count": len(items), "items": items}
+
+
+@app.post("/v1/tiktok/jobs/claim")
+def claim_tiktok_job(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _page_auth(authorization)
+    return {"job": db.claim_tiktok_job(settings.db_path, utcnow())}
+
+
+@app.post("/v1/tiktok/jobs/{job_id}/finish")
+def finish_tiktok_job(
+    job_id: int,
+    body: TikTokFinishBody,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    _page_auth(authorization)
+    if body.status not in _TIKTOK_DONE:
+        raise HTTPException(status_code=400, detail="trạng thái không hợp lệ")
+    job = db.finish_tiktok_job(
+        settings.db_path,
+        job_id,
+        status=body.status,
+        detail=body.detail,
+        comment_count=body.comment_count,
+        now=utcnow(),
+    )
+    if job is None:
+        raise HTTPException(status_code=409, detail="việc này không đang chạy")
+    return job
 
 
 @app.post("/v1/agents/register")

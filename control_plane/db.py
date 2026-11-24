@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -101,6 +102,15 @@ def init_db(db_path: Path) -> None:
               name TEXT NOT NULL,
               contact_name TEXT NOT NULL DEFAULT '',
               username TEXT NOT NULL DEFAULT '',
+              updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS tiktok_jobs (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              url TEXT NOT NULL,
+              status TEXT NOT NULL,
+              detail TEXT NOT NULL DEFAULT '',
+              comment_count INTEGER NOT NULL DEFAULT 0,
+              created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
             """
@@ -647,6 +657,102 @@ def list_comments(
         item["post_url"] = _public_post_url(item.get("post_url"))
         items.append(item)
     return items
+
+
+def create_tiktok_job(db_path: Path, url: str, now: str) -> dict[str, Any]:
+    with session(db_path) as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO tiktok_jobs(url, status, detail, comment_count, created_at, updated_at)
+            VALUES(?, 'queued', '', 0, ?, ?)
+            """,
+            (url, now, now),
+        )
+        job_id = int(cur.lastrowid)
+    job = get_tiktok_job(db_path, job_id)
+    if job is None:
+        raise RuntimeError("không tạo được việc đọc")
+    return job
+
+
+def get_tiktok_job(db_path: Path, job_id: int) -> dict[str, Any] | None:
+    with session(db_path) as conn:
+        row = conn.execute("SELECT * FROM tiktok_jobs WHERE id=?", (job_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def list_tiktok_jobs(db_path: Path, *, limit: int = 20) -> list[dict[str, Any]]:
+    limit = max(1, min(int(limit), 100))
+    with session(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM tiktok_jobs
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def claim_tiktok_job(db_path: Path, now: str) -> dict[str, Any] | None:
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=20)
+    with session(db_path) as conn:
+        stuck = conn.execute("SELECT id, updated_at FROM tiktok_jobs WHERE status='running'").fetchall()
+        for row in stuck:
+            try:
+                stamp = datetime.fromisoformat(row["updated_at"])
+            except ValueError:
+                stamp = None
+            if stamp is not None and stamp < cutoff:
+                conn.execute(
+                    """
+                    UPDATE tiktok_jobs
+                    SET status='queued', detail='Máy đọc dừng giữa chừng', updated_at=?
+                    WHERE id=?
+                    """,
+                    (now, row["id"]),
+                )
+        row = conn.execute(
+            """
+            SELECT * FROM tiktok_jobs
+            WHERE status='queued'
+            ORDER BY id
+            LIMIT 1
+            """
+        ).fetchone()
+        if row is None:
+            return None
+        conn.execute(
+            "UPDATE tiktok_jobs SET status='running', updated_at=? WHERE id=?",
+            (now, row["id"]),
+        )
+        fresh = conn.execute("SELECT * FROM tiktok_jobs WHERE id=?", (row["id"],)).fetchone()
+    return dict(fresh)
+
+
+def finish_tiktok_job(
+    db_path: Path,
+    job_id: int,
+    *,
+    status: str,
+    detail: str,
+    comment_count: int,
+    now: str,
+) -> dict[str, Any] | None:
+    with session(db_path) as conn:
+        cur = conn.execute(
+            """
+            UPDATE tiktok_jobs
+            SET status=?, detail=?, comment_count=?, updated_at=?
+            WHERE id=? AND status='running'
+            """,
+            (status, detail[:500], max(0, int(comment_count)), now, job_id),
+        )
+        if cur.rowcount == 0:
+            return None
+        row = conn.execute("SELECT * FROM tiktok_jobs WHERE id=?", (job_id,)).fetchone()
+    return dict(row) if row else None
 
 
 def upsert_proxy_endpoints(db_path: Path, endpoints: list[str], proxy_type: str = "static") -> int:

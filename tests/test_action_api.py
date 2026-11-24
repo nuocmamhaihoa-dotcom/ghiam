@@ -154,16 +154,19 @@ class ActionApiTests(unittest.TestCase):
     def test_dashboard_is_the_video_queue(self) -> None:
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Đọc video danh bạ", response.text)
-        self.assertIn("Thêm video", response.text)
-        self.assertIn("Tải bản sao lưu về PC", response.text)
-        self.assertIn("Thống kê", response.text)
+        self.assertIn("Bình luận TikTok", response.text)
+        self.assertIn("Đọc bình luận", response.text)
+        self.assertIn("Hàng đọc", response.text)
         self.assertIn('var serverToken = "%s";' % settings.page_token, response.text)
         self.assertNotIn("test-token", response.text)
         self.assertNotIn("__CONTROL_TOKEN__", response.text)
         self.assertNotIn("Mã kết nối", response.text)
         self.assertNotIn("Check proxy ngay", response.text)
         self.assertNotIn("Mở giả lập điện thoại trên PC", response.text)
+        old = self.client.get("/danh-ba")
+        self.assertEqual(old.status_code, 200)
+        self.assertIn("Đọc video danh bạ", old.text)
+        self.assertIn("Tải bản sao lưu về PC", old.text)
 
     def test_page_token_opens_only_the_video_api(self) -> None:
         page = {"Authorization": f"Bearer {settings.page_token}"}
@@ -172,6 +175,8 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(self.client.get("/v1/videos/stats", headers=page).status_code, 200)
         self.assertEqual(self.client.get("/v1/results", headers=page).status_code, 200)
         self.assertEqual(self.client.post("/v1/backup/ticket", headers=page).status_code, 200)
+        self.assertEqual(self.client.get("/v1/comments", headers=page).status_code, 200)
+        self.assertEqual(self.client.get("/v1/tiktok/jobs", headers=page).status_code, 200)
         self.assertEqual(self.client.get("/v1/actions", headers=page).status_code, 401)
         self.assertEqual(self.client.get("/v1/agents", headers=page).status_code, 401)
         self.assertEqual(
@@ -414,7 +419,7 @@ class ActionApiTests(unittest.TestCase):
         listed = self.client.get("/v1/people", headers=self.headers)
         self.assertEqual(listed.status_code, 200)
         self.assertEqual(listed.json()["count"], 1)
-        page = self.client.get("/")
+        page = self.client.get("/danh-ba")
         self.assertIn("Kết quả đã lưu", page.text)
         self.assertIn("Tải bản sao lưu về PC", page.text)
         sample = self.client.get("/sample-people")
@@ -456,9 +461,11 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(body["start_url"], "/iphone")
         self.assertEqual(body["display"], "standalone")
         home = self.client.get("/")
-        self.assertIn("Đọc video danh bạ", home.text)
-        self.assertIn("Tải bản sao lưu về PC", home.text)
+        self.assertIn("Bình luận TikTok", home.text)
         self.assertNotIn("Lướt trên iPhone", home.text)
+        old = self.client.get("/danh-ba")
+        self.assertIn("Đọc video danh bạ", old.text)
+        self.assertIn("Tải bản sao lưu về PC", old.text)
         self.assertIn('href="/tai"', page.text)
 
     def test_public_delivery_package(self) -> None:
@@ -643,6 +650,47 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(by_id["bad"]["hostname"], "may-hong")
         self.assertEqual(by_id["good"]["hostname"], "may-tot")
         self.assertEqual(by_id["good"]["status"], "online")
+
+    def test_tiktok_job_is_claimed_once_and_rejects_other_sites(self) -> None:
+        page = {"Authorization": f"Bearer {settings.page_token}"}
+        denied = self.client.post("/v1/tiktok/jobs", json={"url": "https://example.com/video/1"})
+        self.assertEqual(denied.status_code, 401)
+        bad = self.client.post("/v1/tiktok/jobs", headers=page, json={"url": "https://example.com/video/1"})
+        self.assertEqual(bad.status_code, 400)
+        home = self.client.post("/v1/tiktok/jobs", headers=page, json={"url": "https://www.tiktok.com/"})
+        self.assertEqual(home.status_code, 400)
+        created = self.client.post(
+            "/v1/tiktok/jobs",
+            headers=page,
+            json={"url": "https://www.tiktok.com/@ten/video/123"},
+        )
+        self.assertEqual(created.status_code, 200, created.text)
+        self.assertEqual(created.json()["status"], "queued")
+        first = self.client.post("/v1/tiktok/jobs/claim", headers=page)
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertEqual(first.json()["job"]["url"], "https://www.tiktok.com/@ten/video/123")
+        second = self.client.post("/v1/tiktok/jobs/claim", headers=self.headers)
+        self.assertIsNone(second.json()["job"])
+        job_id = first.json()["job"]["id"]
+        early = self.client.post(
+            f"/v1/tiktok/jobs/{job_id}/finish",
+            headers=page,
+            json={"status": "queued", "detail": "sai", "comment_count": 1},
+        )
+        self.assertEqual(early.status_code, 400)
+        done = self.client.post(
+            f"/v1/tiktok/jobs/{job_id}/finish",
+            headers=page,
+            json={"status": "done", "detail": "Da luu 2 binh luan", "comment_count": 2},
+        )
+        self.assertEqual(done.status_code, 200, done.text)
+        self.assertEqual(done.json()["comment_count"], 2)
+        again = self.client.post(
+            f"/v1/tiktok/jobs/{job_id}/finish",
+            headers=page,
+            json={"status": "done", "detail": "lan nua", "comment_count": 2},
+        )
+        self.assertEqual(again.status_code, 409)
 
 
 class ProxyUrlTests(unittest.TestCase):
