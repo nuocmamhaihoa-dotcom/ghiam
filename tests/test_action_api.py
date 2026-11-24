@@ -177,6 +177,12 @@ class ActionApiTests(unittest.TestCase):
         self.assertEqual(self.client.post("/v1/backup/ticket", headers=page).status_code, 200)
         self.assertEqual(self.client.get("/v1/comments", headers=page).status_code, 200)
         self.assertEqual(self.client.get("/v1/tiktok/jobs", headers=page).status_code, 200)
+        synced = self.client.post(
+            "/v1/sync/comments",
+            headers=page,
+            json={"machine_id": "pc", "comments": [{"comment_id": "page-1", "text": "xin chao", "author_name": "Lan"}]},
+        )
+        self.assertEqual(synced.status_code, 200, synced.text)
         self.assertEqual(self.client.get("/v1/actions", headers=page).status_code, 401)
         self.assertEqual(self.client.get("/v1/agents", headers=page).status_code, 401)
         self.assertEqual(

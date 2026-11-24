@@ -1138,7 +1138,7 @@ def scenarios_delete(scenario_id: int, authorization: str | None = Header(defaul
 @app.post("/v1/sync/comments")
 def sync_comments(body: SyncCommentsBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
     """Bulk sync comments from scanner PCs → server PC database."""
-    _auth(authorization)
+    _page_auth(authorization)
     started = time.time()
     payload = [c.model_dump() for c in body.comments]
     inserted = db.upsert_comments(settings.db_path, body.machine_id, payload, utcnow())
