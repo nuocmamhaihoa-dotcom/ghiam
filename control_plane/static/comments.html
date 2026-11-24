@@ -36,17 +36,23 @@
     .text { margin: 0.2rem 0; white-space: pre-wrap; }
     .meta, .empty { color: var(--muted); }
     a { color: var(--green); }
-    pre {
-      margin: 0.6rem 0 0; padding: 0.75rem; background: #f7f9f8; border-radius: 12px; overflow: auto;
-      font: 13px/1.4 ui-monospace, Consolas, monospace; white-space: pre-wrap;
+    a.primary {
+      display: flex; align-items: center; justify-content: center; text-decoration: none;
+      font-weight: 700; background: var(--green); color: #fff; border-radius: 12px; min-height: 48px; margin-top: 0.7rem;
     }
-    details summary { cursor: pointer; font-weight: 700; }
+    #setup.online { background: #e5f3ea; }
   </style>
 </head>
 <body>
 <main>
   <h1>Bình luận TikTok</h1>
-  <p class="lead">Dán link video. Máy Cốc Cốc của bạn sẽ mở video đó và lưu các bình luận đang hiện.</p>
+  <p class="lead">Dán link video. Máy Cốc Cốc tự mở video đó và lưu các bình luận đang hiện.</p>
+
+  <section id="setup">
+    <h2>Máy đọc</h2>
+    <p id="reader">Đang kiểm tra máy đọc…</p>
+    <a class="primary" id="install" href="/cai-may-doc.cmd">Cài và chạy máy đọc</a>
+  </section>
 
   <section>
     <label for="url">Link video</label>
@@ -68,16 +74,6 @@
     <div id="comments"><p class="empty">Chưa có bình luận.</p></div>
   </section>
 
-  <section>
-    <details>
-      <summary>Bật máy đọc một lần</summary>
-      <p class="lead" style="margin-top:0.7rem">Tải file về máy Windows, rồi chạy lệnh dưới đây. Cốc Cốc đang mở sẽ được đóng và mở lại đúng hồ sơ của bạn. Để cửa sổ đó chạy khi bạn thêm link ở trang này.</p>
-      <pre id="cmd"></pre>
-      <div class="row">
-        <button class="ghost" id="copy" type="button">Sao chép lệnh</button>
-      </div>
-    </details>
-  </section>
 </main>
 <script>
 var serverToken = __CONTROL_TOKEN__;
@@ -137,7 +133,7 @@ document.getElementById("read").onclick = function () {
   api("/v1/tiktok/jobs", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({url: url})})
     .then(function () {
       document.getElementById("url").value = "";
-      say("Đã thêm. Máy Cốc Cốc sẽ nhận video này.");
+      say("Đã thêm. Máy Cốc Cốc sẽ tự mở video này.");
       return loadJobs();
     })
     .catch(function (err) { say(err.message, true); })
@@ -151,15 +147,27 @@ document.getElementById("find").addEventListener("input", function () {
   clearTimeout(findTimer);
   findTimer = setTimeout(loadComments, 250);
 });
-var watch = 'powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\\Read-TikTokComments.ps1" -Watch -ControlUrl "' +
-  location.origin + '" -ControlToken "' + token() + '"';
-document.getElementById("cmd").textContent = watch;
-document.getElementById("copy").onclick = function () {
-  navigator.clipboard.writeText(watch).then(function () { say("Đã sao chép lệnh."); }, function () { say("Hãy chọn và sao chép lệnh bằng tay.", true); });
-};
+function loadReader() {
+  return api("/v1/tiktok/reader").then(function (body) {
+    var node = document.getElementById("reader");
+    var card = document.getElementById("setup");
+    var link = document.getElementById("install");
+    if (body.online) {
+      var where = body.hostname ? " trên " + body.hostname : "";
+      node.textContent = "Máy đọc đang bật" + where + ". Dán link ở trên là Cốc Cốc tự mở.";
+      card.className = "online";
+      link.hidden = true;
+    } else {
+      node.textContent = "Bấm nút bên dưới, rồi mở file Cai-May-Doc. Máy tự cài, tự chạy, và tự mở lại mỗi lần bạn đăng nhập Windows.";
+      card.className = "";
+      link.hidden = false;
+    }
+  }).catch(function (err) { say(err.message, true); });
+}
+loadReader();
 loadJobs();
 loadComments();
-setInterval(function () { loadJobs(); loadComments(); }, 4000);
+setInterval(function () { loadReader(); loadJobs(); loadComments(); }, 4000);
 </script>
 </body>
 </html>

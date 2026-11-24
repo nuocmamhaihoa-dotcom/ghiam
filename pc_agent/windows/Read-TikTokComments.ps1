@@ -9,6 +9,7 @@
 param(
   [string]$Url = "",
   [switch]$Watch,
+  [switch]$Install,
   [string]$ControlUrl = "",
   [string]$ControlToken = "",
   [int]$Port = 9222,
@@ -109,23 +110,70 @@ function Invoke-Cdp {
   }
 }
 
-function Start-CommentWatch {
+function Resolve-HubConfig {
   if (-not $ControlUrl -or -not $ControlToken) {
     $cfgPath = Join-Path $PSScriptRoot "config.json"
     if (Test-Path $cfgPath) {
       $cfg = Get-Content $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
-      if (-not $ControlUrl -and $cfg.control_url) { $script:ControlUrl = [string]$cfg.control_url }
-      if (-not $ControlToken -and $cfg.control_token) { $script:ControlToken = [string]$cfg.control_token }
+      if (-not $script:ControlUrl -and $cfg.control_url) { $script:ControlUrl = [string]$cfg.control_url }
+      if (-not $script:ControlToken -and $cfg.control_token) { $script:ControlToken = [string]$cfg.control_token }
     }
   }
   if (-not $ControlUrl -or -not $ControlToken) {
     throw "Can -ControlUrl va -ControlToken, hoac file config.json nam canh script."
   }
+}
+
+function Get-MachineId {
+  $machine = $env:COMPUTERNAME
+  $idFile = Join-Path $PSScriptRoot "state\machine_id.txt"
+  if (Test-Path $idFile) {
+    $saved = (Get-Content $idFile -Raw).Trim()
+    if ($saved) { $machine = $saved }
+  }
+  return $machine
+}
+
+function Send-ReaderPulse {
+  param([string]$Base, $Headers)
+  $body = @{ machine_id = (Get-MachineId); hostname = $env:COMPUTERNAME } | ConvertTo-Json -Compress
+  Invoke-RestMethod -Uri ($Base + "/v1/tiktok/reader") -Method POST -Headers $Headers -Body $body -ContentType "application/json; charset=utf-8" -TimeoutSec 15 | Out-Null
+}
+
+function Install-CommentReader {
+  Resolve-HubConfig
+  $cfgPath = Join-Path $PSScriptRoot "config.json"
+  @{ control_url = $ControlUrl.TrimEnd("/"); control_token = $ControlToken } | ConvertTo-Json | Set-Content -Path $cfgPath -Encoding UTF8
+  $watchArg = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Watch"
+  try {
+    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $watchArg
+    $trigger = New-ScheduledTaskTrigger -AtLogOn
+    Register-ScheduledTask -TaskName "Ghiam TikTok" -Action $action -Trigger $trigger -Force | Out-Null
+    Write-Host "May doc se tu chay moi lan ban dang nhap Windows."
+  } catch {
+    Write-Host "Chua dat lich tu chay: $($_.Exception.Message)"
+  }
+  $lock = Join-Path $PSScriptRoot "watch.pid"
+  if (Test-Path $lock) {
+    $old = (Get-Content $lock -Raw).Trim()
+    if ($old -match '^\d+$' -and (Get-Process -Id ([int]$old) -ErrorAction SilentlyContinue)) {
+      Write-Host "May doc dang chay."
+      return
+    }
+  }
+  Start-Process -FilePath "powershell.exe" -ArgumentList $watchArg | Out-Null
+  Write-Host "Da bat may doc. Dan link tren trang, Coc Coc se tu mo."
+}
+
+function Start-CommentWatch {
+  Resolve-HubConfig
   $headers = @{ Authorization = "Bearer $ControlToken" }
   $base = $ControlUrl.TrimEnd("/")
-  Write-Host "Dang cho video moi tu $base. Giu cua so nay mo."
+  Set-Content -Path (Join-Path $PSScriptRoot "watch.pid") -Value $PID -Encoding ASCII
+  Write-Host "Dang cho video moi tu $base. Cua so nay tu nhan link ban dan tren trang."
   while ($true) {
     try {
+      Send-ReaderPulse -Base $base -Headers $headers
       $claimed = Invoke-RestMethod -Uri ($base + "/v1/tiktok/jobs/claim") -Method POST -Headers $headers -TimeoutSec 30
       if (-not $claimed.job) {
         Start-Sleep -Seconds 4
@@ -134,6 +182,7 @@ function Start-CommentWatch {
       $job = $claimed.job
       $out = Join-Path $env:TEMP ("ghiam-tiktok-job-" + $job.id + ".json")
       Write-Host "Nhan video $($job.id): $($job.url)"
+      Send-ReaderPulse -Base $base -Headers $headers
       $arg = "-ExecutionPolicy Bypass -File `"$PSCommandPath`" -Url `"$($job.url)`" -Port $Port -Scrolls $Scrolls -OutFile `"$out`" -ControlUrl `"$ControlUrl`" -ControlToken `"$ControlToken`""
       $proc = Start-Process -FilePath "powershell.exe" -ArgumentList $arg -Wait -PassThru -NoNewWindow
       $status = "error"
@@ -160,6 +209,11 @@ function Start-CommentWatch {
       Start-Sleep -Seconds 5
     }
   }
+}
+
+if ($Install) {
+  Install-CommentReader
+  return
 }
 
 if ($Watch) {

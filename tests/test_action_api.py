@@ -157,6 +157,8 @@ class ActionApiTests(unittest.TestCase):
         self.assertIn("Bình luận TikTok", response.text)
         self.assertIn("Đọc bình luận", response.text)
         self.assertIn("Hàng đọc", response.text)
+        self.assertIn("Cài và chạy máy đọc", response.text)
+        self.assertIn("/cai-may-doc.cmd", response.text)
         self.assertIn('var serverToken = "%s";' % settings.page_token, response.text)
         self.assertNotIn("test-token", response.text)
         self.assertNotIn("__CONTROL_TOKEN__", response.text)
@@ -697,6 +699,43 @@ class ActionApiTests(unittest.TestCase):
             json={"status": "done", "detail": "lan nua", "comment_count": 2},
         )
         self.assertEqual(again.status_code, 409)
+
+    def test_reader_installer_starts_from_one_file_and_reports_online(self) -> None:
+        page = {"Authorization": f"Bearer {settings.page_token}"}
+        missing = self.client.get("/v1/tiktok/reader")
+        self.assertEqual(missing.status_code, 401)
+        quiet = self.client.get("/v1/tiktok/reader", headers=page)
+        self.assertEqual(quiet.status_code, 200, quiet.text)
+        self.assertFalse(quiet.json()["online"])
+        beat = self.client.post(
+            "/v1/tiktok/reader",
+            headers=page,
+            json={"machine_id": "pc-1", "hostname": "MAY-A"},
+        )
+        self.assertEqual(beat.status_code, 200, beat.text)
+        seen = self.client.get("/v1/tiktok/reader", headers=page)
+        self.assertTrue(seen.json()["online"])
+        self.assertEqual(seen.json()["hostname"], "MAY-A")
+        with sqlite3.connect(settings.db_path) as conn:
+            conn.execute(
+                "UPDATE tiktok_readers SET last_seen=? WHERE machine_id=?",
+                ("2020-01-01T00:00:00+00:00", "pc-1"),
+            )
+            conn.commit()
+        stale = self.client.get("/v1/tiktok/reader", headers=page)
+        self.assertFalse(stale.json()["online"])
+        cmd = self.client.get("/cai-may-doc.cmd")
+        self.assertEqual(cmd.status_code, 200, cmd.text)
+        self.assertIn("Cai-May-Doc.cmd", cmd.headers["content-disposition"])
+        text = cmd.content.decode("ascii")
+        self.assertIn("-Install", text)
+        self.assertIn(settings.page_token, text)
+        self.assertNotIn("test-token", text)
+        self.assertIn("/may-doc/Read-TikTokComments.ps1", text)
+        script = self.client.get("/may-doc/Read-TikTokComments.ps1")
+        self.assertEqual(script.status_code, 200)
+        self.assertIn(b"Install-CommentReader", script.content)
+        self.assertIn(b"Start-CommentWatch", script.content)
 
 
 class ProxyUrlTests(unittest.TestCase):

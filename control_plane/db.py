@@ -113,6 +113,11 @@ def init_db(db_path: Path) -> None:
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS tiktok_readers (
+              machine_id TEXT PRIMARY KEY,
+              hostname TEXT NOT NULL DEFAULT '',
+              last_seen TEXT NOT NULL
+            );
             """
         )
         conn.commit()
@@ -752,6 +757,28 @@ def finish_tiktok_job(
         if cur.rowcount == 0:
             return None
         row = conn.execute("SELECT * FROM tiktok_jobs WHERE id=?", (job_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def touch_tiktok_reader(db_path: Path, machine_id: str, hostname: str, now: str) -> None:
+    with session(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO tiktok_readers(machine_id, hostname, last_seen)
+            VALUES(?, ?, ?)
+            ON CONFLICT(machine_id) DO UPDATE SET
+              hostname=excluded.hostname,
+              last_seen=excluded.last_seen
+            """,
+            (machine_id[:120], hostname[:120], now),
+        )
+
+
+def latest_tiktok_reader(db_path: Path) -> dict[str, Any] | None:
+    with session(db_path) as conn:
+        row = conn.execute(
+            "SELECT * FROM tiktok_readers ORDER BY last_seen DESC LIMIT 1"
+        ).fetchone()
     return dict(row) if row else None
 
 

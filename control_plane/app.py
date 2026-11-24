@@ -13,8 +13,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -49,6 +50,8 @@ from control_plane.video_store import init_db as init_video_db
 from control_plane.video_store import merge_close_results
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+READER_PS1 = Path(__file__).resolve().parents[1] / "pc_agent" / "windows" / "Read-TikTokComments.ps1"
+_CMD_SAFE = re.compile(r"[A-Za-z0-9.:/_-]+")
 
 app = FastAPI(
     title="fb-poller high-bandwidth control plane",
@@ -603,6 +606,83 @@ def finish_tiktok_job(
     if job is None:
         raise HTTPException(status_code=409, detail="việc này không đang chạy")
     return job
+
+
+class TikTokReaderBody(BaseModel):
+    machine_id: str
+    hostname: str = ""
+
+
+@app.post("/v1/tiktok/reader")
+def touch_tiktok_reader(body: TikTokReaderBody, authorization: str | None = Header(default=None)) -> dict[str, str]:
+    _page_auth(authorization)
+    machine_id = body.machine_id.strip()
+    if not machine_id:
+        raise HTTPException(status_code=400, detail="thiếu mã máy")
+    db.touch_tiktok_reader(settings.db_path, machine_id, body.hostname.strip(), utcnow())
+    return {"ok": "true"}
+
+
+@app.get("/v1/tiktok/reader")
+def tiktok_reader(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _page_auth(authorization)
+    row = db.latest_tiktok_reader(settings.db_path)
+    if row is None:
+        return {"online": False, "hostname": "", "last_seen": ""}
+    try:
+        seen = datetime.fromisoformat(row["last_seen"])
+    except ValueError:
+        seen = None
+    online = seen is not None and datetime.now(timezone.utc) - seen <= timedelta(minutes=3)
+    return {"online": online, "hostname": row["hostname"], "last_seen": row["last_seen"]}
+
+
+@app.get("/may-doc/Read-TikTokComments.ps1")
+def download_reader_script() -> FileResponse:
+    if not READER_PS1.exists():
+        raise HTTPException(status_code=404, detail="thiếu file máy đọc")
+    return FileResponse(
+        READER_PS1,
+        media_type="text/plain; charset=utf-8",
+        filename="Read-TikTokComments.ps1",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@app.get("/cai-may-doc.cmd")
+def download_reader_installer(request: Request) -> Response:
+    base = str(request.base_url).rstrip("/")
+    token = settings.page_token or ""
+    if not _CMD_SAFE.fullmatch(base) or not _CMD_SAFE.fullmatch(token):
+        raise HTTPException(status_code=500, detail="không tạo được file cài")
+    command = (
+        "$d=Join-Path $env:LOCALAPPDATA 'Ghiam'; "
+        "New-Item -ItemType Directory -Force -Path $d | Out-Null; "
+        f"Invoke-WebRequest -UseBasicParsing -Uri '{base}/may-doc/Read-TikTokComments.ps1' "
+        "-OutFile (Join-Path $d 'Read-TikTokComments.ps1'); "
+        f"& (Join-Path $d 'Read-TikTokComments.ps1') -Install -ControlUrl '{base}' -ControlToken '{token}'"
+    )
+    text = (
+        "@echo off\r\n"
+        "echo Dang cai may doc. Giu cua so nay mo den khi thay dong Xong.\r\n"
+        f'powershell -NoProfile -ExecutionPolicy Bypass -Command "{command}"\r\n'
+        "if errorlevel 1 (\r\n"
+        "  echo Cai chua xong.\r\n"
+        "  pause\r\n"
+        "  exit /b 1\r\n"
+        ")\r\n"
+        "echo.\r\n"
+        "echo Xong. Dan link tren trang web. May se tu mo Coc Coc.\r\n"
+        "pause\r\n"
+    )
+    return Response(
+        text.encode("ascii"),
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": "attachment; filename=Cai-May-Doc.cmd",
+            "Cache-Control": "no-cache",
+        },
+    )
 
 
 @app.post("/v1/agents/register")
