@@ -13,10 +13,12 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, File, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -48,6 +50,8 @@ from control_plane.video_store import init_db as init_video_db
 from control_plane.video_store import merge_close_results
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+READER_PS1 = Path(__file__).resolve().parents[1] / "pc_agent" / "windows" / "Read-TikTokComments.ps1"
+_CMD_SAFE = re.compile(r"[A-Za-z0-9.:/_-]+")
 
 app = FastAPI(
     title="fb-poller high-bandwidth control plane",
@@ -151,6 +155,31 @@ def _auth(authorization: str | None) -> None:
         raise HTTPException(status_code=401, detail="unauthorized")
 
 
+def _page_auth(authorization: str | None) -> None:
+    """Token trang chủ hoặc token máy đọc. Token trang không mở các API quản trị."""
+    accepted = {token for token in (settings.token, settings.page_token, os.environ.get("CONTROL_TOKEN")) if token}
+    if not accepted:
+        return
+    offered = ""
+    if authorization and authorization.startswith("Bearer "):
+        offered = authorization.removeprefix("Bearer ").strip()
+    if offered not in accepted:
+        raise HTTPException(status_code=401, detail="unauthorized")
+
+
+def _tiktok_url(value: str) -> str:
+    text = value.strip()
+    parsed = urlsplit(text)
+    host = (parsed.hostname or "").lower().rstrip(".")
+    if parsed.scheme != "https" or parsed.username or parsed.password or any(ord(ch) <= 32 for ch in text):
+        raise HTTPException(status_code=400, detail="link không hợp lệ")
+    if host != "tiktok.com" and not host.endswith(".tiktok.com"):
+        raise HTTPException(status_code=400, detail="chỉ nhận link tiktok.com")
+    if parsed.path in ("", "/"):
+        raise HTTPException(status_code=400, detail="dán link một video")
+    return parsed.geturl()
+
+
 class RegisterBody(BaseModel):
     machine_id: str
     hostname: str | None = None
@@ -219,7 +248,12 @@ def _html(name: str) -> HTMLResponse:
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard() -> HTMLResponse:
-    """Trang duy nhất: thêm video, xem thống kê, tải bản sao lưu."""
+    """Trang chủ: dán link TikTok, xem tiến độ và các bình luận đã lưu."""
+    return _html("comments.html")
+
+
+@app.get("/danh-ba", response_class=HTMLResponse)
+def video_reader() -> HTMLResponse:
     return _html("video.html")
 
 
@@ -511,9 +545,144 @@ def list_comments(
     offset: int = Query(default=0, ge=0),
     q: str = Query(default=""),
 ) -> dict[str, Any]:
-    _auth(authorization)
+    _page_auth(authorization)
     items = db.list_comments(settings.db_path, limit=limit, offset=offset, q=q)
     return {"count": len(items), "offset": offset, "items": items}
+
+
+class TikTokJobBody(BaseModel):
+    url: str
+
+
+class TikTokFinishBody(BaseModel):
+    status: str
+    detail: str = ""
+    comment_count: int = 0
+
+
+_TIKTOK_DONE = {"done", "empty", "error"}
+
+
+@app.post("/v1/tiktok/jobs")
+def create_tiktok_job(body: TikTokJobBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _page_auth(authorization)
+    url = _tiktok_url(body.url)
+    return db.create_tiktok_job(settings.db_path, url, utcnow())
+
+
+@app.get("/v1/tiktok/jobs")
+def list_tiktok_jobs(
+    authorization: str | None = Header(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+) -> dict[str, Any]:
+    _page_auth(authorization)
+    items = db.list_tiktok_jobs(settings.db_path, limit=limit)
+    return {"count": len(items), "items": items}
+
+
+@app.post("/v1/tiktok/jobs/claim")
+def claim_tiktok_job(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _page_auth(authorization)
+    return {"job": db.claim_tiktok_job(settings.db_path, utcnow())}
+
+
+@app.post("/v1/tiktok/jobs/{job_id}/finish")
+def finish_tiktok_job(
+    job_id: int,
+    body: TikTokFinishBody,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    _page_auth(authorization)
+    if body.status not in _TIKTOK_DONE:
+        raise HTTPException(status_code=400, detail="trạng thái không hợp lệ")
+    job = db.finish_tiktok_job(
+        settings.db_path,
+        job_id,
+        status=body.status,
+        detail=body.detail,
+        comment_count=body.comment_count,
+        now=utcnow(),
+    )
+    if job is None:
+        raise HTTPException(status_code=409, detail="việc này không đang chạy")
+    return job
+
+
+class TikTokReaderBody(BaseModel):
+    machine_id: str
+    hostname: str = ""
+
+
+@app.post("/v1/tiktok/reader")
+def touch_tiktok_reader(body: TikTokReaderBody, authorization: str | None = Header(default=None)) -> dict[str, str]:
+    _page_auth(authorization)
+    machine_id = body.machine_id.strip()
+    if not machine_id:
+        raise HTTPException(status_code=400, detail="thiếu mã máy")
+    db.touch_tiktok_reader(settings.db_path, machine_id, body.hostname.strip(), utcnow())
+    return {"ok": "true"}
+
+
+@app.get("/v1/tiktok/reader")
+def tiktok_reader(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _page_auth(authorization)
+    row = db.latest_tiktok_reader(settings.db_path)
+    if row is None:
+        return {"online": False, "hostname": "", "last_seen": ""}
+    try:
+        seen = datetime.fromisoformat(row["last_seen"])
+    except ValueError:
+        seen = None
+    online = seen is not None and datetime.now(timezone.utc) - seen <= timedelta(minutes=3)
+    return {"online": online, "hostname": row["hostname"], "last_seen": row["last_seen"]}
+
+
+@app.get("/may-doc/Read-TikTokComments.ps1")
+def download_reader_script() -> FileResponse:
+    if not READER_PS1.exists():
+        raise HTTPException(status_code=404, detail="thiếu file máy đọc")
+    return FileResponse(
+        READER_PS1,
+        media_type="text/plain; charset=utf-8",
+        filename="Read-TikTokComments.ps1",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@app.get("/cai-may-doc.cmd")
+def download_reader_installer(request: Request) -> Response:
+    base = str(request.base_url).rstrip("/")
+    token = settings.page_token or ""
+    if not _CMD_SAFE.fullmatch(base) or not _CMD_SAFE.fullmatch(token):
+        raise HTTPException(status_code=500, detail="không tạo được file cài")
+    command = (
+        "$d=Join-Path $env:LOCALAPPDATA 'Ghiam'; "
+        "New-Item -ItemType Directory -Force -Path $d | Out-Null; "
+        f"Invoke-WebRequest -UseBasicParsing -Uri '{base}/may-doc/Read-TikTokComments.ps1' "
+        "-OutFile (Join-Path $d 'Read-TikTokComments.ps1'); "
+        f"& (Join-Path $d 'Read-TikTokComments.ps1') -Install -ControlUrl '{base}' -ControlToken '{token}'"
+    )
+    text = (
+        "@echo off\r\n"
+        "echo Dang cai may doc. Giu cua so nay mo den khi thay dong Xong.\r\n"
+        f'powershell -NoProfile -ExecutionPolicy Bypass -Command "{command}"\r\n'
+        "if errorlevel 1 (\r\n"
+        "  echo Cai chua xong.\r\n"
+        "  pause\r\n"
+        "  exit /b 1\r\n"
+        ")\r\n"
+        "echo.\r\n"
+        "echo Xong. Dan link tren trang web. May se tu mo Coc Coc.\r\n"
+        "pause\r\n"
+    )
+    return Response(
+        text.encode("ascii"),
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": "attachment; filename=Cai-May-Doc.cmd",
+            "Cache-Control": "no-cache",
+        },
+    )
 
 
 @app.post("/v1/agents/register")
@@ -1049,7 +1218,7 @@ def scenarios_delete(scenario_id: int, authorization: str | None = Header(defaul
 @app.post("/v1/sync/comments")
 def sync_comments(body: SyncCommentsBody, authorization: str | None = Header(default=None)) -> dict[str, Any]:
     """Bulk sync comments from scanner PCs → server PC database."""
-    _auth(authorization)
+    _page_auth(authorization)
     started = time.time()
     payload = [c.model_dump() for c in body.comments]
     inserted = db.upsert_comments(settings.db_path, body.machine_id, payload, utcnow())
